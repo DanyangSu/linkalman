@@ -1,7 +1,7 @@
 Documentation:
 1) Constant effect
 2) Seasonal and periodical 
-3) Full model
+3) Full model with time varying effect:
 4) efficient modeling
 5) what if error terms not Gaussian?
 6) non-linear (UKF and EnKF) (most likely not needed)
