@@ -5,4 +5,4 @@ theory.fdb_latexmk
 theory.fls
 theory.log
 theory.synctex.gz
-
+.DS_Store
