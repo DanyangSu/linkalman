@@ -3,6 +3,8 @@
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage[style=authoryear,sorting=nyt]{biblatex}
+\addbibresource{ref.bib}
 
 \newenvironment{boenumerate}
     {\begin{enumerate}\renewcommand\labelenumi{\textbf\theenumi}}
@@ -13,41 +15,80 @@
 
 \section{Introduction:}
 
+This document serves as the theoretical foundation of the linkalman package. Compared with some other popular kalman filter package written in python, linkalman has several advantages:
+
+\begin{boenumerate}
+    \item Account for incomplete measurements 
+    \item flexible model structure
+    \item Robust numerical implementation
+\end{boenumerate}
+
+Baseline kalman filters assume constant parameter matrices such that the EM solver has closed solutions. In practice, the dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a kalman filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. linkalman package, while still falls in the linear Gaussian realm, is general enough to tackle many real world problems. This document serves as the theoretical foundation of the linkalman package. Section (\ref{sec:model_setup}) lays out the general structure of a Linear Dynamic System (LDS), and section (\ref{sec:E}) and (\ref{sec:M}) provide detailed derivation of the E-step and the M-step of EM algorithm, respectively.
+
+\section{Model Setup:} \label{sec:model_setup}
+
+Consider the following LDS:
 
 \begin{align}
-    \xi_{t+1} = & F\xi_{t} +v_{t+1} \label{eq:state_evolve} \\
-    y_t = & A + H\xi_{t} + w_t \label{eq:measure}
+    \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_{t+1} \label{eq:state_evolve} \\
+    y_t = & H_t\xi_{t} + D_{t}x_t + w_t \label{eq:measure}
 \end{align}
 
-where 
+Equation (\ref{eq:state_evolve}) governs the transition process. $\xi_t$ $(m\times 1)$ is the latent state at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogeneous process noise. We assume that $v_t\sim N(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time.}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_t$ specify the transition behaviors between $t$ and $t+1$. 
+
+Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogeneous measurement noise. In addition to assuming $w_t\sim N(0, R_t)$ is white noise, I aslo assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
+
+Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a Hidden Markov Model (HMM), with system matrices $M_t\equiv\{F_t, B_t, H_t, D_t, Q_t, R_t\}$. The subscript $t$ makes the model very flexible. For example, regression effects in time series models are placed in $B_t x_t$; ARMA can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$. The subscript $t$ allows the LDS to evolve over time, only constrained by some underlying parameters $\theta$. For example cyclical pattern can be modeled by using Trigonometric Cycle (\cite{harvey_1985}).  
+
+\section{Kalman Filter} \label{sec:filter}
+
+Suppose we observe $Y_T$, and $\theta$ is known. To predict $y_{T+1}$, we need to perform forward filtering Kalman Filtering. We start by making the following notations:
 
 \begin{align*}
-    \xi_t = & \begin{bmatrix}\zeta_{t} \\ \zeta_{t-1}\end{bmatrix} &
-    F = & \begin{bmatrix}2 & -1 \\ 1 & 0\end{bmatrix} \\
-    v_{t} = & \begin{bmatrix}u_t \\ 0\end{bmatrix} &
-    y_t = & \begin{bmatrix}y_t^{\infty} \\ y_t^n\end{bmatrix} \\
-    A = & \begin{bmatrix}0 \\ a\end{bmatrix} &
-    H = & \begin{bmatrix}1 & 0 \\ h & 0\end{bmatrix} \\
-    w_t = & \begin{bmatrix}w_t^{\infty} \\ w_t^n\end{bmatrix}
+    Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
+    X_t &\equiv \{x_1, x_2, ..., x_t\} \\
+    \hat{\xi}_{t,s} &\equiv E(\xi_t|X_{s},Y_{s};\theta) \\
+    \hat{\xi}_{t,r,s} &\equiv E(\xi_t|\xi_r,X_{s},Y_{s};\theta) \\
+    P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
 \end{align*}
 
-Equation (\ref{eq:state_evolve}) governs state evolution, which allows more sophisticated structures by changing its specification. Equation (\ref{eq:measure}) governs how various measures interact with ${\xi_t}$. This setup admits only one additional measure $y_t^n$, but we can potentially add more measures with different $n$. 
+With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$, $\hat{\xi}_{t,t-1}$, $P_{t,t-1}$ and $M_t$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 by Hamilton (\cite{hamilton_1994}).}:
 
-We further assume white noise on error terms: 
-\[
-    E(v_{t}v_{\tau}^{'})=\begin{cases}
-        Q & t=\tau \\
-        0 & otherwise
-    \end{cases} 
-\]
-\[
-    E(w_{t}w_{\tau}^{'})=\begin{cases}
-        R & t=\tau \\
-        0 & otherwise
-    \end{cases}
-\]
-In addition, we assume that $\xi_t$ is uncorrelated with any realizations of $v_t$ or $w_t$.
+\begin{align}
+    \hat{\xi}_{t,t} &= \hat{\xi}_{t,t-1} + K_t(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) \label{eq:filter_begin} \\
+    K_t &= P_{t,t-1}H_t^{'}(H_tP_{t,t-1}H_t^{'}+R_t)^{-1} \label{eq:gain} \\
+    P_{t,t} &= P_{t,t-1} - K_tH_tP_{t,t-1} \label{eq:p_tt} \\
+    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t} + B_tx_t \\
+    P_{t+1,t} &= F_tP_{t,t}F_t^{'}+Q_{t+1} \label{eq:filter_end}
+\end{align}
 
+The Kalman Filter proceeds as follows:
+
+\begin{boenumerate}
+    \item Begin with initial value $\hat{\xi}_{1,0}$, and $P_{1,0}$, which can either be part of system parameter $\theta$ or be measured. 
+    \item Use equation (\ref{eq:filter_begin}) through (\ref{eq:filter_end}) to calculate $\hat{\xi}_{2,1}$, and $P_{2,1}$.
+    \item Repeat step 2 for $t\in\{3, 4, ..., T\}$.
+\end{boenumerate}
+
+\subsection{Joseph Form and Numerical Robustness}
+
+We define $P_{t,t}$ as a covariance matrix, which is a symmetric positive semi-definite (PSD) matrix, but in practice, we may get $P_{t,t}$ that is neither symmetric nor PSD, due to rounding errors. Look at equation (\ref{eq:p_tt}) again. The subtraction makes calculating $P_{t,t}$ susceptible to rounding errors, sometimes even resulting in negative semi-definite matrix. I use Joseph Form to numerically enforce symmetric PSD. 
+
+The Joseph form of $P_{t,t}$ is\footnote{The proof in Appendix \ref{ap:joseph}}:
+
+\[
+    P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tQ_tK_t^{'}    
+\]
+
+If we guarantee $P_{t,t-1}$ and $Q_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
+
+\subsection{Missing Measurements and Sequential Filtering}
+
+\section{Kalman Smoother} \label{sec:smoother}
+
+\section{EM Algorithm}
+
+\section{Implementation}
 
 \section{Solve the Kalman filter} \label{sec:kf}
 
@@ -77,7 +118,7 @@ To optimize $L(\theta)$ we can iterate through the E steps and M steps to achiev
 
 then $Q = L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
 
-\subsection{E-step:} \label{subsec:E}
+\section{E-step:} \label{sec:E}
 
 The E-steps involves forward updating and backward smoothing. First, I make the following definitions:
 
@@ -95,7 +136,7 @@ We start off by providing initial estimates on $\hat{\xi}_{1|0}$ and $P_{1|0}$. 
     \hat{\xi}_{t+1|t} & = F\hat{\xi}_{t|t-1} + FK_t(y_t - A - H\hat{\xi}_{t|t-1}) \label{eq:xi_update} \\
     P_{t|t} & = P_{t|t-1} - K_tHP_{t|t-1} \label{eq:p_update} \\
     P_{t+1|t} & = FP_{t|t}F'+Q \label{eq:pt1_update} \\
-    K_t & \equiv P_{t|t-1}H'(HP_{t|t-1}H'+R)^{-1} \label{eq:gain}
+    % K_t & \equiv P_{t|t-1}H'(HP_{t|t-1}H'+R)^{-1} \label{eq:gain}
 \end{align}
 
 Note that $K_t$ in equation (\ref{eq:gain}) is the Kalman Gain Matrix. It incorporates $y_t$ and updates $\hat{\xi}_{t|t}$. By using equation (\ref{eq:xi_update}) to (\ref{eq:pt1_update}) recursively, we are able to calculate $\{\hat{\xi}_{t+1|t}\}$ and $\{P_{t+1|t}\}$ for all $t$. 
@@ -144,7 +185,7 @@ Assume at time $t$ we have $k$ measurements. We initialize the measurement updat
 
 If we don't have complete set of measurements at time $t$, we can simply skip the updating from any missing measurement.
 
-\subsection{M-step:} \label{subsec:M}
+\section{M-step:} \label{sec:M}
 
 In this section, I detail steps to solve MLE iteratively. Note that to goal is to find parameters $\theta \equiv {A, H, F, R, Q}$ to minimize:
 
@@ -228,4 +269,21 @@ Note we might need to redo structure. As the F need to have eigenvalue less than
 Start with general case, and have a section about linear gaussian implementation.
 revise M-step formula, as it does not take into account of changing vec of updates, use cholesky decomposition to get sequential update 
 
+\[
+    E(v_{t}v_{\tau}^{'})=\begin{cases}
+        Q & t=\tau \\
+        0 & otherwise
+    \end{cases} 
+\]
+\printbibliography
+\appendix
+\section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
+\begin{align*}
+    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tQ_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tQ_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + Q_t)K_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + P_{t,t-1}H_t^{'}K_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1}
+\end{align*}
+The fourth equality follows from equation (\ref{eq:gain}). 
 \end{document}
