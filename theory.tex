@@ -77,12 +77,55 @@ We define $P_{t,t}$ as a covariance matrix, which is a symmetric positive semi-d
 The Joseph form of $P_{t,t}$ is\footnote{The proof in Appendix \ref{ap:joseph}}:
 
 \[
-    P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tQ_tK_t^{'}    
+    P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'}    
 \]
 
-If we guarantee $P_{t,t-1}$ and $Q_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
+If we guarantee $P_{t,t-1}$ and $R_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
 
 \subsection{Missing Measurements and Sequential Filtering}
+
+So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially, based only on observed measurements. Squential filtering also boosts speed dramatically for large matrix, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
+
+\begin{align*}
+    y_t &= 
+    \begin{pmatrix}
+        y_{t:1} \\
+        \vdots \\ 
+        y_{t:n}
+    \end{pmatrix} 
+    = \begin{pmatrix}
+        H_{t:1}\xi_t + D_{t:1}x_t + w_{t:1} \\
+        \vdots \\
+        H_{t:n}\xi_t + D_{t:n}x_t + w_{t:n}
+    \end{pmatrix}
+\end{align*}
+
+where $H_{t:n}$ and $D_{t:n}$ are the $n-th$ row of $H_t$ and $D_t$. Define $\hat{\xi}_{t:i}$ as:
+\begin{align*}
+    \hat{\xi}_{t,t:i} &\equiv E(\xi_t|X_{t-1},Y_{t-1},x_{t:1},...,x_{t:n},y_{t:1},...,y_{t:n};\theta) \\
+    P_{t,t:i} &\equiv Var(\xi_t|X_{t-1},Y_{t-1},x_{t:1},...,x_{t:n},y_{t:1},...,y_{t:n};\theta) 
+\end{align*}
+We initialize the measurement update process with:
+\begin{align}
+    \hat{\xi}_{t,t:0} = \hat{\xi}_{t,t-1} \label{eq:seq_init1} \\
+    P_{t,t:0} = P_{t,t-1} \label{eq:seq_init2}
+\end{align}
+
+For each successive measurement $i$, we have:
+\begin{align}
+    \hat{\xi}_{t,t:i} &= \hat{\xi}_{t,t:i-1} + K_{t:i}(y_{t:i} - H_{t:i}\hat{\xi}_{t,t:i-1} - D_{t:i}x_{t}) \label{eq:seq_start} \\ 
+    K_{t:i} &\equiv \frac{P_{t,t:i-1}H_{t:i}^{'}}{H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}} \\
+    P_{t,t:i} &= [I - K_{t:i}H_{t:i}]P_{t,t:i-1}[I-K_{t:i}H_{t:i}]^{'} + K_{t:i}\sigma_{t:i}^{2}K_{t:i}^{'} \label{eq:seq_end}
+\end{align}
+
+Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formular is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
+\begin{boenumerate}
+    \item Initialize with (\ref{eq:seq_init1}) and (\ref{eq:seq_init2})
+    \item \label{step:seq_update} Update Kalman Filter using equation (\ref{eq:seq_start}) through (\ref{eq:seq_end})
+    \item Repeat Step \ref{step:seq_update} for each $y_{t:i}$
+\end{boenumerate}
+
+If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original LDS into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t =$ 
 
 \section{Kalman Smoother} \label{sec:smoother}
 
@@ -279,9 +322,9 @@ revise M-step formula, as it does not take into account of changing vec of updat
 \appendix
 \section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
 \begin{align*}
-    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tQ_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tQ_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + Q_t)K_t^{'} \\
+    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + R_t)K_t^{'} \\
     &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + P_{t,t-1}H_t^{'}K_t^{'} \\
     &= P_{t,t-1} - K_tH_tP_{t,t-1}
 \end{align*}
