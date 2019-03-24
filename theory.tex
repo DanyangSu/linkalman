@@ -4,6 +4,7 @@
 \usepackage{amsmath}
 \usepackage[a4paper, total={6in, 8in}]{geometry}
 \usepackage[style=authoryear,sorting=nyt]{biblatex}
+\newtheorem{lemma}{Lemma}
 \addbibresource{ref.bib}
 
 \newenvironment{boenumerate}
@@ -23,7 +24,7 @@ This document serves as the theoretical foundation of the linkalman package. Com
     \item Robust numerical implementation
 \end{boenumerate}
 
-Baseline kalman filters assume constant parameter matrices such that the EM solver has closed solutions. In practice, the dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a kalman filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. linkalman package, while still falls in the linear Gaussian realm, is general enough to tackle many real world problems. This document serves as the theoretical foundation of the linkalman package. Section (\ref{sec:model_setup}) lays out the general structure of a Linear Dynamic System (LDS), and section (\ref{sec:E}) and (\ref{sec:M}) provide detailed derivation of the E-step and the M-step of EM algorithm, respectively.
+Baseline kalman filters assume constant parameter matrices such that the EM solver has closed solutions. In practice, the dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a kalman filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. linkalman package, while still falls in the linear Gaussian realm, is general enough to tackle many real world problems. This document serves as the theoretical foundation of the linkalman package. Section (\ref{sec:model_setup}) lays out the general structure of a Linear Dynamic System (LDS), and section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed derivation of Kalman Filter and Kalman Smoother, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate the underlying parameters of the LDS, and Section (\ref{sec:apply}) applies the Kalman Filter to solving a sophisticated time series problem. 
 
 \section{Model Setup:} \label{sec:model_setup}
 
@@ -52,7 +53,7 @@ Suppose we observe $Y_T$, and $\theta$ is known. To predict $y_{T+1}$, we need t
     P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
 \end{align*}
 
-With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$, $\hat{\xi}_{t,t-1}$, $P_{t,t-1}$ and $M_t$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 by Hamilton (\cite{hamilton_1994}).}:
+With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$, $\hat{\xi}_{t,t-1}$, $P_{t,t-1}$ and $M_t$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{lem:1}.}:
 
 \begin{align}
     \hat{\xi}_{t,t} &= \hat{\xi}_{t,t-1} + K_t(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) \label{eq:filter_begin} \\
@@ -125,20 +126,253 @@ Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, 
     \item Repeat Step \ref{step:seq_update} for each $y_{t:i}$
 \end{boenumerate}
 
-If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original LDS into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t =$ 
+If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original LDS into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = L_tS_t(L_t^{-1})^{'}$. Pre-multiply equation (\ref{eq:measure}) by $L_t^{-1}$\footnote{Due to special properties of triangular matrices, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}, and we have:
+
+\[
+    \tilde{y}_t = \tilde{D}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t
+\]
+
+where $\tilde{(\cdot)}_t = L_t^{-1}(\cdot)_t$. In the following sections, I will omit the $(\sim)$ sign, and assume $R_t$ is always diagonal. 
 
 \section{Kalman Smoother} \label{sec:smoother}
+In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t,t}, K_t, P_{t,t}, \hat{\xi}_{t,t-1}, P_{t,t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t,T}$ and $P_{t,T}$. 
 
-\section{EM Algorithm}
+Suppose in addition to state estimates from Kalman Filter, we also know $\hat{\xi}_{t+1,T}$ and $P_{t,T}$. We have\footnote{See Appendix \ref{ap:smooth} for proof.}:
+\begin{align}
+    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t} + J_t(\hat{\xi}_{t+1,T}-\hat{\xi}_{t+1,t}) \label{eq:smooth_start} \\
+    J_t & \equiv P_{t,t}F_t^{'}P_{t+1,t}^{-1} \\
+    P_{t,T} &= P_{t,t} + J_t(P_{t+1,T}-P_{t+1,t})J_t^{'} \label{eq:smooth_end}
+\end{align}
 
-\section{Implementation}
+The procedure for backward smoothing is as follows:
+\begin{boenumerate}
+    \item Start with $\hat{\xi}_{T,T}$ and $P_{T,T}$ obtained from the filtering process.
+    \item \label{step:back_smooth} For $t$, use equation (\ref{eq:smooth_start}) through (\ref{eq:smooth_end}) to get $\hat{\xi}_{t,T}$ and $P_{t,T}$.
+    \item Repeat step \ref{step:back_smooth} for $t \in \{1,2,...,T-1\}$.
+\end{boenumerate}
 
-\section{Solve the Kalman filter} \label{sec:kf}
+Given $Y_t$ and $\theta$, we are able to use forward filtering and backward smoothing to infer the distribution of $\xi_t$ if we assume HMM with Gaussian noises. 
 
-Here I use EM algorithm to solve the Kalman filter\footnote{Alternatively, one can use MCMC, which is widely used in Bayesian statistics. In addition, UKF and EnKF will be explored in the future to account for non-linearity.}. The challenge is that we will have partially missing data. For the remainder of this section I will lay out the algorithm to solve our problem.
+\section{EM Algorithm} \label{sec:EM}
+Kalman Filter and Kalman Smoother are useful to prediction measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer Appendix \ref{ap:EM_proof}.
 
-\subsection{EM Algorithm Premier:} \label{subsec:premier}
-Denote $Y$ as observed measurements, $\Xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
+For a HMM, if we know both $\xi_t$ and $y_t$, the likelihood is: 
+\begin{align}
+    a
+\end{align}
+
+\section{Application} \label{sec:apply}
+
+% \section{Solve the Kalman filter} \label{sec:kf}
+
+% Here I use EM algorithm to solve the Kalman filter\footnote{Alternatively, one can use MCMC, which is widely used in Bayesian statistics. In addition, UKF and EnKF will be explored in the future to account for non-linearity.}. The challenge is that we will have partially missing data. For the remainder of this section I will lay out the algorithm to solve our problem.
+
+% \section{E-step:} \label{sec:E}
+
+% The E-steps involves forward updating and backward smoothing. First, I make the following definitions:
+
+% \begin{align*}
+%     \hat{\xi}_{t+1|t} & \equiv \hat{E}(\xi_{t+1}|\mathcal{Y}_t) \\
+%     \hat{\xi}_{t|t} & \equiv \hat{E}(\xi_{t}|\mathcal{Y}_t) \\
+%     P_{t+1|t} & \equiv E[(\xi_{t+1} - \hat{\xi}_{t+1|t})(\xi_{t+1} - \hat{\xi}_{t+1|t})']
+% \end{align*}
+
+% where $\mathcal{Y}_t\equiv(y_t,y_{t-1},...,y_1)$. 
+
+% We start off by providing initial estimates on $\hat{\xi}_{1|0}$ and $P_{1|0}$. By Kalman Update rule\footnote{See Hamilton's Time Series Analysis for details.}, we have:
+
+% \begin{align}
+%     \hat{\xi}_{t+1|t} & = F\hat{\xi}_{t|t-1} + FK_t(y_t - A - H\hat{\xi}_{t|t-1}) \label{eq:xi_update} \\
+%     P_{t|t} & = P_{t|t-1} - K_tHP_{t|t-1} \label{eq:p_update} \\
+%     P_{t+1|t} & = FP_{t|t}F'+Q \label{eq:pt1_update} \\
+%     % K_t & \equiv P_{t|t-1}H'(HP_{t|t-1}H'+R)^{-1} \label{eq:gain}
+% \end{align}
+
+% Note that $K_t$ in equation (\ref{eq:gain}) is the Kalman Gain Matrix. It incorporates $y_t$ and updates $\hat{\xi}_{t|t}$. By using equation (\ref{eq:xi_update}) to (\ref{eq:pt1_update}) recursively, we are able to calculate $\{\hat{\xi}_{t+1|t}\}$ and $\{P_{t+1|t}\}$ for all $t$. 
+% Since we have data for $t \in (1,2,...,T)$, we may use Kalman Smoothing to obtain better fit. The updating formula are the following:
+
+% \begin{align}
+%     \hat{\xi}_{t|T} & = \hat{\xi}_{t|t} + J_t(\hat{\xi}_{t+1|tT} - \hat{\xi}_{t+1|t}) \label{eq:xi_smooth} \\
+%     P_{t|T} & = P_{t|t} + J_{t}(P_{t+1|T} - P_{t+1|t})J_{t}^{'} \label{eq:p_smooth} \\
+%     J_t & \equiv P_{t|t}F'P_{t+1|t}^{-1} \label{eq:back_smooth}
+% \end{align}
+
+% We use equation (\ref{eq:xi_smooth}) and (\ref{eq:p_smooth}) recursively backwards to get $\{P_{t|T}\}$ and $\{\hat{\xi}_{t|T}\}$. 
+
+% In theory, equation (\ref{eq:p_update}) should always yield positive semi-definite matrix. In practice, it is possible that we have non-PSD matrix due to numerical rounding errors. I use Joseph Form to guarantee we have a PSD matrix. Rewrite equation (\ref{eq:p_update}) as:
+
+% \begin{align} 
+%     \hat{\xi}_{t|t} & = P_{t|t-1} - K_tHP_{t|t-1} \nonumber \\
+%     & = (I-K_tH)P_{t|t-1}(I-K_tH)'+K_tRK_t^{'} \label{eq:joseph}
+% \end{align}
+
+% Equation (\ref{eq:joseph}) guarantees the result is PSD 
+
+% \subsection{Sequential Processing and Missing Measurements:} \label{subsec:seq}
+
+% In practice, we use sequential updating and smoothing. One obvious reason is improvement in numerical performance. Instead of performing the full matrix inverse, which can be prohibitively expensive if the either observation or state vector is large. But most importantly, by using sequential updating, I am able to update Kalman Filter using only partial information, which is not handled by existing Kalman filter packages. 
+
+% To perform Kalman updating sequentially, consider again equation (\ref{eq:measure}):
+% \[
+%     y_t = A + H\xi_{t} + w_t 
+% \]
+% where $E(w_{t}w_{t}')=R$. We use LDL decomposition method to obtain $L$ such that $R=LDL'$. Rewrite equation (\ref{eq:measure}) as:
+
+% \[
+%     \bar{y}_t = L^{-1}A + L^{-1}H\xi_{t} + L^{-1}w_t
+% \]
+
+% where $\bar{w}_t = L^{-1}w_t$. Note that $\bar{w}_t$ has diagonal variance matrix $D$. For the remainder of this section, we assume that we work with transformed measures (thus omit the "-" notation).
+
+% Assume at time $t$ we have $k$ measurements. We initialize the measurement update process with $\hat{\xi}_{t|t}^0=\hat{\xi}_{t|t-1}$, and $P_{t|t}^0=P_{t|t-1}$. Consider the measurement update for the $i$th measurement, $y_t^i$:
+
+% \begin{align*}
+%     \hat{\xi}_{t}^i & = \hat{\xi}_{t}^{i-1} + K_t^i(y_t^i - A - H\hat{\xi}_{t|t}^{i-1}) \\
+%     P_{t|t}^{i} & = (I - K_t^iH_i)P_{t|t}^{i-1}(I-K_t^iH_i)' + K_t^{i}R_{i,i}(K_t^{i})' \\
+%     K_t^i & = \frac{P_{t|t}^{i-1}H_i^{'}}{H_{i}P_{t|t}^{i-1}H_{i}^{'}+R_{i,i}}
+% \end{align*}
+
+% If we don't have complete set of measurements at time $t$, we can simply skip the updating from any missing measurement.
+
+% \section{M-step:} \label{sec:M}
+
+% In this section, I detail steps to solve MLE iteratively. Note that to goal is to find parameters $\theta \equiv {A, H, F, R, Q}$ to minimize:
+
+% \begin{align}
+%     L(\theta,y) = \sum_t^{t=T}log[\mathbb{P}(y_t|\theta)] = \sum_t^{t=T}log\{E[\mathbb{P}(y_t,\xi_t|\theta)]_{\xi_t}\} \label{eq:MLE}
+% \end{align} 
+
+% By Markov Properties, we have: 
+
+% \begin{align}
+%     \sum_t^{t=T}E\{log[\mathbb{P}(y_t,\xi_t)]\}_{\xi_t} &= \sum_t^{t=T}log\{E[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]_{\xi_t}\}
+%     + \sum_t^{t=T}log\{E[\mathbb{P}(y_t|\xi_t, \theta)]_{\xi_t}\} \nonumber \\
+%     & = \sum_t^{t=T}log\left[\int\mathbb{P}(y_t|\xi_t,\theta)d\xi_t\right]
+%     + \sum_t^{t=T}log\left[\int\mathbb{P}(\xi_t|\xi_{t-1},\theta)d\xi_t\right] \nonumber 
+% \end{align}
+
+% If we assume Gaussian Process on the error terms, we have:
+% \begin{align}
+%     log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)] = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1}) + C \nonumber \\
+%     = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1})]\} + C \nonumber \\
+%     = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[Q^{-1}(\xi_t-F\xi_{t-1})(\xi_t-F\xi_{t-1})']\} + C \label{eq:mle_xi}
+% \end{align}
+
+% The second equality follows from $x = Trace(x)$ if $x$ is a scalar, and the third equality follows from $Trace(AB) = Trace(BA)$. Similarly, for $\mathbb{P}()y_t|\xi_{t},\theta)$, we have:
+% \begin{align}
+%     log[\mathbb{P}(y_t|\xi_{t},\theta)] = \frac{1}{2}log|R^{-1}|-\frac{1}{2}(y_t-A-H\xi_t)'R^{-1}(y_t-A-H\xi_t) + C \nonumber \\
+%     = \frac{1}{2}log|R^{-1}|-\frac{1}{2}\{Trace[R^{-1}(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})']\} + C \label{eq:mle_y} 
+% \end{align}
+
+% Note that we have incomplete observations, so we use cholesky decomposition. (Replace current formulation) 
+
+% Before we take derivatives, I list here some useful formula:
+
+% \begin{flalign*}
+%     &\frac{\partial B'AB}{\partial B} = B'(A'+A) \\
+%     &\frac{\partial Trace(AB)}{\partial A} = \frac{\partial Trace(BA)}{\partial A} = \frac{\partial Trace(B'A')}{\partial A} = B' \\
+%     &\frac{\partial log(A)}{\partial A} = A^{-1} \\
+%     &\frac{\partial det(A)}{\partial A} = det(A)(A^{-1})'
+% \end{flalign*}
+
+% Now we find $\hat{\theta}$ by taking derivations of equation (\ref{eq:MLE}). First let's assume we observe $\{\xi\}_t$, we have:
+
+% \begin{align}
+%     log[\mathbb{P}(\xi,y|\theta)] =& \frac{T-1}{2}log|Q^{-1}|+\frac{T}{2}log|R^{-1}| \nonumber \\
+%     & - \frac{1}{2}Trace\left[Q^{-1}\sum_1^{T-1}(\xi_t-F\xi_{t-1})'(\xi_t-F\xi_{t-1})\right] \nonumber \\
+%     & - \frac{1}{2}Trace\left[R^{-1}\sum_1^T(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})'\right] \label{eq:mle_prob}
+% \end{align}
+
+% Take FOC on (\ref{eq:mle_prob}), we have:
+
+% \begin{align*}
+%     \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial F} &= Q^{-1}\left(\sum_1^T\xi_{t+1}\xi_t^{'} 
+%         - F\xi_{t+1}\xi_{t+1}'\right) \\
+%     \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial H} &= R^{-1}\left(\sum_1^Ty_t\xi_t'
+%         -A\xi_t-H\xi_t\xi_t^{'}\right) \\
+%     \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial A} &= R^{-1}\left(\sum_1^Ty_t-A-H\xi_t\right) \\
+%     \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial Q^{-1}} &= \frac{T-1}{2}Q 
+%         - \frac{1}{2}\left(\sum_1^{T-1}(\xi_t-F\xi_{t-1})'(\xi_t-F\xi_{t-1})\right) \\
+%     \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial R^{-1}} &= \frac{T}{2}R 
+%         - \frac{1}{2}\left(\sum_1^T(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})'\right) 
+% \end{align*}
+
+% Set FOC to 0 and take conditional expectations of $\xi$ with pdf $f(\xi_t|y_1^T)$, we have the update rules for parameters of interest:
+
+% \begin{align}
+%     F &= \left[\sum_1^{T}E(\xi_{t+1}\xi_{t}|y_1^T)'\right] \left[\sum_1^{T}E(\xi_{t+1}\xi_{t+1}|y_1^T)'\right]^{-1} \\
+%     H &= \left[\sum_1^{T}y_tE(\xi_{t}|y_1^T)' - \frac{1}{T}\left(\sum_1^Ty_t\right)\left(\sum_1^TE(\xi_t|y_1^T)\right)\right] 
+%     \left[\sum_1^{T}E(\xi_{t}\xi_{t}|y_1^T)'\right]^{-1} \\
+%     A &= \\
+%     Q &= \\
+%     R &= 
+% \end{align}
+% \section{Implementation:} \label{sec:implement}
+% The Implementation is simple (we can use )
+% implement
+% use scipy.linalg.dtrtri to solve inverse of triangular matrix.
+% use cholesky decomposition to make sure inverse is still PSD
+% potential next step is to use efficient smoothing.
+% and make a general kalman filter. 
+% Note we might need to redo structure. As the F need to have eigenvalue less than 1. Need to check whether diff is necessary to get good estimates. This section should be completed last, as the model is still subject to change.
+% Start with general case, and have a section about linear gaussian implementation.
+% revise M-step formula, as it does not take into account of changing vec of updates, use cholesky decomposition to get sequential update 
+
+% \[
+%     E(v_{t}v_{\tau}^{'})=\begin{cases}
+%         Q & t=\tau \\
+%         0 & otherwise
+%     \end{cases} 
+% \]
+\printbibliography
+\appendix
+\section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$}
+
+\begin{lemma}[Law of Iterated Projections] \label{lem:1}
+    Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have:
+    \[
+        \mathcal{P}(Y_3|Y_2,Y_1) = \mathcal{P}(Y_3|Y_1)+H_{32}H_{22}^{-1}[Y_2 - \mathcal{P}(Y_2|Y_1)]
+    \]
+    where 
+    \begin{align*}
+        H_{22} &= E\{[Y_2-\mathcal{P}(Y_2|Y_1)][Y_2-\mathcal{P}(Y_2|Y_1)]^{'} \\
+        H_{23} &= H_{32}^{'} = E\{[Y_2-\mathcal{P}(Y_2|Y_1)][Y_3-\mathcal{P}(Y_3|Y_1)]^{'} 
+    \end{align*}
+
+\end{lemma}
+
+Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t,t}$ and $P_{t,t}$.
+
+\section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
+\begin{align*}
+    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + R_t)K_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + P_{t,t-1}H_t^{'}K_t^{'} \\
+    &= P_{t,t-1} - K_tH_tP_{t,t-1}
+\end{align*}
+The fourth equality follows from equation (\ref{eq:gain}).
+\section{Proof of Backward Smoothing} \label{ap:smooth}
+Consider the following:
+\begin{align*}
+    \hat{\xi}_{t,t+1,t} &= \hat{\xi}_{t,t} + \{E[(\xi_t-\hat{\xi}_{t,t})(\xi_t-\hat{\xi}_{t+1,t})^{'}]\} \\
+    & \times \{E[(\xi_{t+1}-\hat{\xi}_{t+1,t})(\xi_{t+1}-\hat{\xi}_{t+1,t})^{'}]\}^{-1} \\
+    & \times (\xi_{t+1} - \hat{\xi}_{t+1,t}) \\
+    &= \hat{\xi}_{t,t} + P_{t,t}F_t^{'}P_{t+1,t}^{-1}(\xi_{t+1}-\hat{\xi}_{t+1,t}) \\
+    &= \hat{\xi}_{t,t} + J_t(\xi_{t+1}-\hat{\xi}_{t+1,t})
+\end{align*}
+The first equality follows from Lemma \ref{lem:1}. Note that we assume $w_t$ and $v_t$ to be white noises, then we have:
+\[
+    \hat{\xi}_{t,t+1,t} = \hat{\xi}_{t,t+1,T}
+\]
+Now take expectation over $\xi_{t+1}$, we have:
+\[
+    \hat{\xi}_{t,T} = \hat{\xi}_{t,t} + J_t(\hat{\xi}_{t+1,T}-\hat{\xi}_{t+1,t})
+\]
+With some algebra, we can get formula for $P_{t,T}$.
+
+\section{EM Algorithm Premier:} \label{ap:EM_proof}
+Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
 
 \begin{align}
     L(\theta) & = log[P(Y|\theta)] \nonumber \\
@@ -146,7 +380,7 @@ Denote $Y$ as observed measurements, $\Xi$ as hidden states, and $\theta$ as par
     & = log[P(Y,\xi|\theta)] - log[P(\xi|Y,\theta)] \label{eq:general_mle}
 \end{align}
 
-Take expectation of equation (\ref{eq:general_mle}) wrt some distribution of $\xi$ with pdf $f(\xi)$ and get
+Take expectation of equation (\ref{eq:general_mle}) wrt. some distribution of $\xi$ with pdf $f(\xi)$ and get:
 
 \begin{align}
     L(\theta) = & \int f(\xi)log[P(Y,\xi|\theta)]d\xi \nonumber \\
@@ -156,177 +390,9 @@ Take expectation of equation (\ref{eq:general_mle}) wrt some distribution of $\x
 To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) maximized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
 
 \[
-    Q = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi
+    Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi
 \]
 
-then $Q = L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
+then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
 
-\section{E-step:} \label{sec:E}
-
-The E-steps involves forward updating and backward smoothing. First, I make the following definitions:
-
-\begin{align*}
-    \hat{\xi}_{t+1|t} & \equiv \hat{E}(\xi_{t+1}|\mathcal{Y}_t) \\
-    \hat{\xi}_{t|t} & \equiv \hat{E}(\xi_{t}|\mathcal{Y}_t) \\
-    P_{t+1|t} & \equiv E[(\xi_{t+1} - \hat{\xi}_{t+1|t})(\xi_{t+1} - \hat{\xi}_{t+1|t})']
-\end{align*}
-
-where $\mathcal{Y}_t\equiv(y_t,y_{t-1},...,y_1)$. 
-
-We start off by providing initial estimates on $\hat{\xi}_{1|0}$ and $P_{1|0}$. By Kalman Update rule\footnote{See Hamilton's Time Series Analysis for details.}, we have:
-
-\begin{align}
-    \hat{\xi}_{t+1|t} & = F\hat{\xi}_{t|t-1} + FK_t(y_t - A - H\hat{\xi}_{t|t-1}) \label{eq:xi_update} \\
-    P_{t|t} & = P_{t|t-1} - K_tHP_{t|t-1} \label{eq:p_update} \\
-    P_{t+1|t} & = FP_{t|t}F'+Q \label{eq:pt1_update} \\
-    % K_t & \equiv P_{t|t-1}H'(HP_{t|t-1}H'+R)^{-1} \label{eq:gain}
-\end{align}
-
-Note that $K_t$ in equation (\ref{eq:gain}) is the Kalman Gain Matrix. It incorporates $y_t$ and updates $\hat{\xi}_{t|t}$. By using equation (\ref{eq:xi_update}) to (\ref{eq:pt1_update}) recursively, we are able to calculate $\{\hat{\xi}_{t+1|t}\}$ and $\{P_{t+1|t}\}$ for all $t$. 
-Since we have data for $t \in (1,2,...,T)$, we may use Kalman Smoothing to obtain better fit. The updating formula are the following:
-
-\begin{align}
-    \hat{\xi}_{t|T} & = \hat{\xi}_{t|t} + J_t(\hat{\xi}_{t+1|tT} - \hat{\xi}_{t+1|t}) \label{eq:xi_smooth} \\
-    P_{t|T} & = P_{t|t} + J_{t}(P_{t+1|T} - P_{t+1|t})J_{t}^{'} \label{eq:p_smooth} \\
-    J_t & \equiv P_{t|t}F'P_{t+1|t}^{-1} \label{eq:back_smooth}
-\end{align}
-
-We use equation (\ref{eq:xi_smooth}) and (\ref{eq:p_smooth}) recursively backwards to get $\{P_{t|T}\}$ and $\{\hat{\xi}_{t|T}\}$. 
-
-In theory, equation (\ref{eq:p_update}) should always yield positive semi-definite matrix. In practice, it is possible that we have non-PSD matrix due to numerical rounding errors. I use Joseph Form to guarantee we have a PSD matrix. Rewrite equation (\ref{eq:p_update}) as:
-
-\begin{align} 
-    \hat{\xi}_{t|t} & = P_{t|t-1} - K_tHP_{t|t-1} \nonumber \\
-    & = (I-K_tH)P_{t|t-1}(I-K_tH)'+K_tRK_t^{'} \label{eq:joseph}
-\end{align}
-
-Equation (\ref{eq:joseph}) guarantees the result is PSD 
-
-\subsection{Sequential Processing and Missing Measurements:} \label{subsec:seq}
-
-In practice, we use sequential updating and smoothing. One obvious reason is improvement in numerical performance. Instead of performing the full matrix inverse, which can be prohibitively expensive if the either observation or state vector is large. But most importantly, by using sequential updating, I am able to update Kalman Filter using only partial information, which is not handled by existing Kalman filter packages. 
-
-To perform Kalman updating sequentially, consider again equation (\ref{eq:measure}):
-\[
-    y_t = A + H\xi_{t} + w_t 
-\]
-where $E(w_{t}w_{t}')=R$. We use LDL decomposition method to obtain $L$ such that $R=LDL'$. Rewrite equation (\ref{eq:measure}) as:
-
-\[
-    \bar{y}_t = L^{-1}A + L^{-1}H\xi_{t} + L^{-1}w_t
-\]
-
-where $\bar{w}_t = L^{-1}w_t$. Note that $\bar{w}_t$ has diagonal variance matrix $D$. For the remainder of this section, we assume that we work with transformed measures (thus omit the "-" notation).
-
-Assume at time $t$ we have $k$ measurements. We initialize the measurement update process with $\hat{\xi}_{t|t}^0=\hat{\xi}_{t|t-1}$, and $P_{t|t}^0=P_{t|t-1}$. Consider the measurement update for the $i$th measurement, $y_t^i$:
-
-\begin{align*}
-    \hat{\xi}_{t}^i & = \hat{\xi}_{t}^{i-1} + K_t^i(y_t^i - A - H\hat{\xi}_{t|t}^{i-1}) \\
-    P_{t|t}^{i} & = (I - K_t^iH_i)P_{t|t}^{i-1}(I-K_t^iH_i)' + K_t^{i}R_{i,i}(K_t^{i})' \\
-    K_t^i & = \frac{P_{t|t}^{i-1}H_i^{'}}{H_{i}P_{t|t}^{i-1}H_{i}^{'}+R_{i,i}}
-\end{align*}
-
-If we don't have complete set of measurements at time $t$, we can simply skip the updating from any missing measurement.
-
-\section{M-step:} \label{sec:M}
-
-In this section, I detail steps to solve MLE iteratively. Note that to goal is to find parameters $\theta \equiv {A, H, F, R, Q}$ to minimize:
-
-\begin{align}
-    L(\theta,y) = \sum_t^{t=T}log[\mathbb{P}(y_t|\theta)] = \sum_t^{t=T}log\{E[\mathbb{P}(y_t,\xi_t|\theta)]_{\xi_t}\} \label{eq:MLE}
-\end{align} 
-
-By Markov Properties, we have: 
-
-\begin{align}
-    \sum_t^{t=T}E\{log[\mathbb{P}(y_t,\xi_t)]\}_{\xi_t} &= \sum_t^{t=T}log\{E[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]_{\xi_t}\}
-    + \sum_t^{t=T}log\{E[\mathbb{P}(y_t|\xi_t, \theta)]_{\xi_t}\} \nonumber \\
-    & = \sum_t^{t=T}log\left[\int\mathbb{P}(y_t|\xi_t,\theta)d\xi_t\right]
-    + \sum_t^{t=T}log\left[\int\mathbb{P}(\xi_t|\xi_{t-1},\theta)d\xi_t\right] \nonumber 
-\end{align}
-
-If we assume Gaussian Process on the error terms, we have:
-\begin{align}
-    log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)] = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1}) + C \nonumber \\
-    = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1})]\} + C \nonumber \\
-    = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[Q^{-1}(\xi_t-F\xi_{t-1})(\xi_t-F\xi_{t-1})']\} + C \label{eq:mle_xi}
-\end{align}
-
-The second equality follows from $x = Trace(x)$ if $x$ is a scalar, and the third equality follows from $Trace(AB) = Trace(BA)$. Similarly, for $\mathbb{P}()y_t|\xi_{t},\theta)$, we have:
-\begin{align}
-    log[\mathbb{P}(y_t|\xi_{t},\theta)] = \frac{1}{2}log|R^{-1}|-\frac{1}{2}(y_t-A-H\xi_t)'R^{-1}(y_t-A-H\xi_t) + C \nonumber \\
-    = \frac{1}{2}log|R^{-1}|-\frac{1}{2}\{Trace[R^{-1}(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})']\} + C \label{eq:mle_y} 
-\end{align}
-
-Note that we have incomplete observations, so we use cholesky decomposition. (Replace current formulation) 
-
-Before we take derivatives, I list here some useful formula:
-
-\begin{flalign*}
-    &\frac{\partial B'AB}{\partial B} = B'(A'+A) \\
-    &\frac{\partial Trace(AB)}{\partial A} = \frac{\partial Trace(BA)}{\partial A} = \frac{\partial Trace(B'A')}{\partial A} = B' \\
-    &\frac{\partial log(A)}{\partial A} = A^{-1} \\
-    &\frac{\partial det(A)}{\partial A} = det(A)(A^{-1})'
-\end{flalign*}
-
-Now we find $\hat{\theta}$ by taking derivations of equation (\ref{eq:MLE}). First let's assume we observe $\{\xi\}_t$, we have:
-
-\begin{align}
-    log[\mathbb{P}(\xi,y|\theta)] =& \frac{T-1}{2}log|Q^{-1}|+\frac{T}{2}log|R^{-1}| \nonumber \\
-    & - \frac{1}{2}Trace\left[Q^{-1}\sum_1^{T-1}(\xi_t-F\xi_{t-1})'(\xi_t-F\xi_{t-1})\right] \nonumber \\
-    & - \frac{1}{2}Trace\left[R^{-1}\sum_1^T(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})'\right] \label{eq:mle_prob}
-\end{align}
-
-Take FOC on (\ref{eq:mle_prob}), we have:
-
-\begin{align*}
-    \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial F} &= Q^{-1}\left(\sum_1^T\xi_{t+1}\xi_t^{'} 
-        - F\xi_{t+1}\xi_{t+1}'\right) \\
-    \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial H} &= R^{-1}\left(\sum_1^Ty_t\xi_t'
-        -A\xi_t-H\xi_t\xi_t^{'}\right) \\
-    \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial A} &= R^{-1}\left(\sum_1^Ty_t-A-H\xi_t\right) \\
-    \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial Q^{-1}} &= \frac{T-1}{2}Q 
-        - \frac{1}{2}\left(\sum_1^{T-1}(\xi_t-F\xi_{t-1})'(\xi_t-F\xi_{t-1})\right) \\
-    \frac{\partial log[\mathbb{P}(\xi,y|\theta)]}{\partial R^{-1}} &= \frac{T}{2}R 
-        - \frac{1}{2}\left(\sum_1^T(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})'\right) 
-\end{align*}
-
-Set FOC to 0 and take conditional expectations of $\xi$ with pdf $f(\xi_t|y_1^T)$, we have the update rules for parameters of interest:
-
-\begin{align}
-    F &= \left[\sum_1^{T}E(\xi_{t+1}\xi_{t}|y_1^T)'\right] \left[\sum_1^{T}E(\xi_{t+1}\xi_{t+1}|y_1^T)'\right]^{-1} \\
-    H &= \left[\sum_1^{T}y_tE(\xi_{t}|y_1^T)' - \frac{1}{T}\left(\sum_1^Ty_t\right)\left(\sum_1^TE(\xi_t|y_1^T)\right)\right] 
-    \left[\sum_1^{T}E(\xi_{t}\xi_{t}|y_1^T)'\right]^{-1} \\
-    A &= \\
-    Q &= \\
-    R &= 
-\end{align}
-\section{Implementation:} \label{sec:implement}
-The Implementation is simple (we can use )
-implement
-use scipy.linalg.dtrtri to solve inverse of triangular matrix.
-use cholesky decomposition to make sure inverse is still PSD
-potential next step is to use efficient smoothing.
-and make a general kalman filter. 
-Note we might need to redo structure. As the F need to have eigenvalue less than 1. Need to check whether diff is necessary to get good estimates. This section should be completed last, as the model is still subject to change.
-Start with general case, and have a section about linear gaussian implementation.
-revise M-step formula, as it does not take into account of changing vec of updates, use cholesky decomposition to get sequential update 
-
-\[
-    E(v_{t}v_{\tau}^{'})=\begin{cases}
-        Q & t=\tau \\
-        0 & otherwise
-    \end{cases} 
-\]
-\printbibliography
-\appendix
-\section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
-\begin{align*}
-    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + R_t)K_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + P_{t,t-1}H_t^{'}K_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1}
-\end{align*}
-The fourth equality follows from equation (\ref{eq:gain}). 
 \end{document}
