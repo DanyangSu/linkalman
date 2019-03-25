@@ -24,7 +24,7 @@ This document serves as the theoretical foundation of the linkalman package. Com
     \item Robust numerical implementation
 \end{boenumerate}
 
-Baseline kalman filters assume constant parameter matrices such that the EM solver has closed solutions. In practice, the dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a kalman filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. linkalman package, while still falls in the linear Gaussian realm, is general enough to tackle many real world problems. This document serves as the theoretical foundation of the linkalman package. Section (\ref{sec:model_setup}) lays out the general structure of a Linear Dynamic System (LDS), and section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed derivation of Kalman Filter and Kalman Smoother, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate the underlying parameters of the LDS, and Section (\ref{sec:apply}) applies the Kalman Filter to solving a sophisticated time series problem. 
+Baseline kalman filters assume const parameter matrices such that the EM solver has closed solutions. In practice, the dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a kalman filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. linkalman package, while still falls in the linear Gaussian realm, is general enough to tackle many real world problems. This document serves as the theoretical foundation of the linkalman package. Section (\ref{sec:model_setup}) lays out the general structure of a Linear Dynamic System (LDS), and section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed derivation of Kalman Filter and Kalman Smoother, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate the underlying parameters of the LDS, and Section (\ref{sec:apply}) applies the Kalman Filter to solving a sophisticated time series problem. 
 
 \section{Model Setup:} \label{sec:model_setup}
 
@@ -48,6 +48,7 @@ Suppose we observe $Y_T$, and $\theta$ is known. To predict $y_{T+1}$, we need t
 \begin{align*}
     Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
     X_t &\equiv \{x_1, x_2, ..., x_t\} \\
+    \Xi_t &\equiv \{\xi_1,\xi_2,...,\xi_t\} \\
     \hat{\xi}_{t,s} &\equiv E(\xi_t|X_{s},Y_{s};\theta) \\
     \hat{\xi}_{t,r,s} &\equiv E(\xi_t|\xi_r,X_{s},Y_{s};\theta) \\
     P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
@@ -154,13 +155,62 @@ The procedure for backward smoothing is as follows:
 Given $Y_t$ and $\theta$, we are able to use forward filtering and backward smoothing to infer the distribution of $\xi_t$ if we assume HMM with Gaussian noises. 
 
 \section{EM Algorithm} \label{sec:EM}
-Kalman Filter and Kalman Smoother are useful to prediction measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer Appendix \ref{ap:EM_proof}.
+Kalman Filter and Kalman Smoother are useful to predict measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer Appendix \ref{ap:EM_proof}.
 
-For a HMM, if we know both $\xi_t$ and $y_t$, the likelihood is: 
+The log likelihood function for a HMM system is:
+\begin{align*}
+    L(Y_T,X_T, \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
+\end{align*}
+
+Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing: 
 \begin{align}
-    a
+    G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T \label{eq:G}
+\end{align}
+Denote $G(\theta,\theta_1)$ as: 
+\[
+    G(\theta,\theta_1) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_1)d\Xi_T
+\]
+EM algorithm proceeds as follows:
+\begin{boenumerate}
+    \item Start with initial parameter value $\theta_0$
+    \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to get $\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})$
+    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$    
+    \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal.
+\end{boenumerate}
+
+\subsection{$G(Y_T,X_T,\theta)$ with Missing Measurements}
+If we know $(Y_T,\Xi_T)$, by Markov Property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
+\begin{align}
+    log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)] 
+    + \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)] \label{eq:log}
 \end{align}
 
+$log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]$ in equation (\ref{eq:log}) is:
+\begin{align}
+    log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)] &= const-\frac{1}{2}log(|Q_t|) 
+    -\frac{1}{2}\delta_t^{'}Q_t^{-1}\delta_t \nonumber \\
+    &= const-\frac{1}{2}log(|Q_t|) 
+    -\frac{1}{2}Tr[\delta_t^{'}Q_t^{-1}\delta_t] \nonumber \\
+    &= const-\frac{1}{2}log(|Q_t|) 
+    -\frac{1}{2}Tr[Q_t^{-1}\delta_t\delta_t^{'}] \label{eq:log1} \\
+    \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1} \nonumber
+\end{align}
+The second equality in equation (\ref{eq:log1}) holds because $Tr(a)=a$ for scalar $a$. The third equality holds because $Tr(AB)=Tr(BA)$. 
+We may calculate:
+\begin{align}
+    G_1^{t}(\theta,\theta_{i-1}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T \nonumber \\
+    &= const -\frac{1}{2}log(|Q_t|)-\frac{1}{2}Tr[E(Q_t^{-1}\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})] \nonumber \\
+    &= const - \frac{1}{2}log(|Q_t|) - \frac{1}{2}Tr[Q_t^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log1_trace}
+\end{align}
+
+Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. 
+
+Calculating conditional expectation of the second term in equation (\ref{eq:log}) is more involved in the presence of missing measurements. Let's consider:
+\[
+    G_2^t(\theta,\theta_{i-1}) \equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t, \theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T 
+\]
+
+With the assumption of Gaussian white noises, 
 \section{Application} \label{sec:apply}
 
 % \section{Solve the Kalman filter} \label{sec:kf}
@@ -238,31 +288,6 @@ For a HMM, if we know both $\xi_t$ and $y_t$, the likelihood is:
 
 % In this section, I detail steps to solve MLE iteratively. Note that to goal is to find parameters $\theta \equiv {A, H, F, R, Q}$ to minimize:
 
-% \begin{align}
-%     L(\theta,y) = \sum_t^{t=T}log[\mathbb{P}(y_t|\theta)] = \sum_t^{t=T}log\{E[\mathbb{P}(y_t,\xi_t|\theta)]_{\xi_t}\} \label{eq:MLE}
-% \end{align} 
-
-% By Markov Properties, we have: 
-
-% \begin{align}
-%     \sum_t^{t=T}E\{log[\mathbb{P}(y_t,\xi_t)]\}_{\xi_t} &= \sum_t^{t=T}log\{E[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]_{\xi_t}\}
-%     + \sum_t^{t=T}log\{E[\mathbb{P}(y_t|\xi_t, \theta)]_{\xi_t}\} \nonumber \\
-%     & = \sum_t^{t=T}log\left[\int\mathbb{P}(y_t|\xi_t,\theta)d\xi_t\right]
-%     + \sum_t^{t=T}log\left[\int\mathbb{P}(\xi_t|\xi_{t-1},\theta)d\xi_t\right] \nonumber 
-% \end{align}
-
-% If we assume Gaussian Process on the error terms, we have:
-% \begin{align}
-%     log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)] = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1}) + C \nonumber \\
-%     = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[(\xi_t-F\xi_{t-1})'Q^{-1}(\xi_t-F\xi_{t-1})]\} + C \nonumber \\
-%     = \frac{1}{2}log|Q^{-1}|-\frac{1}{2}\{Trace[Q^{-1}(\xi_t-F\xi_{t-1})(\xi_t-F\xi_{t-1})']\} + C \label{eq:mle_xi}
-% \end{align}
-
-% The second equality follows from $x = Trace(x)$ if $x$ is a scalar, and the third equality follows from $Trace(AB) = Trace(BA)$. Similarly, for $\mathbb{P}()y_t|\xi_{t},\theta)$, we have:
-% \begin{align}
-%     log[\mathbb{P}(y_t|\xi_{t},\theta)] = \frac{1}{2}log|R^{-1}|-\frac{1}{2}(y_t-A-H\xi_t)'R^{-1}(y_t-A-H\xi_t) + C \nonumber \\
-%     = \frac{1}{2}log|R^{-1}|-\frac{1}{2}\{Trace[R^{-1}(y_t-A-H\xi_{t})(y_t-A-H\xi_{t})']\} + C \label{eq:mle_y} 
-% \end{align}
 
 % Note that we have incomplete observations, so we use cholesky decomposition. (Replace current formulation) 
 
@@ -325,6 +350,8 @@ For a HMM, if we know both $\xi_t$ and $y_t$, the likelihood is:
 %     \end{cases} 
 % \]
 \printbibliography
+
+\pagebreak
 \appendix
 \section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$}
 
@@ -389,10 +416,41 @@ Take expectation of equation (\ref{eq:general_mle}) wrt. some distribution of $\
 
 To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) maximized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
 
-\[
-    Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi
-\]
-
+\begin{align}
+    Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi \label{eq:Q}
+\end{align}
 then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
+\section{Derivation of Log-likelihood for $\Xi_T$} \label{ap:log}
+Recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}$. Expanding the expectation terms in equation (\ref{eq:log1_trace}), and denoting $\Theta \equiv (Y_T,X_T, \theta_i)$, we have:
+\begin{align*}
+    E(\delta_t\delta_t^{'}|\Theta) &= E[(\xi_t-F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1}) 
+    (\xi_t-F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1})^{'})|\Theta] \\
+    &= E(\xi_t\xi_t^{'}|\Theta) - F_{t-1}E(\xi_{t-1}\xi_{t}^{'}|\Theta) - B_{t-1}x_{t-1}E(\xi_t^{'}|\Theta) \\
+    &- E(\xi_t\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'}
+    +B_{t-1}x_{t-1}E(\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} \\
+    &- E(\xi_t|\Theta)x_{t-1}^{'}B_{t-1}^{'} + F_{t-1}E(\xi_{t-1}|\Theta)x_{t-1}^{'}B_{t-1}^{'}
+    +B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'}
+\end{align*}
+
+We already derive expression for $E(\xi_t|\Theta)$ in (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
+\begin{align*}
+    E(\xi_t\xi_t^{'}|\Theta) & = E(\xi_t|\Theta)E(\xi_t^{'}|\Theta) + Var(\xi_t|\Theta) \\
+    &= \hat{\xi}_{t,T}(\hat{\xi}_{t,T})^{'} + P_{t,T}
+\end{align*}
+
+To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This derivation adapts the general strategy in deriving $\hat{\xi}_{t,T}$ in Chapter 13 of (\cite{hamilton_1994}).}:
+\begin{align}
+    E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) &= \xi_tE(\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) \nonumber \\
+    &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \label{eq:xi_t,t-1}
+\end{align}
+
+By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t,t-1}) over $\xi_t$, we have:
+\begin{align*}
+    E(\xi_t\xi_{t-1}^{'})|\Theta) &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + E(\xi_t\xi_t^{'}|\Theta)J_{t-1}^{'}
+    -\hat{\xi}_{t,T}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \\
+    &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + [\hat{\xi}_{t,T}(\hat{\xi}_{t,T})^{'} + P_{t,T} 
+    -\hat{\xi}_{t,T}(\hat{\xi}_{t,t-1})^{'}]J_{t-1}^{'} \\
+    &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + [P_{t,T} + \hat{\xi}_{t,T}(\hat{\xi}_{t,T}-\hat{\xi}_{t,t-1})^{'}]J_{t-1}^{'}
+\end{align*}
 
 \end{document}
