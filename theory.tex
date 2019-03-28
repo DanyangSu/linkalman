@@ -2,6 +2,7 @@
 \usepackage{enumitem}
 \usepackage{amssymb}
 \usepackage{amsmath}
+\usepackage{bbm}
 \usepackage[a4paper, total={6in, 8in}]{geometry}
 \usepackage[style=authoryear,sorting=nyt]{biblatex}
 \newtheorem{lemma}{Lemma}
@@ -203,7 +204,7 @@ We may calculate:
     &= const - \frac{1}{2}log(|Q_t|) - \frac{1}{2}Tr[Q_t^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log1_trace}
 \end{align}
 
-Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. 
+Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. If $Q_t$ does not have full rank, we will use only the full rank partition of $Q_t$. 
 
 Calculating conditional expectation of the second term in equation (\ref{eq:log}) is similar. Let's consider:
 \[
@@ -226,9 +227,105 @@ We can use numerical methods to find $\theta_i$ that maximizes $G(\theta,\theta_
 \section{Implementation} \label{sec:implement}
 Nearest PSD to ensure PSD
 \section{Application} \label{sec:apply}
+In this section, I use the Kalman Filter to solve a complex time series problem from (\cite{brodersen_etal_2015}) (with some modification). Consider the following time series: 
+\begin{align}
+    g_t &= \mu_t + \gamma_t + D_1x_t + w_{g,t} \label{eq:ts_setup} \\
+    e_t &= \pi(\mu_t + \gamma_t) + D_2x_t + w_{e_t}
+\end{align}
+In equation (\ref{eq:ts_setup}), $g_t$ is the daily S\&P index, and $e_t$ is gold price index at time $t$, both of wich can be viewed as measurements of economic status at time $t$. We consider $g_t$ as the unbised measurement of $(\mu_t+\gamma_t)$, and $e_t$ is a biased measurement. $x_t$ includes $1$ as well as whether it is a holidy at time $t$. $\mu_t$ is the trend component, and $gamma_t$ is the seasonal component. $\mu_t$ has the following specification:
+\begin{align}
+    &\mu_{t+1} = \mu_{t} + \delta_t + \eta_{\mu,t} \\
+    &\delta_{t+1} = \Delta_{\delta} + \rho_{\delta}(\delta_t - \Delta_{\delta}) + \eta_{\delta,t} 
+\end{align}
+where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$, and $\eta_{\mu,t} \perp \eta_{\delta,t}$. $\delta_t$ is interpreted as the slop of the trend and is assumed to be stationary. $\gamma_t$ has the following specification:
+\begin{align}
+    \sum_{j=0}^6\gamma_{t-j} &= \alpha_{t-1} + \eta_{\gamma,t} \\
+    \alpha_{t+1} &= \Delta_{\alpha} + \rho_{\alpha}(\alpha_t-\Delta_{\alpha}) + \eta_{\alpha,t}
+\end{align}
+$\alpha_t$ implies the seasonal magnitude exists and follows a stationary process. We assume $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$, $\eta_{\alpha,t}\sim\mathcal{N}(0,\sigma_{\alpha}^2)$, and $\eta_{\gamma,t} \perp \eta_{\alpha,t}$.
+
+To fit the LDS model Kalman Filter, we rewrite it as:
+
+\begin{align*}
+    \xi_t = \begin{pmatrix}
+        \mu_t \\
+        \delta_t \\
+        \alpha_t \\
+        \gamma_t \\
+        \gamma_{t-1} \\
+        \gamma_{t-2} \\
+        \gamma_{t-3} \\
+        \gamma_{t-4} \\
+        \gamma_{t-5} \\
+        \gamma_{t-6}
+    \end{pmatrix}, 
+    &\ 
+    F_t = F = \begin{pmatrix}
+        1 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & \rho_{\delta} & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & \rho_{\alpha} & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 \\
+        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0
+    \end{pmatrix} \\
+    v_t = \begin{pmatrix}
+        \eta_{\mu,t} \\
+        \eta_{\delta,t} \\
+        \eta_{\alpha,t} \\
+        \eta_{\gamma,t} \\
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+    \end{pmatrix},
+    &\ 
+    B_t = B = \begin{pmatrix}
+        0 & 0 \\
+        (1-\rho_{\delta})\Delta_{\delta} & 0 \\
+        (1-\rho_{\alpha}\Delta_{\alpha}) & 0 \\
+        0 & 0 \\
+        0 & 0 \\
+        0 & 0 \\
+        0 & 0 \\
+        0 & 0 \\
+        0 & 0 \\
+        0 & 0 
+    \end{pmatrix},
+    \ 
+    x_t = \begin{pmatrix}
+        1 \\
+        \mathbbm{1}_{holiday}
+    \end{pmatrix} \\
+    y_t = \begin{pmatrix}
+        g_t \\
+        e_t 
+    \end{pmatrix},
+    &\ 
+    D_t = D = \begin{pmatrix}
+        0 & h_1 \\
+        a & h_2
+    \end{pmatrix},
+    \ 
+    w_t = \begin{pmatrix}
+        w_{1,t} \\
+        w_{2,t}
+    \end{pmatrix} 
+    , \ w_t\sim\mathcal{N}(0,\Sigma_{w}) \\
+    & H_t = H = \begin{pmatrix}
+        1 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        k & k & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0
+    \end{pmatrix}
+\end{align*}
+
+The system paramter is $\theta\equiv(\rho_{\delta},\rho_{\alpha}, \Delta_{\delta}, \Delta_{\alpha}, h_1, h_2, k, \sigma_{\mu}, \sigma{\delta}, \sigma_{\gamma}, \Sigma_w)$. We may use the standard EM algorithm to solve $\theta$.
 
 \printbibliography
-
 \pagebreak
 \appendix
 \section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$}
