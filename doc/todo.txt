@@ -6,3 +6,5 @@ Documentation:
 5) what if error terms not Gaussian?
 6) non-linear (UKF and EnKF) (most likely not needed)
 7) partical filter
+8) efficient smoother
+9) square root kf
