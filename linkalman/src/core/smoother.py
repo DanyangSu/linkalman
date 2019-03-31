@@ -35,6 +35,12 @@ class Smoother(object):
         xi_t_T = self.xi_t_t[t] + Jt * (self.xi_t_T[-1] - self.P_t_1t[t+1])
         P_t_T = self.P_t_t[t] + Jt * (self.P_t_T[-1] - self.P_t_1t[t+1]) * Jt.T
         return xi_t_T, P_t_T
+
+    def _E_delta2(self, t):
+        pass
+
+    def _E_chi2(self, t):
+        pass
         
 
     def __call__(self):
@@ -45,9 +51,13 @@ class Smoother(object):
             (xi_t_T, P_t_T) = self._smooth(t)
             self.xi_t_T.append(xi_t_T)
             self.P_t_T.append(P_t_T)
-        
+
         # Reverse the order
         self.xi_t_T = list(reversed(self.xi_t_T))
         self.P_t_T = list(reversed(self.P_t_T))
             
+        # Calculate delta2 can chi2 in the E-step of the EM algorithm
+        for t in range(self.T):
+            self.E_delta2.append(self._E_delta2(t))
+            self.E_chi2.append(self._E_chi2(t))
 
