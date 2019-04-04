@@ -1,36 +1,29 @@
-def inv():
-    pass
+from collections import Sequence
+import numpy as np
 
-def ldl_transform():
-    pass
-
-def check_M():
-    pass
-
-class Mt_series(object):
-
-    def __init__(self, f_theta):
-
-        # If a list of matrices has identical matrices, we can save lots of matrix operations
-        self.M = None
-        self.M_inv = None
-        self.M_transpose = None
-
+class M_series(Sequence):
     
-    def inv(self, t):
-        if self[t] != self.M:
-            self.M = self[t]
-            self.M_inv = linalg.pinvh(self[t])
-        return self.M_inv
-
-class Mt(object):
-    """
-    Performance Improvement over native f_theta
-    """
-    def __init__(self, f_theta)
-        pass
-
-    def _check_Mt_names():
-        pass
-
+    def __init__(self, m_list):
         
+        self.m = None
+        self.m_inv = None
+        self.m_transpose = None
+        self.m_list = m_list
+        
+    def __getitem__(self, index):
+        return self.m_list[index]
+
+    def __len__(self):
+        return len(self.m_list)
+    
+    def inv(self, index):
+        if (not np.array_equal(self.m, self.m_list[index])) or self.m_inv is None:
+            self.minv = self.m_list[index]
+            self.m_inv = np.linalg.pinv(self.m)
+        return self.m_inv
+    
+    def transpose(self, index):
+        if (not np.array_equal(self.m, self.m_list[index])) or self.m_transpose is None:
+            self.mt = self.m_list[index]
+            self.m_transpose = self.m_list[index].T
+        return self.m_transpose 
