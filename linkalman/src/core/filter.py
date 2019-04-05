@@ -1,28 +1,29 @@
 import numpy as np
+import scipy
 from copy import deepcopy as copy
 
 class Filter(object):
 
-    def __init__(self, Ft, Bt, Ht, Dt, Qt, Rt, Yt, Xt, xi_1_0, P_1_0):
+    def __init__(self, f):
         """
         Initialize a Kalman Filter. Refer to linkalman/doc/theory.pdf for definition of arguments
         Note that the HMM is assumed to have gone through LDL transformation
         """
-        self.Ft = Ft
-        self.Bt = Bt
-        self.Ht = Ht
-        self.Dt = Dt
-        self.Qt = Qt
-        self.Rt = Rt
+        self.Ft = f.Ft
+        self.Bt = f.Bt
+        self.Ht = f.Ht
+        self.Dt = f.Dt
+        self.Qt = f.Qt
+        self.Rt = f.Rt
         self.Yt = Yt
         self.Xt = Xt
-        self.T = len(F)
+        self.T = len(self.Ft)
         self.xi_length = Ft[0].shape[1]
         self.y_length = Yt[0].shape[0]
         
         # Create output matrices
-        self.xi_t_1t = [x1_1_0]
-        self.P_t_1t = [P_1_0]
+        self.xi_t_1t = [f.x1_1_0]
+        self.P_t_1t = [f.P_1_0]
         self.xi_t_t = []
         self.P_t_t = []
 
@@ -37,6 +38,11 @@ class Filter(object):
         """
         Sequentially update Kalman Filter at time t
         """
+
+        # LDL 
+        (L_t, R_t) = self.Rt.LDL(t)
+        (Y_t, H_t, D_t) = self._LDL(L_t, t)
+
         xi_t_t = copy(self.xi_t_1t[t])
         P_t_t = copy(self.P_t_1t[t])
         for i in range(self.y_length):
@@ -53,21 +59,25 @@ class Filter(object):
         else:
             xi_t1_t = None
             P_t1_t = None
-        return xi_t_t, P_t_t, xi_t1_t, P_t1_t
+
+        # Restore to original form
+        self._restore()
+
+        return xi_t_t, P_t_t, xi_t1_t, P_t1_t, K
 
     def __call__(self):
         """
         Run forward filtering
         """
+        # Filter
         for t in range(self.T):
-            (xi_t_t, P_t_t, xi_t1_t, P_t1_t) = self._sequential_update(t)
+            (xi_t_t, P_t_t, xi_t1_t, P_t1_t, K_t) = self._sequential_update(t)
             self.xi_t_t.append(xi_t_t)
             self.P_t_t.append(P_t_t)
+            self.K_t.append(K_t)
             if t < self.T - 1:
                 self.xi_t_1t.append(xi_t1_t)
                 self.P_t_1t.append(P_t1_t)
 
-
-
-
+        return ('xi_t_1t': self.xi_t_1t, 'xi_t_t': self.xi_t_t, 'P_t_1t': self.P_t_1t, 'P_t_t': self.P_t_t, 'K_t': self.K_t)
 

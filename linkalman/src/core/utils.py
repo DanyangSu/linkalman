@@ -8,6 +8,7 @@ class M_series(Sequence):
         self.m = None
         self.m_inv = None
         self.m_transpose = None
+        self.m_L = None
         self.m_list = m_list
         
     def __getitem__(self, index):
@@ -18,12 +19,18 @@ class M_series(Sequence):
     
     def inv(self, index):
         if (not np.array_equal(self.m, self.m_list[index])) or self.m_inv is None:
-            self.minv = self.m_list[index]
+            self.m = self.m_list[index]
             self.m_inv = np.linalg.pinv(self.m)
         return self.m_inv
     
     def transpose(self, index):
         if (not np.array_equal(self.m, self.m_list[index])) or self.m_transpose is None:
-            self.mt = self.m_list[index]
+            self.m = self.m_list[index]
             self.m_transpose = self.m_list[index].T
         return self.m_transpose 
+
+    def LDL(self, index):
+        if (not np.array_equal(self.m, self._m_list[index])) or self.m_L is None:
+            self.m = self.m_list[index]
+            self.m_L = scipy.linalg.ldl(self.m)
+        return self.m_L

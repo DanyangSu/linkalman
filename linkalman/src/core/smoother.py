@@ -4,16 +4,16 @@ from ../core/utils import inv
 
 class Smoother(object):
 
-    def __init__(self, kf):
+    def __init__(self, f, kf, Xt, Yt):
         """
         Initialize a Kalman Smoother. Refer to linkalman/doc/theory.pdf for details
         """
-        self.Ft = kf.Ft
-        self.Bt = kf.Bt
-        self.Ht = kf.Ht
-        self.Dt = kf.Dt
-        self.Qt = kf.Qt
-        self.Rt = kf.Rt
+        self.Ft = f.Ft
+        self.Bt = f.Bt
+        self.Ht = f.Ht
+        self.Dt = f.Dt
+        self.Qt = f.Qt
+        self.Rt = f.Rt
         self.Yt = kf.Yt
         self.Xt = kf.Xt
         self.xi_t_1t = kf.xi_t_1t

@@ -21,12 +21,17 @@ class F_theta(object):
 
     def __call__(theta):
         M = self.f(theta)
-        self.F = Constant_M(M.F, self.T)
-        self.B = Constant_M(M.B, self.T)
-        self.H = Constant_M(M.H, self.T)
-        self.D = Constant_M(M.D, self.T)
-        self.Q = Constant_M(M.Q, self.T)
-        self.R = Constant_M(M.R, self.T)
+        self.Ft = Constant_M(M.F, self.T)
+        self.Bt = Constant_M(M.B, self.T)
+        self.Ht = Constant_M(M.H, self.T)
+        self.Dt = Constant_M(M.D, self.T)
+        self.Qt = Constant_M(M.Q, self.T)
+        self.Rt = Constant_M(M.R, self.T)
+        self.xi_1_0 = M.xi_1_0
+        self.P_1_0 = M.P_1_0
+    
+    def __getattr__(self, index):
+        return getattr(self, index)
 
 
 class Simple_EM(Base):
