@@ -1,6 +1,5 @@
 import numpy as np
 from copy import deepcopy as copy
-from ../core/utils import inv
 
 class Smoother(object):
 
@@ -26,6 +25,9 @@ class Smoother(object):
         # Create output matrices
         self.xi_t_T = [self.xi_t_t[-1]]
         self.P_t_T = [self.P_t_t[-1]]
+        self.xi2 = []
+        self.delta2 = []
+        self.chi2 = []
         
     def _smooth(self, t):
         """
@@ -37,11 +39,27 @@ class Smoother(object):
         return xi_t_T, P_t_T
 
     def _E_delta2(self, t):
-        pass
+        xi2_t_T = self.xi_T[t] * self.xi_T[t].T + self.P_t_T[t]
+        xi_t_T_xi_1t_T = self.xi_t_t[t-1].T + (P_t_T[t] + xi_t_T * ((xi_t_T - xi_t_1t).T)) * Jt[t-1].T
+        delta2 = xi2_t_T - self.F[t-1] * xi_t_T_xi_1t_T.T - self.Bt[t-1] * x[t-1] * self.xi_t_T[t] \\
+                - xi_t_T_xi_1t_T * self.F[t-1].T + self.Ft[t-1] * xi2_t_T[t-1] * self.Ft[t-1].T \\
+                + self.Bt[t-1] * self.Xt[t-1] * self.xi_t_T[t-1].T * self.Ft[t-1].T \\
+                - self.xi_t_T[t] * self.Xt[t-1].T * self.Bt[t-1].T \\
+                + self.Ft[t-1] * self.xi_t_T[t-1] * self.Xt[t-1].T * self.Bt[t-1].T \\
+                + self.Bt[t-1] * self.Xt[t-1] * self.Xt[t-1].T * self.Bt[t-1].T
+        return delta2
 
     def _E_chi2(self, t):
-        pass
+        # preprocess 
         
+        term1 = self.Yt[t] - self.Dt[t] * self.Xt[t]
+        term2 = self.Ht[t] * (self.xi_t_t[t] + self.Jt[t] \\
+                * (self.xi_t_T[t+1] - self.xi_t_1t[t+1])) * (self.Yt[t] - self.Dt[t] * self.Xt[t]).T
+        term3 = term2.T
+        term4 = self.Ht[t] * self.xi2_t_T * self.Ht[t].T
+        
+        chi2 = term1 + term2 + term3 + term4
+        return chi2
 
     def __call__(self):
         """
