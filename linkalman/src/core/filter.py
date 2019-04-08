@@ -15,8 +15,8 @@ class Filter(object):
         self.Dt = f.Dt
         self.Qt = f.Qt
         self.Rt = f.Rt
-        self.Yt = Yt
-        self.Xt = Xt
+        self.Yt = f.Yt
+        self.Xt = f.Xt
         self.T = len(self.Ft)
         self.xi_length = Ft[0].shape[1]
         self.y_length = Yt[0].shape[0]
@@ -93,7 +93,7 @@ class Filter(object):
         """
         # Filter
         for t in range(self.T):
-            (xi_t_t, P_t_t, xi_t1_t, P_t1_t, K_t) = self._sequential_update(t)
+            xi_t_t, P_t_t, xi_t1_t, P_t1_t, K_t = self._sequential_update(t)
             self.xi_t_t.append(xi_t_t)
             self.P_t_t.append(P_t_t)
             self.K_t.append(K_t)
