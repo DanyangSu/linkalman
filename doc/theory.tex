@@ -16,26 +16,20 @@
 \title{Notes for Kalman Filter EM algorithms}
 
 \section{Introduction:}
-
 This document serves as the theoretical foundation of the \texttt{linkalman} package. Compared with some other popular Kalman Filter package written in python, linkalman has several advantages:
-
 \begin{boenumerate}
     \item Account for incomplete measurements 
     \item flexible model structure
     \item Robust numerical implementation
 \end{boenumerate}
-
 Kalman Filters, in its simplified form, assume constant parameter matrices such that the EM solver has closed form solutions. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman Filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. \texttt{linkalman} package, while still falls in the linear Gaussian realm, is general enough to tackle many of the challenged mentioned above. This document serves as the theoretical foundation of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed derivation of Kalman Filter and Kalman Smoother, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate the underlying parameters of the HMM, and Section (\ref{sec:apply}) applies the Kalman Filter to solving a complex time series problem. 
 
 \section{Model Setup:} \label{sec:model_setup}
-
 Consider the following Linear Dynamic System:
-
 \begin{align}
     \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_{t+1} \label{eq:state_evolve} \\
     y_t = & H_t\xi_{t} + D_{t}x_t + w_t \label{eq:measure}
 \end{align}
-
 Equation (\ref{eq:state_evolve}) governs the Markov state transition process. $\xi_t$ $(m\times 1)$ is the latent state random vector at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogeneous process noise. We assume that $v_t\sim \mathcal{N}(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time.}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_{t+1}$ specify the transition dynamics between $t$ and $t+1$. 
 
 Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I aslo assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
@@ -43,9 +37,7 @@ Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)
 Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $M_t\equiv\{F_t, B_t, H_t, D_t, Q_t, R_t\}$. The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; ARMA can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$. We bind $M_t$ with some underlying parameter set $\theta$. For example cyclical pattern can be modeled by using Trigonometric Cycle (\cite{harvey_1985}).  
 
 \section{Kalman Filter} \label{sec:filter}
-
 Given a set of measurements over time, and suppose $\theta$ is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
-
 \begin{align*}
     Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
     X_t &\equiv \{x_1, x_2, ..., x_t\} \\
@@ -54,9 +46,7 @@ Given a set of measurements over time, and suppose $\theta$ is known. To predict
     \hat{\xi}_{t,r,s} &\equiv E(\xi_t|\xi_r,X_{s},Y_{s};\theta) \\
     P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
 \end{align*}
-
 With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
-
 \begin{align}
     \hat{\xi}_{t,t} &= \hat{\xi}_{t,t-1} + K_t(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) \label{eq:filter_begin} \\
     K_t &= P_{t,t-1}H_t^{'}(H_tP_{t,t-1}H_t^{'}+R_t)^{-1} \label{eq:gain} \\
@@ -64,9 +54,7 @@ With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional d
     \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t} + B_tx_t \\
     P_{t+1,t} &= F_tP_{t,t}F_t^{'}+Q_{t+1} \label{eq:filter_end}
 \end{align}
-
 The Kalman Filter proceeds as follows:
-
 \begin{boenumerate}
     \item Given $\theta$, begin with initial value $\hat{\xi}_{1,0}$, and $P_{1,0}$, which can either be part of system parameter $\theta$ or be measured. 
     \item Use equation (\ref{eq:filter_begin}) through (\ref{eq:filter_end}) to calculate $\hat{\xi}_{2,1}$, and $P_{2,1}$.
@@ -74,19 +62,15 @@ The Kalman Filter proceeds as follows:
 \end{boenumerate}
 
 \subsection{Joseph Form and Numerical Robustness}
-
 We define $P_{t,t}$ as a covariance matrix, which is a symmetric positive semi-definite (PSD) matrix, but in practice, we may get $P_{t,t}$ that is neither symmetric nor PSD, due to rounding errors. Look at equation (\ref{eq:p_tt}) again. The subtraction makes calculating $P_{t,t}$ susceptible to rounding errors, sometimes even resulting in negative semi-definite matrix. I use Joseph Form to numerically enforce symmetric PSD. 
 
 The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{The proof in Appendix \ref{ap:joseph}}:
-
 \[
     P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'}    
 \]
-
 If we guarantee $P_{t,t-1}$ and $R_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
 
 \subsection{Missing Measurements and Sequential Filtering}
-
 So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Squential filtering also boosts speed dramatically for large matrix, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}^2$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
 \begin{align*}
     y_t &= 
@@ -106,27 +90,23 @@ where $H_{t:n}$ and $D_{t:n}$ are the $n_{th}$ row of $H_t$ and $D_t$. Define $\
     \hat{\xi}_{t,t:i} &\equiv E(\xi_t|X_{t-1},Y_{t-1},x_{t:1},...,x_{t:n},y_{t:1},...,y_{t:n};\theta) \\
     P_{t,t:i} &\equiv Var(\xi_t|X_{t-1},Y_{t-1},x_{t:1},...,x_{t:n},y_{t:1},...,y_{t:n};\theta) 
 \end{align*}
-
 We initialize the measurement update process with:
 \begin{align}
     \hat{\xi}_{t,t:0} = \hat{\xi}_{t,t-1} \label{eq:seq_init1} \\
     P_{t,t:0} = P_{t,t-1} \label{eq:seq_init2}
 \end{align}
-
 For each successive measurement $i$, we have:
 \begin{align}
     \hat{\xi}_{t,t:i} &= \hat{\xi}_{t,t:i-1} + K_{t:i}(y_{t:i} - H_{t:i}\hat{\xi}_{t,t:i-1} - D_{t:i}x_{t}) \label{eq:seq_start} \\ 
     K_{t:i} &\equiv \frac{P_{t,t:i-1}(H_{t:i})^{'}}{H_{t:i}P_{t,t:i-1}(H_{t:i})^{'}+\sigma_{t:i}^{2}} \\
     P_{t,t:i} &= [I - K_{t:i}H_{t:i}]P_{t,t:i-1}[I-K_{t:i}H_{t:i}]^{'} + K_{t:i}\sigma_{t:i}^{2}(K_{t:i})^{'} \label{eq:seq_end}
 \end{align}
-
 Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formular is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
 \begin{boenumerate}
     \item Initialize with (\ref{eq:seq_init1}) and (\ref{eq:seq_init2})
     \item \label{step:seq_update} Update Kalman Filter using equation (\ref{eq:seq_start}) through (\ref{eq:seq_end})
     \item Repeat Step \ref{step:seq_update} for each $y_{t:i}$
 \end{boenumerate}
-
 If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original LDS into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = L_tS_t(L_t^{-1})^{'}$. Pre-multiply equation (\ref{eq:measure}) by $L_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
 \[
     \tilde{y}_t = \tilde{D}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t
@@ -142,14 +122,25 @@ Suppose in addition to state estimates from Kalman Filter, we also know $\hat{\x
     J_t & \equiv P_{t,t}F_t^{'}P_{t+1,t}^{-1} \\
     P_{t,T} &= P_{t,t} + J_t(P_{t+1,T}-P_{t+1,t})J_t^{'} \label{eq:smooth_end}
 \end{align}
-
 The procedure for backward smoothing is as follows:
 \begin{boenumerate}
     \item Start with $\hat{\xi}_{T,T}$ and $P_{T,T}$ obtained from the filtering process.
     \item \label{step:back_smooth} For $t$, use equation (\ref{eq:smooth_start}) through (\ref{eq:smooth_end}) to get $\hat{\xi}_{t,T}$ and $P_{t,T}$.
     \item Repeat step \ref{step:back_smooth} for $t \in \{1,2,...,T-1\}$.
 \end{boenumerate}
-
+In practice, if we use EM algorithm to solve for system paramters, we also need to calculate two additional values\footnote{See Appendix (\ref{ap:log}) and (\ref{ap:log2}) for derivation}:
+\begin{align*}
+    \Omega_t &\equiv E(\xi_t\xi_t^{'}|Y_T, X_T, \theta) \nonumber \\
+    \Lambda_{t,t-1} &\equiv E(\xi_t\xi_{t-1}|Y_T,X_T, \theta) \nonumber
+\end{align*}
+The the procedure for Kalman Smoother is:
+\begin{boenumerate}
+    \item Start with $\hat{\xi}_{T,T}$, $P_{T,T}$ and $\Omega_t$ obtained from the filtering process. 
+    \item Calculate $\Lambda_{T, T-1}$
+    \item \label{step:smooth_complete_start} For $t\in\{T-1, T-2, ..., 1\}$, calculate $\hat{\xi}_{t,T}$, $P_{t,T}$, and $\Omega_t$
+    \item \label{step:smooth_complete_end} For $t\in\{T-1, T-2, ..., 2\}$, calculate $\Lambda_{t,t-1}$
+    \item Repeat Step (\ref{step:smooth_complete_start}) and (\ref{step:smooth_complete_end})\footnote{We don't have to calculate $\Lambda_{1,0}$ because it is not needed for EM algorithm. See Section \ref{subsec:G} and Appendix \ref{ap:log} for details.}
+\end{boenumerate}
 Given $Y_t$ and $\theta$, we are able to use forward filtering and backward smoothing to infer the distribution of $\xi_t$ if we assume HMM with Gaussian noises. 
 
 \section{EM Algorithm} \label{sec:EM}
@@ -159,14 +150,13 @@ The log likelihood function for a HMM system is:
 \begin{align*}
     L(Y_T,X_T, \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
 \end{align*}
-
 Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing: 
-\begin{align}
-    G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T \label{eq:G}
-\end{align}
+\begin{align*}
+    G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T 
+\end{align*}
 Denote $G(\theta,\theta_1)$ as: 
 \[
-    G(\theta,\theta_1) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_1)d\Xi_T
+    G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T
 \]
 EM algorithm proceeds as follows:
 \begin{boenumerate}
@@ -176,7 +166,7 @@ EM algorithm proceeds as follows:
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal.
 \end{boenumerate}
 
-\subsection{$G(Y_T,X_T,\theta)$ with Missing Measurements}
+\subsection{$G(Y_T,X_T,\theta)$ with Missing Measurements} \label{subsec:G}
 If we know $(Y_T,\Xi_T)$, by Markov Property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
 \begin{align}
     log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] 
@@ -195,6 +185,7 @@ For $t>1$, the second term in equation (\ref{eq:log}) is:
     \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1} \nonumber
 \end{align}
 The second equality in equation (\ref{eq:log1}) holds because $Tr(a)=a$ for scalar $a$. The third equality holds because $Tr(AB)=Tr(BA)$. 
+
 We may calculate:
 \begin{align}
     G_1^{t}(\theta,\theta_{i-1}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T \nonumber \\
@@ -205,7 +196,7 @@ Note that when $t=1$, we have $\xi_1\sim\mathcal{N}(\hat{\xi}_{1,0}, P_{1,0})$. 
 \begin{align}
     G_1^1(\theta,\theta_{i-1}) &= const - \frac{1}{2}log(|P_{1,0}|) \nonumber \\
     &- \frac{1}{2}Tr\{P_{1,0}^{-1}E[\delta_1\delta_1^{'}|Y_T, X_T, \theta_{i-1}]\} \nonumber \\
-    \delta_1 &\equiv \xi_1 - \hat{\xi}_{1,0}
+    \delta_1 &\equiv \xi_1 - \hat{\xi}_{1,0} \nonumber
 \end{align}
 Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} to find the pseudo inverse of $Q_t$. 
 
@@ -213,21 +204,16 @@ Calculating conditional expectation of the second term in equation (\ref{eq:log}
 \[
     G_2^t(\theta,\theta_{i-1}) \equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t, \theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T 
 \]
-
 With the assumption of Gaussian white noises, we have:
 \begin{align}
     G_2^t(\theta,\theta_{i-1}) &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log2_trace} \\
     \chi_t &\equiv y_t - H_t\xi_t - D_tx_t \nonumber
 \end{align}
 See Appendix \ref{ap:log2} for detailed derivation of $G_2^t(\theta,\theta_{i-1})$. Now $G(\theta,\theta_{i-1})$ is:
-\begin{align}
-    G(\theta,\theta_{i-1}) &= \sum_{t=1}^{T}G_1^t(\theta,\theta_{i-1}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i-1}) \label{eq:final_mle}
-\end{align}
+\begin{align*}
+    G(\theta,\theta_{i-1}) &= \sum_{t=1}^{T}G_1^t(\theta,\theta_{i-1}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i-1})
+\end{align*}
 We can use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_i$ that maximizes $G(\theta,\theta_{i-1})$.
-
-\section{Implementation} \label{sec:implement}
-How to do LDL in practice.
-backard smoothing should E(xit+1xi_t)
 
 \section{Application} \label{sec:apply}
 In this section, I use the Kalman Filter to solve a complex time series problem from (\cite{brodersen_etal_2015}) (with some modification). Consider the following time series: 
@@ -335,8 +321,8 @@ We may use the standard EM algorithm to solve $\theta$.
 \printbibliography
 \pagebreak
 \appendix
-\section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
 
+\section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
 \begin{lemma}[Law of Iterated Projections] \label{lem:1}
     Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have:
     \[
@@ -360,6 +346,7 @@ Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain fo
     &= P_{t,t-1} - K_tH_tP_{t,t-1}
 \end{align*}
 The fourth equality follows from equation (\ref{eq:gain}).
+
 \section{Proof of Backward Smoothing} \label{ap:smooth}
 Consider the following:
 \begin{align*}
@@ -381,7 +368,6 @@ With some algebra, we can get formula for $P_{t,T}$.
 
 \section{EM Algorithm Premier:} \label{ap:EM_proof}
 Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
-
 \begin{align}
     L(\theta) & = log[P(Y|\theta)] \nonumber \\
     & = log\left[\frac{P(Y,\xi|\theta)}{P(\xi|Y,\theta)}\right] \nonumber \\
@@ -394,13 +380,12 @@ Take expectation of equation (\ref{eq:general_mle}) wrt. some distribution of $\
     L(\theta) = & \int f(\xi)log[P(Y,\xi|\theta)]d\xi \nonumber \\
     & - \int f(\xi)log[P(\xi|Y,\theta)]d\xi \nonumber
 \end{align}
-
 To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) maximized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
-
 \begin{align}
     Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi \label{eq:Q}
 \end{align}
 then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
+
 \section{Derivation of Log-likelihood for $\Xi_T$} \label{ap:log}
 If $t>1$, recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}$. Expanding the expectation terms in equation (\ref{eq:log1_trace}), and denoting $\Theta \equiv (Y_T,X_T, \theta_i)$, we have:
 \begin{align*}
@@ -412,20 +397,17 @@ If $t>1$, recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}
     &- E(\xi_t|\Theta)x_{t-1}^{'}B_{t-1}^{'} + F_{t-1}E(\xi_{t-1}|\Theta)x_{t-1}^{'}B_{t-1}^{'}
     +B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'}
 \end{align*}
-
 We already derive expression for $E(\xi_t|\Theta)$ in (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
 \begin{align*}
     E(\xi_t\xi_t^{'}|\Theta) & = E(\xi_t|\Theta)E(\xi_t^{'}|\Theta) + Var(\xi_t|\Theta) \\
     &= \hat{\xi}_{t,T}(\hat{\xi}_{t,T})^{'} + P_{t,T}
 \end{align*}
-
 To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This derivation adapts the general strategy in deriving $\hat{\xi}_{t,T}$ in Chapter 13 of (\cite{hamilton_1994}).}:
 \begin{align}
     E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) &= \xi_tE(\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) \nonumber \\
     &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \label{eq:xi_t,t-1}
 \end{align}
-
-By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t,t-1}) over $\xi_t$, we have:
+By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change the value of $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t,t-1}) over $\xi_t$, we have:
 \begin{align*}
     E(\xi_t\xi_{t-1}^{'})|\Theta) &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + E(\xi_t\xi_t^{'}|\Theta)J_{t-1}^{'}
     -\hat{\xi}_{t,T}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \\
@@ -434,10 +416,10 @@ By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not c
     &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + [P_{t,T} + \hat{\xi}_{t,T}(\hat{\xi}_{t,T}-\hat{\xi}_{t,t-1})^{'}]J_{t-1}^{'}
 \end{align*}
 If $t=1$, we have:
-\begin{align}
+\begin{align*}
     E(\delta_1\delta_1^{'}) &= E(\xi_1\xi_1^{'}|\Theta) - \hat{\xi}_{1,0}(\hat{\xi}_{1,T})^{'}
     -\hat{\xi}_{1,T}(\hat{\xi}_{1,0})^{'} + \hat{\xi}_{1,0}(\hat{\xi}_{1,0})^{'}
-\end{align}
+\end{align*}
 
 \section{Derivation of Log-likelihood for $Y_T$} \label{ap:log2}
 Recall that $\chi_t \equiv y_t - H_t\xi_t - D_tx_t$. Expanding the expectation terms in equation (\ref{eq:log2_trace}), and denoting $\Theta \equiv (Y_T,X_T,\theta_i)$, we have:
@@ -447,8 +429,8 @@ Recall that $\chi_t \equiv y_t - H_t\xi_t - D_tx_t$. Expanding the expectation t
     &-(y_t-D_tx_t)E(\xi_t^{'}|\Theta)H_t^{'} + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'}
 \end{align*}
 Now look at equation (\ref{eq:log2_trace}) again. Let $M_t$ be:
-\begin{align}
-    M_t \equiv Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:trace}
-\end{align}
+\begin{align*}
+    M_t \equiv Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] 
+\end{align*}
 If $y_t$ has no missing measurements, it is straightforward to calculate $M_t$. If $y_t$ has missing measurements, but $R_t^{-1}$ is diagonal, we can follow (\cite{shumway_stoffer_1982}) and modify $R_t$, $H_t$, $D_t$ and $\chi_t$, which is done in section (\ref{sec:filter}). In fact, we are calculating the marginal distribution of the observed components. 
 \end{document}
