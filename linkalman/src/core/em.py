@@ -1,79 +1,75 @@
 import numpy as np
 from scipy.optimize import minimize
 from functools import partial
-from ../core/utils.py import *
 import scipy
 from scipy import linalg
+from kalman_filter import Filter
+from kalman_smoother import Smoother
+import nlopt
 
 class EM(object):
 
-    def __init__(self, f_theta):
+    def __init__(self, f):
         """
         Initialize an EM Optimizer. Refer to linkalman/doc/theory.pdf for details.
-        f_theta is a customized function that returns system Mt from theta
         """
+        self.f = f
 
-
-
-    def _reverse()
-
-    def _G1(self, Mt, t):
-        
-        return -0.5 * scipy.log(scipy.linalg.det(Mt['Qt'][t])) - \\
-                0.5 * numpy.matrix.trace(Mt['Qt'].inv(t) * self._E_delta2(t))
-
-    def _G2(self, Mt, t):
-        
-        return -0.5 * scipy.log(scipy.linalg.det(Mt['Rt'][t])) - \\
-                0.5 * numpy.matrix.trace(Mt['Rt'].inv(t) * self._E_chi2(t))
-
-    def _E_delta2(self, t):
-        E_xi = 
-
-
-    def _E_chi2(self, t):
-        pass
-
-    def _G(self, ks, f_theta):
-        
-        G = 0
-        for t in range(self.T):
-            G += self._G1(Mt, t) + self._G2(Mt, t)
-        return G
-
-
-    def __call__(self, theta_init, threshold=0.01):
+    def fit(self, theta_init, threshold=0.01):
         """
         Perform the EM algorithm until G converges
         """
         dist = 1
         G_init = np.inf
         while dist > threshold:
-            (theta_opt, G_opt) = self._EM(theta_init)
+            theta_opt, G_opt = self._em(theta_init)
             dist = abs(G_init - G_opt)
             G_init = G_opt
             theta_init = theta_opt
         return theta_init
 
     def _em(self, theta_init):
-        Mt = self.f_theta(theta_init)
-        _check_M(Mt)
-        
-        # Diagonalize HMM
-        Mt_diag = self.diag(Mt)
+        """
+        Perform E-step and M-step within each iteration
+        """
+        # Generate system matrices
+        Mt = self.f(theta_init)
         
         # E-Step
-        kf = Filter(**M_diag)
+        kf = Filter(Mt)
         ks = Smoother(kf())
-        E_delta2 = self._E_delta2()
-        E_chi2 = self._E_chi2()
+        ks()
 
         # M-Step
-        MLE = self.G(E_delta2, E_chi2, self.f_theta)
-        theta_opt = minimize()
+        obj = partial(self._G, ks)
+        opt = nlopt.opt('nlopt.LN_BOBYQA', length(theta_init))
+        opt.set_max_objective(obj)
+        theta_opt = opt.optimize(theta_init)
+        mle_opt = opt.last_optimum_value()
+        return theta_opt, mle_opt
+    
+    def _G(self, ks, theta):
+        """
+        Calculate expected likelihood
+        """  
+        G = 0
+        for t in range(self.T):
+            G += self._G1(ks, t) + self._G2(ks, t)
+        return G
 
-        return theta_opt
+    def _G1(self, ks, t):
+        """
+        Calculate expected likelihood of xi_t
+        """ 
+        return -0.5 * scipy.log(scipy.linalg.det(ks.Qt[t])) - \\
+                0.5 * np.matrix.trace(linalg.pinvh(ks.Qt[t]).dot(ks.delta2[t]))
 
+    def _G2(self, ks, t):
+        """
+        Calculate expected likelihood of y_t
+        """
+        return -0.5 * scipy.log(scipy.linalg.det(ks.Rt[t])) - \\
+                0.5 * numpy.matrix.trace(linalg.pinvh(ks.Rt[t]).dot(ks.chi2[t]))
 
 
 

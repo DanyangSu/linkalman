@@ -4,26 +4,26 @@ from copy import deepcopy as copy
 
 class Filter(object):
 
-    def __init__(self, f):
+    def __init__(self, M):
         """
         Initialize a Kalman Filter. Refer to linkalman/doc/theory.pdf for definition of arguments
         Note that the HMM is assumed to have gone through LDL transformation
         """
-        self.Ft = f.Ft
-        self.Bt = f.Bt
-        self.Ht = f.Ht
-        self.Dt = f.Dt
-        self.Qt = f.Qt
-        self.Rt = f.Rt
-        self.Yt = f.Yt
-        self.Xt = f.Xt
+        self.Ft = M['Ft']
+        self.Bt = M['Bt']
+        self.Ht = M['Ht']
+        self.Dt = M['Dt']
+        self.Qt = M['Qt']
+        self.Rt = M['Rt']
+        self.Yt = M['Yt']
+        self.Xt = M['Xt']
         self.T = len(self.Ft)
-        self.xi_length = Ft[0].shape[1]
-        self.y_length = Yt[0].shape[0]
+        self.xi_length = self.Ft[0].shape[1]
+        self.y_length = self.Yt[0].shape[0]
         
         # Create output matrices
-        self.xi_t_1t = [f.xi_1_0]
-        self.P_t_1t = [f.P_1_0]
+        self.xi_t_1t = [M['xi_1_0']]
+        self.P_t_1t = [M['P_1_0']]
         self.xi_t_t = []
         self.P_t_t = []
 
