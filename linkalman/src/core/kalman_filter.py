@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 from copy import deepcopy as copy
+from utils import inv, M_wrap
 
 class Filter(object):
 
@@ -9,17 +10,17 @@ class Filter(object):
         Initialize a Kalman Filter. Refer to linkalman/doc/theory.pdf for definition of arguments
         Note that the HMM is assumed to have gone through LDL transformation
         """
-        self.Ft = M['Ft']
-        self.Bt = M['Bt']
-        self.Ht = M['Ht']
-        self.Dt = M['Dt']
-        self.Qt = M['Qt']
-        self.Rt = M['Rt']
-        self.Yt = M['Yt']
-        self.Xt = M['Xt']
-        self.T = len(self.Ft)
+        self.Ft = M_wrap(M['Ft'])
+        self.Bt = M_wrap(M['Bt'])
+        self.Ht = M_wrap(M['Ht'])
+        self.Dt = M_wrap(M['Dt'])
+        self.Qt = M_wrap(M['Qt'])
+        self.Rt = M_wrap(M['Rt'])
         self.xi_length = self.Ft[0].shape[1]
         self.y_length = self.Yt[0].shape[0]
+        self.Yt = None
+        self.Xt = None
+        self.T = None
         
         # Create output matrices
         self.xi_t_1t = [M['xi_1_0']]
@@ -75,8 +76,7 @@ class Filter(object):
                     self.Rt[t][:, i] = 0
                     self.Ht[t][i] = 0
                     self.Dt[t][i] = 0
-        L_t, R_t, _ = linalg.ldl(self.Rt[t])
-        L_inv, _ = linalg.lapack.clapack.dtrtri(L_t, lower=True)
+        L_t, R_t, L_inv = self.Rt.ldl(t)
         Y_t = L_inv.dot(self.Yt[t])
         H_t = L_inv.dot(self.Ht[t])
         D_t = L_inv.dot(self.Dt[t])
@@ -87,10 +87,13 @@ class Filter(object):
                 Y_t[i] = np.nan
         return Y_t, H_t, D_t, R_t
 
-    def __call__(self):
+    def __call__(Xt, Yt):
         """
         Run forward filtering
         """
+        self.Yt = Yt
+        self.Xt = Xt
+        self.T = len(self.Yt)
         # Filter
         for t in range(self.T):
             xi_t_t, P_t_t, xi_t1_t, P_t1_t, K_t = self._sequential_update(t)

@@ -2,15 +2,23 @@ from collections import Sequence
 import numpy as np
 from scipy import linalg
 
-class M_series(Sequence):
-    
+def inv(h_array):
+    """
+    Calculate pinvh of PSD array
+    """
+    return linalg.pinvh(h_array)
+
+class M_wrap(Sequence):
+    """
+    Wraper of array lists. Improve efficiency by skipping 
+    repeated calculation when m_list contains same arrays. 
+    """ 
     def __init__(self, m_list):
-        
         self.m = None
-        self.m_pinv = None
-        self.m_transpose = None
-        self.m_dtrtri = None
         self.m_pinvh = None
+        self.L = None
+        self.D = None
+        self.L_I = None
         self.m_list = m_list
         
     def __getitem__(self, index):
@@ -18,28 +26,32 @@ class M_series(Sequence):
 
     def __len__(self):
         return len(self.m_list)
-    
-    def pinv(self, index):
-        if (not np.array_equal(self.m, self.m_list[index])) or self.m_pinv is None:
-            self.m = self.m_list[index]
-            self.m_pinv = linalg.pinv(self.m)
-        return self.m_pinv
-    
-    def transpose(self, index):
-        if (not np.array_equal(self.m, self.m_list[index])) or self.m_transpose is None:
-            self.m = self.m_list[index]
-            self.m_transpose = self.m_list[index].T
-        return self.m_transpose 
 
-    def dtrtri(self, index):
-        if (not np.array_equal(self.m, self.m_list[index])) or self.m_dtrtri is None:
+    def _equal_M(self, t):
+        """
+        Return true if self.m_list[t] == self.m. 
+        If false, set self.m = self.m_list[t]
+        """
+        if np.array_equal(self.m, self.m_list[index]):
+            return True
+        else:
             self.m = self.m_list[index]
-            self.m_dtrtri = linalg.lapack.clapack.dtrtri(self.m)
-        return self.m_dtrtri
-
+            return False
+    
     def pinvh(self, index):
-        if (not np.array_equal(self.m, self.m_list[index])) or self.m_pinvh is None:
-            self.m = self.m_list[index]
-            self.m_pinvh = linalg.pinvh(self.m)
+        """
+        Return pseudo-inverse of self.m_list[index]
+        """
+        if (not self._equal_M(index)) or self.m_pinv is None:
+            self.m_pinvh = inv(self.m)
         return self.m_pinvh
+    
+    def ldl(self, index):
+        """
+        Calculate L and D from LDL decomposition, and inverse of L
+        """
+        if (not self._equal_M(index)) or self.m_l is None:
+            self.L, self.D, _ = linalg.ldl(self.m)
+            self.L_I = linalg.lapack.clapack.dtrtri(self.L, lower=True)
+        return self.L, self.D, self.L_I
 

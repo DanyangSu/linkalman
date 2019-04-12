@@ -1,13 +1,7 @@
 import numpy as np
 from copy import deepcopy as copy
 from scipy import linalg
-
-def inv(h_array):
-    """
-    PSD matrix inverse
-    """
-    return linalg.pinvh(h_array)
-
+from utils import inv
 
 class Smoother(object):
 

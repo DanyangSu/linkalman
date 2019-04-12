@@ -15,7 +15,7 @@ class EM(object):
         """
         self.f = f
 
-    def fit(self, theta_init, threshold=0.01):
+    def fit(self, theta_init, Xt, Yt, threshold=0.01):
         """
         Perform the EM algorithm until G converges
         """
@@ -37,7 +37,7 @@ class EM(object):
         
         # E-Step
         kf = Filter(Mt)
-        ks = Smoother(kf())
+        ks = Smoother(kf(Xt, Yt))
         ks()
 
         # M-Step
