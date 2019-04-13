@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 class Base(object):
     
@@ -11,11 +12,13 @@ class Base(object):
             L.append(np.array([df.loc[i,:]]).T)
         return L
 
-    def data_gen(self):
+    def _list_to_df(self, df_list, col):
         """
-        Generate synthetic dataframe
+        Convert list of n-by-1 arrays to a dataframe
         """
-        pass
+        df_val = np.concatenate([i.T for i in df_list])
+        df = pd.DataFrame(data=df_val, columns=col)
+        return df
 
     def fit(self):
         raise NotImplementedError

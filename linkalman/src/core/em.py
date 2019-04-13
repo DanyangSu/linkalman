@@ -61,15 +61,15 @@ class EM(object):
         """
         Calculate expected likelihood of xi_t
         """ 
-        return -0.5 * scipy.log(scipy.linalg.det(ks.Qt[t])) - \\
-                0.5 * np.matrix.trace(linalg.pinvh(ks.Qt[t]).dot(ks.delta2[t]))
+        return -0.5 * scipy.log(ks.Qt.pdet(t)) -
+                0.5 * np.trace(ks.Qt.pinv(t)).dot(ks.delta2[t]))
 
     def _G2(self, ks, t):
         """
         Calculate expected likelihood of y_t
         """
-        return -0.5 * scipy.log(scipy.linalg.det(ks.Rt[t])) - \\
-                0.5 * numpy.matrix.trace(linalg.pinvh(ks.Rt[t]).dot(ks.chi2[t]))
+        return -0.5 * scipy.log(ks.Rt.pdet(t) -
+                0.5 * np.trace(ks.Rt.pinv(t).dot(ks.chi2[t]))
 
 
 
