@@ -198,7 +198,7 @@ Note that when $t=1$, we have $\xi_1\sim\mathcal{N}(\hat{\xi}_{1,0}, P_{1,0})$. 
     &- \frac{1}{2}Tr\{P_{1,0}^{-1}E[\delta_1\delta_1^{'}|Y_T, X_T, \theta_{i-1}]\} \nonumber \\
     \delta_1 &\equiv \xi_1 - \hat{\xi}_{1,0} \nonumber
 \end{align}
-Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} to find the pseudo inverse of $Q_t$. 
+Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} to find the pseudo inverse of $Q_t$, or \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo determinant of $Q_t$.
 
 Calculating conditional expectation of the second term in equation (\ref{eq:log}) is similar. Let's consider:
 \[

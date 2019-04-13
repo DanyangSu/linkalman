@@ -1,6 +1,7 @@
 from collections import Sequence
 from base import Base
 from ../core.em import EM
+from ../core.kalman_fiter import Filter
 
 class Constant_M(Sequence):
 
@@ -29,14 +30,24 @@ def F_theta(theta, f, t):
     P_1_0 = M['P_1_0']
     return {'Ft': Ft, 'Bt': Bt, 'Ht': Ht, 'Dt': Dt, 'Dt': Dt, 
             'Qt': Qt, 'Rt': Rt, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0}
+
+def create_col(col, suffix='_pred'):
+    """
+    Create column names for filter predictions. Default suffix is '_pred'
+    """
+    col_pred = []
+    for i in col:
+        col_pred.append(i + suffix)
+    return col_pred
     
-class Simple_EM(Base):
+class ConstantEM(Base):
     """
     EM solver with Mt = M
     """
 
     def __init__(self, f, t):
-        self.f = lambda theta: F_theta(theta, f, t)
+        self.f_M = lambda theta: F_theta(theta, f, t)
+        self.f = f
         self.theta_opt = None
         self.x_col = None
         self.y_col = None
@@ -46,8 +57,9 @@ class Simple_EM(Base):
         Fit the model using EM algorithm
         """
         # Initialize
-        em = EM(self.f)
-
+        em = EM(self.f_M)
+        self.x_col = x_col
+        self.y_col = y_col
         # Convert dataframe to lists
         Xt = self._df_to_list(df[x_col])
         Yt = self._df_to_list(df[y_col])
@@ -55,15 +67,25 @@ class Simple_EM(Base):
         # Run EM solver
         self.theta_opt = em.fit(theta, Xt, Yt)
 
-    def predict(self, df_extend):
+    def predict(self, df_extended):
         """
-        Predict time series
+        Predict time series. df_extended should contain both training and test data.
+        If y_t in test data is not available, use np.nan
         """
-        # Process Xt_extend
-        Xt_extend = self._df_to_list(df_extend[self.x_col])
-        T_extend = len(Xt_extend)
         
-        # Use Kalman Filter to predict Yt_extend
+        # Generate system matrices for prediction
+        Mt = F_theta(self.theta_opt, self.f, T_extend)
+        kf = Filter(Mt)
+        Xt = self._df_to_list(df[self.x_col])
+        Yt = self._df_to_list(df[self.y_col])
+
+        # Run Kalman Filter and get y_t_1t
+        kf(Xt, Yt)
+        xi_t_1t = kf.xi_t_1t
+        y_t_1t = kf.get_y(kf.xi_t_1t)
+        return self._list_to_df(df_list, create_col(y_col))
+
+        
 
 
      

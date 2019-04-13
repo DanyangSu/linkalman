@@ -19,6 +19,7 @@ class M_wrap(Sequence):
         self.L = None
         self.D = None
         self.L_I = None
+        self.pdet = None
         self.m_list = m_list
         
     def __getitem__(self, index):
@@ -55,3 +56,13 @@ class M_wrap(Sequence):
             self.L_I = linalg.lapack.clapack.dtrtri(self.L, lower=True)
         return self.L, self.D, self.L_I
 
+    def pdet(self, index):
+        """
+        Calculate pseudo-determinant
+        """
+        if (not self._equal_M(index)) or self.m_pdet is None:
+            eig = linalg.eigh(self.m, eigvals_only=True)
+
+            # If all eigenvalues are close to 0, np.product(np.array([])) returns 1
+            self.pdet = np.product(eig[abs(eig)>1e-12])
+        return self.pdet
