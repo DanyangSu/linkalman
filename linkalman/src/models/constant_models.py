@@ -1,27 +1,33 @@
 import numpy as np
-from constant_em import ConstantEM
+from constant_em improt ConstantEM
+from base import BaseConstantModel
 
-
-
-def gen_PSD(theta, dim):
+class SimpleEM(BaseConstantModel):
     """
-    Generate covariance matrix from theta. Requirement:
-    len(theta) = (dim**2 + dim) / 2
+    Solve HMM with 1-D xi and y. The dimension of B and D are determined by x.
+    The model is suitable for y and xwith low dimensions.
     """
-    L = np.zeros([dim, dim])
 
-    # Fill diagonal values
-    for i in range(dim):
-        L[i][i] = np.exp(theta[i])
+    def __init__(self):
+        self.mod = None
 
-    # Fill lower off-diagonal values
-    theta_off = theta[dim:]
-    idx = np.tril_indices(dim, k=-1)
-    L[idx] = theta_off
-    return L.dot(L.T)
-
-
-class TSEM(object):
+    def get_f(self, theta, dim_x):
+        """
+        Create mapping M=f(theta)
+        """
+        F = np.array([[theta[0]]])
+        Q = np.array([[np.exp(theta[1])]])
+        H = np.array([[theta[2]]])
+        R = np.array([[np.exp(theta[3])]])
+        xi_1_0 = np.array([[theta[4]]])
+        P_1_0 = np.array([[np.exp(theta[5])]])
+        B = np.array([theta[i] for i in range(6, 6 + dim_x)])
+        D = np.array([theta[i] for i in range(6 + dim_x, 6 + dim_x * 2)])
+        
+        M = {'F': F, 'Q': Q, 'H': H, 'B': B, 'D': D, 'R': R, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0}
+        return M
+        
+class CycleEM(BaseConstantModel):
     """
     Solve HMM with Time series specification in xi. The dimensions of measurement matrices are 
     determined by x and y. 
@@ -32,28 +38,6 @@ class TSEM(object):
         self.mod = None
         self.x_dim = None
         self.y_dim = None
-
-    def fit(self, df, x_col, y_col):
-        """
-        Fit a time-series model. For specification design, refer to theory.pdf
-        """
-        self.x_dim = len(x_col)
-        self.y_dim = len(y_col)
-        T = df.shape[0]
-
-        # Create f
-        f = lambda theta: self.get_f(theta, dim_x, dim_y)
-
-        # Fit model using ConstantEM
-        ConstEM = COnstantEM(f, T)
-        ConstEM.fit(df, theta, x_col, y_col)
-        self.mod = ConstEM
-
-    def predict(self, df):
-        """
-        Predict filtered yt
-        """
-        return self.mod.predict(df)
 
     def get_f(self, theta, dim_x, dim_y):
         """
