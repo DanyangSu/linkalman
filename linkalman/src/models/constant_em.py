@@ -3,18 +3,6 @@ from base import Base
 from ../core.em import EM
 from ../core.kalman_fiter import Filter
 
-class Constant_M(Sequence):
-
-    def __init__(self, M, length):
-        self.M = M
-        self.length = length
-
-    def __getitem__(self, index):
-        return self.M
-
-    def __len__(self):
-        return self.length
-
 def F_theta(theta, f, t):
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
@@ -40,6 +28,18 @@ def create_col(col, suffix='_pred'):
         col_pred.append(i + suffix)
     return col_pred
     
+class Constant_M(Sequence):
+
+    def __init__(self, M, length):
+        self.M = M
+        self.length = length
+
+    def __getitem__(self, index):
+        return self.M
+
+    def __len__(self):
+        return self.length
+
 class ConstantEM(Base):
     """
     EM solver with Mt = M
