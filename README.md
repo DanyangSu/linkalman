@@ -30,7 +30,7 @@ My passion project.
 3. ~~Read other package codes and figure out where to add Cholesky transform and reverse~~
 4. ~~Derive the complete delta2 and chi2~~
 5. ~~Masked values~~
-6. ~~~Rethink the structure of filter and smoother~~
+6. ~~Rethink the structure of filter and smoother~~
 
 ## Week 6
 
