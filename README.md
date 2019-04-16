@@ -34,7 +34,7 @@ My passion project.
 
 ## Week 6
 
-1. ~~Modify smoother section. Add xi2 and xi_t_xi_1t_T 3~~
+1. ~~Modify smoother section. Add xi2 and xi_t_xi_1t_T~~
 2. ~~Finish EM~~
 3. ~~Rewrite things in array form~~
 4. ~~Finish filter and smoother~~
