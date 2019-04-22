@@ -16,8 +16,8 @@ class Filter(object):
         self.Dt = M_wrap(M['Dt'])
         self.Qt = M_wrap(M['Qt'])
         self.Rt = M_wrap(M['Rt'])
-        self.xi_length = self.Ft[0].shape[1]
-        self.y_length = self.Yt[0].shape[0]
+        self.xi_length = None
+        self.y_length = None
         self.Yt = None
         self.Xt = None
         self.T = None
@@ -27,6 +27,7 @@ class Filter(object):
         self.P_t_1t = [M['P_1_0']]
         self.xi_t_t = []
         self.P_t_t = []
+        self.K_t = []
 
     def _joseph_form(self, K, H, P_t_1t, R):
         """
@@ -67,10 +68,10 @@ class Filter(object):
         Transform HMM using LDL methods.
         """
         # Preprocess Rt and Yt if Yt has missing measurements
-        is_missing = np.isnan(self.Yt[t])
+        is_missing = np.hstack(np.isnan(self.Yt[t]))
         if np.any(is_missing):
-            for i in is_missing:
-                if i:
+            for i in range(self.y_length):
+                if is_missing[i]:
                     self.Yt[t][i] = 0
                     self.Rt[t][i] = 0
                     self.Rt[t][:, i] = 0
@@ -82,17 +83,20 @@ class Filter(object):
         D_t = L_inv.dot(self.Dt[t])
 
         # Fill nan for missing measurements
-        for i in is_missing:
-            if i:
-                Y_t[i] = np.nan
+        if np.any(is_missing):
+            for i in range(self.y_length):
+                if is_missing[i]:
+                    Y_t[i] = np.nan
         return Y_t, H_t, D_t, R_t
 
-    def __call__(Xt, Yt):
+    def __call__(self, Xt, Yt):
         """
         Run forward filtering
         """
         self.Yt = Yt
         self.Xt = Xt
+        self.xi_length = self.Ft[0].shape[0]
+        self.y_length = self.Yt[0].shape[0]
         self.T = len(self.Yt)
         # Filter
         for t in range(self.T):

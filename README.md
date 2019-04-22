@@ -1,5 +1,5 @@
 # linkalman
-My passion project. 
+Kalman Filter with flexible form. Work in Progress. Do NOT use yet.  
 
 ## Week 1
 
@@ -46,10 +46,16 @@ My passion project.
 
 ## Week 7
 
-1. Test run debug
-2. Check wrapped, if change value to 0 (due to missing obs), whether it’s stored. 
-3. Finish utility function (plot, etc)
-4. Make whole thing work
+1. ~~Test utils~~
+2. ~~Test Filter~~
+3. Test Smoother
+4. Test constant_M (need to deal with correct `__setitem__`)
+5. Test SimpleEM, Constant_EM and CycleEM
+6. Test constant_EM
+7. Test core EM
+8. Check wrapped, if change value to 0 (due to missing obs), whether it’s stored. 
+9. Finish utility function (plot, etc)
+10. Run full test
 
 ## Week 8
 
