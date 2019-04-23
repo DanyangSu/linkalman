@@ -25,11 +25,11 @@ class Smoother(object):
         """
         if t < self.T - 1:
             Jt = self.P_t_t[t].dot(self.Ft[t].T).dot(inv(self.P_t_1t[t+1]))
-            xi_t_T = self.xi_t_t[t] + Jt.dot(self.xi_t_T[-1] - self.P_t_1t[t+1])
+            xi_t_T = self.xi_t_t[t] + Jt.dot(self.xi_t_T[-1] - self.xi_t_1t[t+1])
             P_t_T = self.P_t_t[t] + Jt.dot(self.P_t_T[-1] - self.P_t_1t[t+1]).dot(Jt.T)
             xi2_t_T = xi_t_T.dot(xi_t_T.T) + P_t_T
-            xi_t1_xi_t_T = self.xi_t_T[-1].dot(self.xi_t_t[t].T) + (self.xi2_t_T[-1] - 
-                    self.xi_t_T[-1].dot(self.xi_t_1t[t+1])).dot(Jt.T)
+            xi_t1_xi_t_T = self.xi_t_T[-1].dot(self.xi_t_t[t].T) + (self.xi2_t_T[-1] -
+                    self.xi_t_T[-1].dot(self.xi_t_1t[t+1].T)).dot(Jt.T)
         else:
             xi_t_T = self.xi_t_t[-1]
             P_t_T = self.P_t_t[-1]
@@ -50,7 +50,7 @@ class Smoother(object):
             term4 = self.xi_t_xi_1t_T[t].dot(self.Ft[t-1].T)
             term5 = self.Ft[t-1].dot(self.xi2_t_T[t-1]).dot(self.Ft[t-1].T)
             term6 = Bx.dot(self.xi_t_T[t-1].T).dot(self.Ft[t-1].T)
-            delta2 = self.xi2_t_T[t] - term4.T - term3 - term4 + term5 + term6 - term3.T +
+            delta2 = self.xi2_t_T[t] - term4.T - term3 - term4 + term5 + term6 - term3.T + \
                 term6.T + Bx.dot(Bx.T)
         return delta2
 
@@ -69,12 +69,12 @@ class Smoother(object):
         """
         Run backward smoothing
         """
-        for t in reversed(range(self.T - 1)):
+        for t in reversed(range(self.T)):
             xi_t_T, P_t_T, xi2_t_T, xi_t1_xi_t_T = self._smooth(t)
             self.xi_t_T.append(xi_t_T)
             self.P_t_T.append(P_t_T)
             self.xi2_t_T.append(xi2_t_T)
-            self.xi_t_xi_1t_T.append(xi_t1_x_t_T)
+            self.xi_t_xi_1t_T.append(xi_t1_xi_t_T)
 
         # match index for xi_t_xi_1t_T
         self.xi_t_xi_1t_T.append(None)

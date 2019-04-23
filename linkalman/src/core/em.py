@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.optimize import minimize
 from functools import partial
 import scipy
 from scipy import linalg
@@ -37,7 +36,8 @@ class EM(object):
         
         # E-Step
         kf = Filter(Mt)
-        ks = Smoother(kf(Xt, Yt))
+        kf(Xt, Yt)
+        ks = Smoother(kf)
         ks()
 
         # M-Step

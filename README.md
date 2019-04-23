@@ -48,7 +48,7 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 
 1. ~~Test utils~~
 2. ~~Test Filter~~
-3. Test Smoother
+3. ~~Test Smoother~~
 4. Test constant_M (need to deal with correct `__setitem__`)
 5. Test SimpleEM, Constant_EM and CycleEM
 6. Test constant_EM
