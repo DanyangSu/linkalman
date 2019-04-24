@@ -3,6 +3,8 @@ from copy import deepcopy as copy
 from scipy import linalg
 from utils import inv
 
+__all__ = ['Smoother']
+
 class Smoother(object):
 
     def __init__(self, kf):

@@ -6,6 +6,8 @@ from kalman_filter import Filter
 from kalman_smoother import Smoother
 import nlopt
 
+__all__ = ['EM']
+
 class EM(object):
 
     def __init__(self, f):

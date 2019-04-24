@@ -2,6 +2,8 @@ from collections.abc import Sequence
 import numpy as np
 from scipy import linalg
 
+__all__ = ['inv', 'M_wrap']
+
 def inv(h_array):
     """
     Calculate pinvh of PSD array

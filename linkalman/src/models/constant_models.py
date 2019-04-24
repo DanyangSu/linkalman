@@ -1,6 +1,8 @@
 import numpy as np
-from constant_em improt ConstantEM
-from base import BaseConstantModel
+from . import ConstantEM
+from . import BaseConstantModel
+
+__all__ = ['SimpleEM', 'CycleEM']
 
 class SimpleEM(BaseConstantModel):
     """

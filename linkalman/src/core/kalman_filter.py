@@ -3,6 +3,8 @@ import scipy
 from copy import deepcopy as copy
 from utils import inv, M_wrap
 
+__all__ = ['Filter']
+
 class Filter(object):
 
     def __init__(self, M):

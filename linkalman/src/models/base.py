@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+__all__ ['Base', 'BaseConstantModel']
+
 class Base(object):
     
     def _df_to_list(self, df):
@@ -27,8 +29,6 @@ class Base(object):
         raise NotImplementedError
 
 
-
-
 class BaseConstantModel(object):
     """
     Solve HMM with Time series specification in xi. The dimensions of measurement matrices are 
@@ -39,7 +39,7 @@ class BaseConstantModel(object):
     def __init__(self):
         raise NotImplementedError
     
-    def fit(self, df, x_col, y_col, **kwargs={}):
+    def fit(self, df, x_col, y_col, **kwargs):
         """
         Fit a time-series model. For specification design, refer to theory.pdf
         """
@@ -66,7 +66,7 @@ class BaseConstantModel(object):
        raise NotImplementedError
 
 
-    @staticmethodNotImplementedError
+    @staticmethod
     def gen_PSD(theta, dim):
         """
         Generate covariance matrix from theta. Requirement:

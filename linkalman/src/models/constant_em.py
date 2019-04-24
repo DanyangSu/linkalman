@@ -1,9 +1,12 @@
-from collections import Sequence
-from base import Base
-from ../core.em import EM
-from ../core.kalman_fiter import Filter
+from collections.abc import Sequence
+import numpy as np
+from . import Base
+from ..core import EM
+from ..core import Filter
 
-def F_theta(theta, f, t):
+__all__ = ['F_theta', 'create_col', 'Constant_M', 'ConstantEM']
+
+def F_theta(theta, f, T):
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
     """ 
@@ -16,8 +19,8 @@ def F_theta(theta, f, t):
     Rt = Constant_M(M['R'], T)
     xi_1_0 = M['xi_1_0']
     P_1_0 = M['P_1_0']
-    return {'Ft': Ft, 'Bt': Bt, 'Ht': Ht, 'Dt': Dt, 'Dt': Dt, 
-            'Qt': Qt, 'Rt': Rt, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0}
+    return {'Ft': Ft, 'Bt': Bt, 'Ht': Ht, 'Dt': Dt, 
+        'Qt': Qt, 'Rt': Rt, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0}
 
 def create_col(col, suffix='_pred'):
     """
@@ -29,13 +32,22 @@ def create_col(col, suffix='_pred'):
     return col_pred
     
 class Constant_M(Sequence):
+    """
+    It saves memory if Mt=M for most t, and varies only for a small percentage of t.
+    If Mt!=M, add Mt to a dictionary
+    """
 
     def __init__(self, M, length):
         self.M = M
+        self.Mt = {}
         self.length = length
 
+    def __setitem__(self, index, val):
+        if not np.array_equal(self.M, val):
+            self.Mt.update({index: val}) 
+
     def __getitem__(self, index):
-        return self.M
+        return self.Mt.get(index, self.M)
 
     def __len__(self):
         return self.length
