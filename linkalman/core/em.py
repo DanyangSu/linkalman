@@ -2,8 +2,8 @@ import numpy as np
 from functools import partial
 import scipy
 from scipy import linalg
-from kalman_filter import Filter
-from kalman_smoother import Smoother
+from .kalman_filter import Filter
+from .kalman_smoother import Smoother
 import nlopt
 
 __all__ = ['EM']
@@ -63,14 +63,14 @@ class EM(object):
         """
         Calculate expected likelihood of xi_t
         """ 
-        return -0.5 * scipy.log(ks.Qt.pdet(t)) -
-                0.5 * np.trace(ks.Qt.pinv(t)).dot(ks.delta2[t]))
+        return -0.5 * scipy.log(ks.Qt.pdet(t)) - \
+                0.5 * np.trace(ks.Qt.pinv(t).dot(ks.delta2[t]))
 
     def _G2(self, ks, t):
         """
         Calculate expected likelihood of y_t
         """
-        return -0.5 * scipy.log(ks.Rt.pdet(t) -
+        return -0.5 * scipy.log(ks.Rt.pdet(t)) - \
                 0.5 * np.trace(ks.Rt.pinv(t).dot(ks.chi2[t]))
 
 

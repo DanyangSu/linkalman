@@ -1,5 +1,4 @@
-from .src import *
-from . import src
+from . import core
+from . import models
 
-__all__ = []
-__all__.extend(src.__all__)
+__all__ = ['core', 'models']

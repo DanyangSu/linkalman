@@ -58,7 +58,7 @@ class CycleEM(BaseConstantModel):
             [0, 0, 0, 0, 0, 0, 0, 1, 0]])
         B = np.zeros([dim_xi, dim_x])
         B[1][0] = (1-rho_delta) * theta[1]
-        Q = np.diag([np.exp([[theta[2], theta[3], theta[4]] + [0 for _ in range(dim_xi - 3)])])
+        Q = np.diag(np.append(np.exp([theta[2], theta[3], theta[4]]), [0 for _ in range(dim_xi - 3)]))
         H = np.zeros([dim_y, dim_xi])
         for i in range(dim_y):
             H[i: 0:1] = theta[i + 5]

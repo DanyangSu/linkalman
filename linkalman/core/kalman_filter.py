@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 from copy import deepcopy as copy
-from utils import inv, M_wrap
+from .utils import inv, M_wrap
 
 __all__ = ['Filter']
 

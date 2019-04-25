@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-__all__ ['Base', 'BaseConstantModel']
+__all__ = ['Base', 'BaseConstantModel']
 
 class Base(object):
     

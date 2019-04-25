@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy as copy
 from scipy import linalg
-from utils import inv
+from .utils import inv
 
 __all__ = ['Smoother']
 
