@@ -49,7 +49,7 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 1. ~~Test utils~~
 2. ~~Test Filter~~
 3. ~~Test Smoother~~
-4. Test constant_M (need to deal with correct `__setitem__`)
+4. ~~Test constant_M (need to deal with correct `__setitem__`)~~
 5. Test SimpleEM, Constant_EM and CycleEM
 6. Test constant_EM
 7. Test core EM
@@ -59,7 +59,7 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 
 ## Week 8
 
-1. Make it a package
+1. ~~Make it a package~~
 2. Review and update documentation
 3. Release V1
 4. Add test 

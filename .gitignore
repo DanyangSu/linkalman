@@ -3,6 +3,7 @@ __pycache__
 .DS_Store
 theory*
 ref*
+linkalman.egg-info
 
 !theory.tex
 !ref.bib
