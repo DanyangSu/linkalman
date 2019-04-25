@@ -51,11 +51,10 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 3. ~~Test Smoother~~
 4. ~~Test constant_M (need to deal with correct `__setitem__`)~~
 5. Test SimpleEM, Constant_EM and CycleEM
-6. Test constant_EM
-7. Test core EM
-8. Check wrapped, if change value to 0 (due to missing obs), whether it’s stored. 
-9. Finish utility function (plot, etc)
-10. Run full test
+6. Test core EM
+7. Check wrapped, if change value to 0 (due to missing obs), whether it’s stored. 
+8. Finish utility function (plot, etc)
+9. Run full test
 
 ## Week 8
 
