@@ -1,20 +1,28 @@
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 __all__ = ['Base', 'BaseConstantModel']
 
 class Base(object):
     
-    def _df_to_list(self, df):
+    @staticmethod
+    def _df_to_list(df):
         """
         Convert pandas dataframe to list of arrays
-        """ 
+        """
+        # Check datatypes, must be numeric
+        for col in df.columns:
+            if not is_numeric_dtype(df[col]):
+                raise TypeError('Input dataframe must be numeric')
+        # Convert df to list row-wise
         L = []
         for i in range(df.shape[0]):
             L.append(np.array([df.loc[i,:]]).T)
         return L
-
-    def _list_to_df(self, df_list, col):
+    
+    @staticmethod
+    def _list_to_df(df_list, col):
         """
         Convert list of n-by-1 arrays to a dataframe
         """
