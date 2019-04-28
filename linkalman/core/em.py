@@ -5,6 +5,7 @@ from scipy import linalg
 from .kalman_filter import Filter
 from .kalman_smoother import Smoother
 import nlopt
+from copy import deepcopy
 
 __all__ = ['EM']
 
@@ -16,11 +17,12 @@ class EM(object):
         """
         self.f = f
 
-    def fit(self, theta_init, Xt, Yt, threshold=0.01):
+    def fit(self, theta, Xt, Yt, threshold=0.01):
         """
         Perform the EM algorithm until G converges
         """
         dist = 1
+        theta_init = deepcopy(theta) 
         G_init = np.inf
         while dist > threshold:
             theta_opt, G_opt = self._em(theta_init)
@@ -28,6 +30,17 @@ class EM(object):
             G_init = G_opt
             theta_init = theta_opt
         return theta_init
+
+    @staticmethod
+    def E_step(Mt, Xt, Yt):
+        """
+        Perform E-step
+        """
+        kf = Filter(Mt)
+        kf(Xt, Yt)
+        ks = Smoother(kf)
+        ks()
+        return ks
 
     def _em(self, theta_init):
         """
@@ -37,10 +50,7 @@ class EM(object):
         Mt = self.f(theta_init)
         
         # E-Step
-        kf = Filter(Mt)
-        kf(Xt, Yt)
-        ks = Smoother(kf)
-        ks()
+        ks = E_step(Mt, Xt, Yt)
 
         # M-Step
         obj = partial(self._G, ks)
