@@ -101,3 +101,23 @@ def test_init_not_function():
     F = 2
     with pytest.raises(TypeError):
         A = BaseEM(F)
+
+# Test creat_col
+def test_create_col():
+    """
+    Test append column suffix
+    """
+    col = ['a', 'b']
+    suffix = '_test'
+    expected_result = ['a_test', 'b_test']
+    result = BaseEM.create_col(col, suffix=suffix)
+    assert(expected_result == result)
+
+def test_create_col_default():
+    """
+    Test default suffix
+    """
+    col = ['a', 'b']
+    expected_result = ['a_pred', 'b_pred']
+    result = BaseEM.create_col(col)
+    assert(expected_result == result)
