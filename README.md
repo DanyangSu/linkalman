@@ -1,6 +1,8 @@
 # linkalman
 Kalman Filter with flexible form. Work in Progress. Do NOT use yet. 
 
+## Roadmap
+
 * ~~Finalize Model design~~
 * ~~Draft V0~~
 * ~~Derive the math for the whole system~~
@@ -26,7 +28,7 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 * ~~Finish complex ts model~~
 * ~~produce projections~~
 * ~~Rename simple_EM to constantEM~~
-* Test base
+* ~~Test base~~
 * ~~Make it a package~~
 * Test utils
 * Test core EM

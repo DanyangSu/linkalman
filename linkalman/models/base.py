@@ -6,62 +6,8 @@ from collections.abc import Sequence
 from ..core import EM
 from ..core import Smoother
 
-__all__ = ['BaseEM', 'BaseConstantModel', 'F_theta', 'create_col', 'Constant_M']
+__all__ = ['BaseEM', 'BaseConstantModel', 'Constant_M']
 
-def F_theta(theta: List[float], f: Callable, T: int) -> dict:
-    """
-    Duplicate arrays in M = f(theta) and generate list of Mt
-    Output of f(theta) must contain all the required keys.
-    """ 
-    M = f(theta)
-
-    # Check validity of M
-    required_keys = set(['F', 'B', 'H', 'D', 'Q', 'R', 'xi_1_0', 'P_1_0'])
-    if set(M.keys()) != required_keys:
-        raise ValueError('f does not have right outputs')
-
-    Ft = Constant_M(M['F'], T)
-    Bt = Constant_M(M['B'], T)
-    Ht = Constant_M(M['H'], T)
-    Dt = Constant_M(M['D'], T)
-    Qt = Constant_M(M['Q'], T)
-    Rt = Constant_M(M['R'], T)
-    xi_1_0 = M['xi_1_0']
-    P_1_0 = M['P_1_0']
-
-    # Raise exception if xi_1_0 or P_1_0 is not numpy arrays
-    if not isinstance(xi_1_0, np.ndarray):
-        raise TypeError('xi_1_0 must be a numpy array')
-    if not isinstance(P_1_0, np.ndarray):
-        raise TypeError('P_1_0 must be a numpy array')
-
-    return {'Ft': Ft, 
-            'Bt': Bt, 
-            'Ht': Ht, 
-            'Dt': Dt, 
-            'Qt': Qt, 
-            'Rt': Rt, 
-            'xi_1_0': xi_1_0, 
-            'P_1_0': P_1_0}
-
-def create_col(col: List[str], suffix: str='_pred') -> List[str]:
-    """
-    Create column names for filter predictions. Default suffix is '_pred'
-
-    Parameters:
-    ----------
-    col : column list of a dataframe
-    suffix : string to be appended to each column name in col
-
-    Returns:
-    ----------
-    col_new : modified column names
-    """
-    col_new = []
-    for i in col:
-        col_new.append(i + suffix)
-    return col_new
-    
 class Constant_M(Sequence):
     """
     If the sequence of system matrix is mostly constant over time 
@@ -192,7 +138,7 @@ class BaseEM(object):
         # Run EM solver
         self.theta_opt = em.fit(theta_init, Xt, Yt)
 
-    def predict(self, df: pd.DataFrame, Ft: Callable=None) -> Smoother: 
+    def predict(self, df: pd.DataFrame, Ft: Callable) -> Smoother: 
         """
         Predict time series. df_extended should contain 
         both training and test data.
@@ -200,16 +146,14 @@ class BaseEM(object):
         Parameters:
         ----------
         df : df to be predicted. Use np.nan for missing Yt
-        Ft : must be a function of theta, update self.Ft if not
-            None. Ft should be consistent with self.Ft for t <= T
+        Ft : should be consistent with self.Ft for t <= T
 
         Returns:
         ----------
         ks : Contains filtered/smoothed y_t, xi_t, and P_t
         """
         # Generate system matrices for prediction
-        self.Ft = Ft if Ft != None else self.Ft 
-        Mt = self.Ft(self.theta_opt)
+        Mt = Ft(self.theta_opt)
         Xt = self._df_to_list(df_extended[self.x_col])
         Yt = self._df_to_list(df_extended[self.y_col])
 
@@ -265,52 +209,166 @@ class BaseEM(object):
         df = pd.DataFrame(data=df_val, columns=col)
         return df
     
+    @staticmethod
+    def create_col(col: List[str], suffix: str='_pred') -> List[str]:
+        """
+        Create column names for predictions. Default suffix is '_pred'
+
+        Parameters:
+        ----------
+        col : column list of a dataframe
+        suffix : string to be appended to each column name in col
+
+        Returns:
+        ----------
+        col_new : modified column names
+        """
+        col_new = []
+        for i in col:
+            col_new.append(i + suffix)
+        return col_new
+
 class BaseConstantModel(object):
+    """
+    Any HMM with constant system matrices may inherit this class.
+    The child class should provide get_f function.
+    """
 
     def __init__(self) -> None:
-        raise NotImplementedError
-    
+        self.f = None  # placeholder for f
+        self.mod = None  # placeholder for BaseEM object
+
     def get_f(self) -> None:
+        """
+        Mapping from theta to M. Provided by children classes.
+        Must be the form of get_f(theta, **kwargs)
+        """
         raise NotImplementedError
 
     def fit(self, df: pd.DataFrame, x_col: List[str], y_col: List[str], 
-            **kwargs) -> None:
+            **kwargs: Any) -> None:
         """
-        Fit a time-series model. For specification design, refer to theory.pdf
+        Invoke BaseEM.fit to fit the data.
+
+        Parameters:
+        ----------
+        df : data to be fitted
+        x_col : columns in df that belong to Xt
+        y_col : columns in df that belong to Yt
+        kwargs : kwargs for get_f 
         """
+        # Raise exception if x_col or y_col is not list
+        if not isinstance(x_col, list):
+            raise TypeError('x_col must be a list.')
+        if not isinstance(y_col, list):
+            raise TypeError('y_col must be a list.')
+
+        # Collect dimensions of Xt and Yt
         x_dim = len(x_col)
         y_dim = len(y_col)
         T = df.shape[0]
 
-        # Create f
+        # Create F
         kwargs.update({'x_dim': x_dim, 'y_dim': y_dim})
-        f = lambda theta: self.get_f(theta, **kwargs)
+        self.f = lambda theta: self.get_f(theta, **kwargs)
+        F = lambda theta: self.F_theta(theta, self.f, T)
 
         # Fit model using ConstantEM
-        ConstEM = ConstantEM(f, T)
+        ConstEM = BaseEM(F)
         ConstEM.fit(df, theta, x_col, y_col)
         self.mod = ConstEM
 
-    def predict(self, df):
+    def predict(self, df: pd.DataFrame) -> Smoother:
         """
-        Predict filtered yt
+        Predict fitted values from Kalman Filter / Kalman Smoother
+        Ft is extended to fit the size of the input df.
+
+        Parameters:
+        ----------
+        df : input dataframe. Must contain both the training set and
+            the prediction set.
+
+        Returns:
+        ----------
+        ks : Contains fitted y_t, xi_t, and P_t
         """
-        return self.mod.predict(df)
+        # Update Ft
+        T = df.shape[0]
+        Ft = lambda theta: self.F_theta(theta, self.f, T)
+
+        # Generate a smoother object that stores fitted values
+        ks = self.mod.predict(df, Ft)
+        return ks
 
     @staticmethod
-    def gen_PSD(theta, dim):
+    def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
         """
         Generate covariance matrix from theta. Requirement:
         len(theta) = (dim**2 + dim) / 2
+
+        Parameters:
+        ----------
+        theta : parameters used in generating lower triangle matrix
+        dim : dimension of the matrix. 
+
+        Returns:
+        PSD : PSD matrix
         """
+        # Raise exception if theta has wrong size
+        if len(theta) != (dim ** 2 + dim)/2:
+            raise ValueError('theta has wrong length')
+
         L = np.zeros([dim, dim])
+        idx = np.tril_indices(dim, k=0)
+        L[idx] = theta
+        PSD = L.dot(L.T)
+        return PSD
+    
+    @staticmethod
+    def F_theta(theta: List[float], f: Callable, T: int) -> dict:
+        """
+        Duplicate arrays in M = f(theta) and generate list of Mt
+        Output of f(theta) must contain all the required keys.
 
-        # Fill diagonal values
-        for i in range(dim):
-            L[i][i] = np.exp(theta[i])
+        Parameters:
+        ----------
+        theta : input of f(theta). Underlying paramters to be optimized
+        f : obtained from get_f. Mapping theta to M
+        T : length of Mt. "Duplicate" M for T times.
 
-        # Fill lower off-diagonal values
-        theta_off = theta[dim:]
-        idx = np.tril_indices(dim, k=-1)
-        L[idx] = theta_off
-        return L.dot(L.T)
+        Returns:
+        ----------
+        Mt : system matrices to feed into the EM algorithm. Should contain
+            all the required keywords. 
+        """ 
+        M = f(theta)
+
+        # Check validity of M
+        required_keys = set(['F', 'B', 'H', 'D', 'Q', 'R', 'xi_1_0', 'P_1_0'])
+        if set(M.keys()) != required_keys:
+            raise ValueError('f does not have right outputs')
+
+        Ft = Constant_M(M['F'], T)
+        Bt = Constant_M(M['B'], T)
+        Ht = Constant_M(M['H'], T)
+        Dt = Constant_M(M['D'], T)
+        Qt = Constant_M(M['Q'], T)
+        Rt = Constant_M(M['R'], T)
+        xi_1_0 = M['xi_1_0']
+        P_1_0 = M['P_1_0']
+
+        # Raise exception if xi_1_0 or P_1_0 is not numpy arrays
+        if not isinstance(xi_1_0, np.ndarray):
+            raise TypeError('xi_1_0 must be a numpy array')
+        if not isinstance(P_1_0, np.ndarray):
+            raise TypeError('P_1_0 must be a numpy array')
+
+        Mt = {'Ft': Ft, 
+                'Bt': Bt, 
+                'Ht': Ht, 
+                'Dt': Dt, 
+                'Qt': Qt, 
+                'Rt': Rt, 
+                'xi_1_0': xi_1_0, 
+                'P_1_0': P_1_0}
+        return Mt

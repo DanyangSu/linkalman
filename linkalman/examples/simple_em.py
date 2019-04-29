@@ -1,15 +1,15 @@
 import numpy as np
 import linkalman
-from linkalman.models import BaseConstantModel
+from linkalman.models import BaseConstantModel as BCM
 
-class SimpleEM(BaseConstantModel):
+class SimpleEM(BCM):
     """
     Solve HMM with 1-D xi and y. The dimension of B and D are determined by x.
     The model is suitable for y and xwith low dimensions.
     """
 
     def __init__(self):
-        self.mod = None
+        super.BCM.__init__()
 
     def get_f(self, theta, dim_x):
         """
