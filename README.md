@@ -30,11 +30,13 @@ Kalman Filter with flexible form. Work in Progress. Do NOT use yet.
 * ~~Rename simple_EM to constantEM~~
 * ~~Test base~~
 * ~~Make it a package~~
-* Test utils
+* ~~Test utils~~
 * Test core EM
 * Run full test
-* Finish utility function (plot, fake_data, etc)
+* Finish plot function
 * Finish example
+* Add codebase section
+* Update Application section
 * Review and update documentation
 * Add git.io site
 * Release V1, add pdf doc to git repo

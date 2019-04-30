@@ -116,4 +116,3 @@ def test_setitem_comprehensive():
     for i in range(9):
         match = match and np.array_equal(Mt[i], expected_result[i])
     assert(match)
-

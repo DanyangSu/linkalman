@@ -121,3 +121,22 @@ def test_create_col_default():
     expected_result = ['a_pred', 'b_pred']
     result = BaseEM.create_col(col)
     assert(expected_result == result)
+
+# Test noise
+def test_noise_1d():
+    """
+    test 1d noise
+    """
+    epsilon = BaseEM.noise(1, np.array([[1]]))
+    result = epsilon.shape
+    expected_result = (1, 1)
+    assert(result == expected_result)
+
+def test_noise_2d():
+    """
+    test 2d noise
+    """
+    epsilon = BaseEM.noise(2, np.array([[3, 2], [2, 4]]))
+    result = epsilon.shape
+    expected_result = (2, 1)
+    assert(result == expected_result)

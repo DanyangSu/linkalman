@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from ..core import EM
 from ..core import Smoother
 from copy import deepcopy
+from numpy.random import multivariate_normal
 
 __all__ = ['BaseEM', 'BaseConstantModel', 'Constant_M']
 
@@ -44,10 +45,33 @@ class Constant_M(Sequence):
             raise TypeError('M must be a numpy array')
 
         self.M = deepcopy(M)
-        self._M = deepcopy(M)
+        self._M = deepcopy(M)  # benchmark M
         self.index = None
         self.Mt = {}
         self.length = length
+
+    @property
+    def is_M_modified(self) -> bool:
+        """
+        Determine whether self.M is modified or not
+
+        Returns:
+        ----------
+        Boolean that returns True if self.M is different from self._M
+        """
+        return not np.array_equal(self.M, self._M)
+
+    def finger_print(self) -> None:
+        """
+        Update self.Mt and restore self.M if self.M is modified. This 
+        happens when elements of a numpy array is modified and 
+        __setitem__ is not invoked. The modified value will be kept 
+        in self.M. This function will record the change before restoring
+        self.M to its original state.
+        """
+        self.Mt.update({self.index: deepcopy(self.M)})
+        self.M = deepcopy(self._M)
+
 
     def __setitem__(self, index: int, val: np.ndarray) -> None:
         """
@@ -60,9 +84,8 @@ class Constant_M(Sequence):
         val : value to replace M at index. 
         """
         # Check if already partially updated. If it is, update self.Mt
-        if self.index == index and (not np.array_equal(self.M, self._M)):
-            self.Mt.update({index: deepcopy(self.M)})
-            self.M = deepcopy(self._M)
+        if self.index == index and self.is_M_modified:
+            self.finger_print()
 
         # Only update if val differs from current value or self._M
         if not np.array_equal(self.Mt.get(index, self._M), val):
@@ -85,9 +108,8 @@ class Constant_M(Sequence):
         Mt_index : Constant_M[index]
         """
         # Restore self.M and update self.Mt
-        if not np.array_equal(self._M, self.M):
-            self.Mt.update({self.index: deepcopy(self.M)})
-            self.M = deepcopy(self._M)
+        if self.is_M_modified:
+            self.finger_print()
 
         Mt_index = self.Mt.get(index, self.M)
         self.index = index
@@ -244,6 +266,66 @@ class BaseEM(object):
             col_new.append(i + suffix)
         return col_new
 
+    @staticmethod
+    def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
+        """
+        Generate n-by-1 Gaussian noise 
+
+        Parameters: 
+        ----------
+        y_dim : dimension of yt
+        Sigma : cov matrix of Gaussian noise
+
+        Returns:
+        ----------
+        epsilon : noise of the system
+        """
+        epsilon = multivariate_normal(np.zeros(y_dim), Sigma).reshape(-1, 1)
+        return epsilon
+
+    @staticmethod
+    def simulated_data(Xt: pd.DataFrame, Mt: np.ndarray) -> pd.DataFrame:
+        """
+        Generate simulated data from a given HMM system. 
+
+        Parameters: 
+        ----------
+        Xt : input Xt. If one does not want Xt, can use 0and set Bt Dt as 0
+        Mt : system matrices
+
+        Returns:
+        ----------
+        df : output dataframe that contains Xi_t, Y_t and X_t
+        """
+        T = Xt.shape[0]
+        xi_dim = Mt['xi_1_0'].shape[0]
+        y_dim = Mt['Ht'][0].shape[0]
+        x_dim = Xt.shape[1]
+        Y_t = []
+        X_t = BaseEM._df_to_list(Xt)
+        Xi_t = [Mt['xi_1_0'] + BaseEM.noise(xi_dim, Mt['P_1_0'])]
+
+        # Iterate through time steps
+        for t in range(T):
+            # Generate Y_t
+            y_t = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
+                    BaseEM.noise(y_dim, Mt['Rt'][t])
+            Y_t.append(y_t)
+
+            # Genereate Xi_t
+            if t < T - 1:
+                xi_t1 = Mt['Ft'][t].dot(Xi_t[t]) + Mt['Bt'][t].dot(X_t[t]) + \
+                        BaseEM.noise(xi_dim, Mt['Qt'][t])
+                Xi_t.append(xi_t1)
+
+        # Generate df
+        y_col = ['y_{}'.format(i) for i in range(y_dim)]
+        xi_col = ['xi_{}'.format(i) for i in range(xi_dim)]
+        df_Y = BaseEM._list_to_df(Y_t, y_col)
+        df_Xi = BaseEM._list_to_df(Xi_t, xi_col)
+        df = pd.concat([df_Xi, df_Y, Xt], axis=1)
+        return df
+
 class BaseConstantModel(object):
     """
     Any HMM with constant system matrices may inherit this class.
@@ -251,13 +333,21 @@ class BaseConstantModel(object):
     """
 
     def __init__(self) -> None:
-        self.f = None  # placeholder for f
+        """
+        Initialize self.f 
+        """
+        self.f = lambda theta: self.get_f(theta)
         self.mod = None  # placeholder for BaseEM object
 
-    def get_f(self) -> None:
+    def get_f(self, theta: List[float]) -> None:
         """
         Mapping from theta to M. Provided by children classes.
-        Must be the form of get_f(theta, **kwargs)
+        Must be the form of get_f(theta). If defined, it should
+        return system matrix M
+
+        Parameters:
+        ----------
+        theta : placeholder for system parameter
         """
         raise NotImplementedError
 
