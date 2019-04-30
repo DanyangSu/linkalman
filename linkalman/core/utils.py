@@ -1,21 +1,44 @@
 from collections.abc import Sequence
 import numpy as np
 from scipy import linalg
+from typing import List, Any, Callable
 
 __all__ = ['inv', 'M_wrap']
 
-def inv(h_array):
+def inv(h_array: np.ndarray) -> np.ndarray:
     """
-    Calculate pinvh of PSD array
+    Calculate pinvh of PSD array. Note pinvh performs poorly
+    if input matrix is far from being Hermitian, so use pinv2
+    instead in this case.
+
+    Parameters:
+    ----------
+    h_array : input matrix, assume to be Hermitian
+    
+    Returns:
+    ----------
+    h_inv : pseudo inverse of h_array. 
     """
-    return linalg.pinvh(h_array)
+    if np.allclose(h_array, h_array.T):
+        h_inv = linalg.pinvh(h_array)
+    else:
+        h_inv = linalg.pinv2(h_array)
+    return h_inv
 
 class M_wrap(Sequence):
     """
     Wraper of array lists. Improve efficiency by skipping 
     repeated calculation when m_list contains same arrays. 
-    """ 
-    def __init__(self, m_list):
+    """
+
+    def __init__(self, m_list: List[np.ndarray]) -> None:
+        """
+        Create placeholder for calculated matrix. 
+
+        Parameters:
+        ----------
+        m_list : list of input arrays. Should be mostly constant
+        """
         self.m = None
         self.m_pinvh = None
         self.L = None
@@ -24,10 +47,39 @@ class M_wrap(Sequence):
         self.m_pdet = None
         self.m_list = m_list
         
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> np.ndarray:
+        """
+        Returns indexed array of the wrapped list
+
+        Parameters:
+        ----------
+        index : index of the wrapped list
+
+        Returns:
+        ----------
+        self.m_list[index] : indexed array of the wrapped list
+        """
         return self.m_list[index]
 
-    def __len__(self):
+    def __setitem__(self, index: int, val: np.ndarray) -> None:
+        """
+        Set values of the wrapped list
+
+        Parameters:
+        ----------
+        index : index of the wrapped list
+        val : input array
+        """
+        self.m_list[index] = val 
+
+    def __len__(self) -> int:
+        """
+        Required for a Sequence Object
+
+        Returns:
+        ----------
+        len(self.m_list) : length of the wrapped list
+        """
         return len(self.m_list)
 
     def _equal_M(self, index):

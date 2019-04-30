@@ -5,6 +5,7 @@ from pandas.api.types import is_numeric_dtype
 from collections.abc import Sequence
 from ..core import EM
 from ..core import Smoother
+from copy import deepcopy
 
 __all__ = ['BaseEM', 'BaseConstantModel', 'Constant_M']
 
@@ -42,7 +43,9 @@ class Constant_M(Sequence):
         if not isinstance(M, np.ndarray):
             raise TypeError('M must be a numpy array')
 
-        self.M = M
+        self.M = deepcopy(M)
+        self._M = deepcopy(M)
+        self.index = None
         self.Mt = {}
         self.length = length
 
@@ -56,15 +59,22 @@ class Constant_M(Sequence):
         index : index number of the list between 0 and self.T
         val : value to replace M at index. 
         """
-        # Only update if val differs from self.M
-        if not np.array_equal(self.M, val):
-            self.Mt.update({index: val}) 
+        # Check if already partially updated. If it is, update self.Mt
+        if self.index == index and (not np.array_equal(self.M, self._M)):
+            self.Mt.update({index: deepcopy(self.M)})
+            self.M = deepcopy(self._M)
+
+        # Only update if val differs from current value or self._M
+        if not np.array_equal(self.Mt.get(index, self._M), val):
+            self.Mt.update({index: deepcopy(val)}) 
 
     def __getitem__(self, index: int) -> np.ndarray:
         """
         Search through self.Mt dictionary, return 
         self.Mt[index] if self.Mt[index] is set, 
-        else returns default self.M
+        else returns default self.M. In addition,
+        if a modification on self.M is detected, 
+        update self.Mt and restore self.M
 
         Parameters:
         ----------
@@ -74,7 +84,13 @@ class Constant_M(Sequence):
         ----------
         Mt_index : Constant_M[index]
         """
+        # Restore self.M and update self.Mt
+        if not np.array_equal(self._M, self.M):
+            self.Mt.update({self.index: deepcopy(self.M)})
+            self.M = deepcopy(self._M)
+
         Mt_index = self.Mt.get(index, self.M)
+        self.index = index
         return Mt_index
 
     def __len__(self) -> int:
