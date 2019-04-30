@@ -82,10 +82,18 @@ class M_wrap(Sequence):
         """
         return len(self.m_list)
 
-    def _equal_M(self, index):
+    def _equal_M(self, index: int) ->bool:
         """
         Return true if self.m_list[index] == self.m. 
         If false, set self.m = self.m_list[index]
+
+        Parameters: 
+        ----------
+        index : index of the wrapped list
+
+        Returns:
+        ----------
+        Boolean that indicates whether we need to perform the operation
         """
         if np.array_equal(self.m, self.m_list[index]):
             return True
@@ -96,6 +104,13 @@ class M_wrap(Sequence):
     def pinvh(self, index):
         """
         Return pseudo-inverse of self.m_list[index]
+
+        Parameters:
+        ----------
+        index : index of the wrapped list
+
+        Returns:
+        self.m_pinvh : pesudo inverse 
         """
         if (not self._equal_M(index)) or self.m_pinvh is None:
             self.m_pinvh = inv(self.m)
@@ -104,6 +119,15 @@ class M_wrap(Sequence):
     def ldl(self, index):
         """
         Calculate L and D from LDL decomposition, and inverse of L
+
+        Parameters:
+        ----------
+        index : index of the wrapped list
+
+        Returns:
+        self.L : L  of LDL
+        self.D : D of LDL
+        self.L_I : inverse of L
         """
         if (not self._equal_M(index)) or self.L is None:
             self.L, self.D, _ = linalg.ldl(self.m)
@@ -112,7 +136,16 @@ class M_wrap(Sequence):
 
     def pdet(self, index):
         """
-        Calculate pseudo-determinant
+        Calculate pseudo-determinant. If zero matrix, determinant is 1
+        Because we are using log, determinant of 1 is good.
+
+        Parameters:
+        ----------
+        index : index of the wrapped list
+        
+        Returns:
+        ----------
+        self.m_pdet : pseudo-determinant
         """
         if (not self._equal_M(index)) or self.m_pdet is None:
             eig = linalg.eigh(self.m, eigvals_only=True)
