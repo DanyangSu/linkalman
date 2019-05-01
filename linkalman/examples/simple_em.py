@@ -6,8 +6,16 @@ from linkalman.models import BaseEM
 
 class SimpleEM(BCM):
     """
-    Solve HMM with 1-D xi and y. The dimension of B and D are determined by x.
-    The model is suitable for y and x with low dimensions.
+    Solve HMM with 1-D xi and y. The dimension of B and D are 
+    determined by x. The model is suitable for y and x with 
+    low dimensions.
+
+    This example illustrates the basic usage of linkalman. 
+    If you are working with HMM with Mt=M, you simply need to 
+    specify a mapping theta->M. You can use BaseEM.simulated_data
+    to genereate a simulated data and verify the model performance.
+    If the goal is to estimate theta, you need to make sure that
+    theta in the model is properly identified.
     """
 
     def __init__(self):
@@ -15,7 +23,9 @@ class SimpleEM(BCM):
 
     def get_f(self, theta):
         """
-        Create mapping M=f(theta)
+        Create mapping M=f(theta, **kwargs).This function 
+        should only accept theta as the only argument. The
+        idea is that the Mt is fully characterized by theta.
         """
         dim_x = 2
         F = np.array([[theta[0]]])
@@ -46,10 +56,10 @@ df = BaseEM.simulated_data(Xt, Mt)
 
 # Fit data
 train_cutoff = 700
-df_train = df.loc[: 700, :].copy()
+df_train = df.loc[: train_cutoff-1, :].copy()
 y_col = ['y_0']
-x_col = ['X']
-simple_ts.fit(df_train, x_col, y_col)
+theta_init = [1.1 for _ in range(10)]
+simple_ts.fit(df_train, theta_init, x_col, y_col)
 
 # Prediction
 df.loc[: 700, 'y_0'] = np.nan

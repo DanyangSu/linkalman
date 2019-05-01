@@ -351,17 +351,17 @@ class BaseConstantModel(object):
         """
         raise NotImplementedError
 
-    def fit(self, df: pd.DataFrame, x_col: List[str], y_col: List[str], 
-            **kwargs: Any) -> None:
+    def fit(self, df: pd.DataFrame, theta_init: List[float], 
+            x_col: List[str], y_col: List[str]) -> None:
         """
         Invoke BaseEM.fit to fit the data.
 
         Parameters:
         ----------
         df : data to be fitted
+        theta_init : initial theta, generate first Mt
         x_col : columns in df that belong to Xt
         y_col : columns in df that belong to Yt
-        kwargs : kwargs for get_f 
         """
         # Raise exception if x_col or y_col is not list
         if not isinstance(x_col, list):
@@ -370,18 +370,14 @@ class BaseConstantModel(object):
             raise TypeError('y_col must be a list.')
 
         # Collect dimensions of Xt and Yt
-        x_dim = len(x_col)
-        y_dim = len(y_col)
         T = df.shape[0]
 
         # Create F
-        kwargs.update({'x_dim': x_dim, 'y_dim': y_dim})
-        self.f = lambda theta: self.get_f(theta, **kwargs)
         F = lambda theta: self.F_theta(theta, self.f, T)
 
         # Fit model using ConstantEM
         ConstEM = BaseEM(F)
-        ConstEM.fit(df, theta, x_col, y_col)
+        ConstEM.fit(df, theta_init, x_col, y_col)
         self.mod = ConstEM
 
     def predict(self, df: pd.DataFrame) -> Smoother:

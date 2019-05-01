@@ -6,18 +6,26 @@ from .kalman_filter import Filter
 from .kalman_smoother import Smoother
 import nlopt
 from copy import deepcopy
+from typing import List, Any, Callable
 
 __all__ = ['EM']
 
 class EM(object):
 
-    def __init__(self, f):
+    def __init__(self, Ft -> Callable) -> None:
         """
-        Initialize an EM Optimizer. Refer to linkalman/doc/theory.pdf for details.
-        """
-        self.f = f
+        Initialize an EM Optimizer. Starting with an initial Mt, the 
+        algorithm iteratively updates theta until it converges. Refer to 
+        linkalman/doc/theory.pdf for details.
 
-    def fit(self, theta, Xt, Yt, threshold=0.01):
+        Parameters:
+        ----------
+        Ft : mapping from theta to Mt
+        """
+        self.Ft = Ft
+
+    def fit(self, theta: List[float], Xt: List[np.ndarray], 
+            Yt: List[np.ndarray], threshold: float=0.01) -> List[float]:
         """
         Perform the EM algorithm until G converges
         """
@@ -47,7 +55,7 @@ class EM(object):
         Perform E-step and M-step within each iteration
         """
         # Generate system matrices
-        Mt = self.f(theta_init)
+        Mt = self.Ft(theta_init)
         
         # E-Step
         ks = E_step(Mt, Xt, Yt)
