@@ -12,7 +12,7 @@ __all__ = ['EM']
 
 class EM(object):
 
-    def __init__(self, Ft -> Callable) -> None:
+    def __init__(self, Ft: Callable) -> None:
         """
         Initialize an EM Optimizer. Starting with an initial Mt, the 
         algorithm iteratively updates theta until it converges. Refer to 

@@ -3,7 +3,42 @@ import numpy as np
 from scipy import linalg
 from typing import List, Any, Callable
 
-__all__ = ['inv', 'M_wrap']
+__all__ = ['mask_nan', 'inv', 'M_wrap']
+
+def mask_nan(is_nan: np.ndarray, mat: np.ndarray, dim: str='both') -> np.ndarray:
+    """
+    Takes the list of NaN indices and mask the ros and columns 
+    of a matrix with 0 if index has NaN value.
+
+    Example:
+    ----------
+    mat_masked = mask_nan(np.array([False, True, False]), 
+        np.array([[1, 2, 3], 
+                [4, 5, 6], 
+                [7, 8, 9]]))
+    print(mat_masked)  # np.array([[1, 0, 3], [0, 0, 0], [7, 0, 9]])
+
+    Parameters:
+    ----------
+    mask_nan : indicates if the row and column should be masked
+    mat : matrix to be transformed
+
+    Returns:
+    ----------
+    mat_masked : masked mat
+    """
+    if dim not in ['col', 'row', 'both']:
+        raise ValueError('dim must be either "col", "row", or "both"')
+    mat_masked = mat.copy()
+
+    # Perform row operation if dim=='row' and 'both' and not a vector
+    if dim != 'col' and mat_masked.shape[0] > 1: 
+        mat_masked[is_nan] = 0
+
+    # Perform column operation if dim=='col' or 'both' and not a vector
+    if dim != 'row' and mat_masked.shape[1] > 1:
+        mat_masked[:, is_nan] = 0
+    return mat_masked
 
 def inv(h_array: np.ndarray) -> np.ndarray:
     """

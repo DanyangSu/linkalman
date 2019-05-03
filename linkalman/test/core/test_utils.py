@@ -1,8 +1,54 @@
 import pytest
 import numpy as np
 from scipy import linalg
-from linkalman.core.utils import inv, M_wrap
+from linkalman.core.utils import mask_nan, inv, M_wrap
 from linkalman.models import Constant_M as CM
+
+# Test mask_nan
+def test_mask_nan():
+    """
+    Test when input is a matrix with column size > 1
+    """
+    mat = np.ones((4,4))
+    is_nan = np.array([True, False, True, False])
+    expected_result = np.array([[0, 0, 0, 0], 
+                            [0, 1, 0, 1], 
+                            [0, 0, 0, 0], 
+                            [0, 1, 0, 1]])
+    result = mask_nan(is_nan, mat)
+    np.testing.assert_array_equal(expected_result, result)
+
+def test_mask_nan_vector():
+    """
+    Test when input is a matrix with column size == 1
+    """
+    mat = np.ones((4, 1))
+    is_nan = np.array([True, False, True, False])
+    expected_result = np.array([[0], [1], [0], [1]])
+    result = mask_nan(is_nan, mat)
+    np.testing.assert_array_equal(expected_result, result)
+
+def test_mask_nan_wrong_dim_input():
+    """
+    Test if raise exception if wrong dim input 
+    """
+    mat = np.ones((4, 1))
+    is_nan = np.array([True, False, True, False])
+    with pytest.raises(ValueError):
+        result = mask_nan(is_nan, mat, 'Col')
+
+def test_mask_nan_row_only():
+    """
+    Test if only change row if dim=='row'
+    """
+    mat = np.ones((4,4))
+    is_nan = np.array([True, False, True, False])
+    expected_result = np.array([[0, 0, 0, 0], 
+                            [1, 1, 1, 1], 
+                            [0, 0, 0, 0], 
+                            [1, 1, 1, 1]])
+    result = mask_nan(is_nan, mat, dim='row')
+    np.testing.assert_array_equal(expected_result, result)
 
 # Test inv
 def test_inv():
