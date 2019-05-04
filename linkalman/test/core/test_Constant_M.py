@@ -1,8 +1,9 @@
 import pytest
 import pandas as pd
 import numpy as np
-from linkalman.models import Constant_M
+from linkalman.core.utils import Constant_M
 from copy import deepcopy
+
 
 # Test __init__
 def test_wrong_M_type():
@@ -14,6 +15,7 @@ def test_wrong_M_type():
     with pytest.raises(TypeError):
         Mt = Constant_M(M, T)
 
+
 # Test __getitem__
 def test_getitem():
     """
@@ -23,6 +25,7 @@ def test_getitem():
     T = 5
     Mt = Constant_M(M, T)
     assert(np.array_equal(Mt[0], M))
+
 
 # Test __setitem__
 def test_setitem():
@@ -35,6 +38,7 @@ def test_setitem():
     M_modify = np.array([4, 5])
     Mt[1] = M_modify
     assert(np.array_equal(Mt[1], M_modify))
+
 
 def test_setitem_other_index():
     """
@@ -60,6 +64,7 @@ def test_setitem_partial_update():
     result = Mt[0]
     np.testing.assert_array_equal(expected_result, result)
 
+
 def test_setitem_partial_update_other_index():
     """
     Test whether partially updating array affect other arrays
@@ -71,6 +76,7 @@ def test_setitem_partial_update_other_index():
     expected_result = np.array([[5, 3], [3, 4]])
     result = Mt[1]
     np.testing.assert_array_equal(expected_result, result)
+
 
 def test_setitem_comprehensive():
     """
@@ -87,6 +93,7 @@ def test_setitem_comprehensive():
             expected_result_1, expected_result_default,
             expected_result_default, expected_result_default,
             expected_result_1]
+
     # Partial Update
     Mt[0][1, :] = 0
 
