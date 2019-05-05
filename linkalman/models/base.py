@@ -55,12 +55,15 @@ class BaseEM(object):
         em = EM(self.Ft)
         self.x_col = x_col
         self.y_col = y_col
+
         # Convert dataframe to lists
         Yt = self._df_to_list(df[y_col])
 
         # If x_col is given, convert dataframe to lists
         if x_col is not None:
             Xt = self._df_to_list(df[x_col])
+        else:
+            Xt = None
 
         # Run EM solver
         self.theta_opt = em.fit(theta_init, Yt, Xt)

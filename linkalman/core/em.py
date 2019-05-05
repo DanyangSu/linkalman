@@ -24,7 +24,7 @@ class EM(object):
         """
         self.Ft = Ft
 
-    def fit(self, theta: List[float], Xt: List[np.ndarray], 
+    def fit(self, theta: List[float], Xt: List[np.ndarray]=None, 
             Yt: List[np.ndarray], threshold: float=0.01) -> List[float]:
         """
         Perform the EM algorithm until G converges

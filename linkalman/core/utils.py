@@ -251,18 +251,28 @@ def ft(theta: List[float], f: Callable, T: int) -> Dict:
     M = f(theta)
 
     # Check validity of M
-    required_keys = set(['F', 'B', 'H', 'D', 'Q', 'R', 'xi_1_0', 'P_1_0'])
-    if set(M.keys()) != required_keys:
-        raise ValueError('f does not have right outputs')
-
+    required_keys = set(['F', 'H', 'Q', 'R', 'xi_1_0', 'P_1_0'])
+    M_keys = set(M.keys())
+    if len(required_keys - M_keys) > 0:
+        raise ValueError('f does not have required outputs: {}'.format(required_keys - M_keys))
+    
+    # Generate ft for required keys
     Ft = Constant_M(M['F'], T)
-    Bt = Constant_M(M['B'], T)
     Ht = Constant_M(M['H'], T)
-    Dt = Constant_M(M['D'], T)
     Qt = Constant_M(M['Q'], T)
     Rt = Constant_M(M['R'], T)
     xi_1_0 = M['xi_1_0']
     P_1_0 = M['P_1_0']
+
+    # Set Bt if Bt is not Given
+    if 'B' not in M_keys:
+        M.update({'B': np.zeros((1, 1))})
+    if 'D' not in M_keys:
+        M.update({'D': np.zeros((1, 1))})
+
+    # Get Bt and Dt for ft
+    Bt = Constant_M(M['B'], T)
+    Dt = Constant_M(M['D'], T)
 
     # Raise exception if xi_1_0 or P_1_0 is not numpy arrays
     if not isinstance(xi_1_0, np.ndarray):

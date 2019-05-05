@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 import scipy
 from copy import deepcopy as copy
-from .utils import mask_nan, inv, M_wrap
+from .utils import mask_nan, inv, M_wrap, Constant_M
 
 __all__ = ['Filter']
 
@@ -57,18 +57,27 @@ class Filter(object):
         self.P_t_t = []
         self.Yt_missing = []  # Keep track of missing measurements
 
-    def __call__(self, Xt: List[np.ndarray], Yt: List[np.ndarray]) -> None:
+    def __call__(self, Yt: List[np.ndarray], Xt: List[np.ndarray]=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
 
         Parameters:
         ----------
-        Xt : regressors, must be deterministic and has no missing values
         Yt : measurements, may contain missing values
+        Xt : regressors, must be deterministic and has no missing values.
+            If set as None, will generate zero vectors
         """
         self.Yt = Yt
-        self.Xt = Xt
 
+        # Generate zeros arrays for Xt if Xt is None
+        if Xt is None:
+            self.Xt = Constant_M(np.zeros((self.Bt[0].shape[1], 1)), self.T)
+        else:
+            self.Xt = Xt
+        
+        # Check Mt and Xt, Yt dimension consistence
+        self.check_consistence()
+        
         # Filter
         for t in range(self.T):
             xi_t_t, P_t_t, xi_t1_t, P_t1_t = self._sequential_update(t)
@@ -194,4 +203,73 @@ class Filter(object):
                     self.Dt[t].dot(self.Xt[t])
             Yt_filtered.append(yt_f)
         return Yt_filtered
+    
+    def check_consistence(self):
+        """
+        Check consistence of matrix dimensions. Ensure
+        all matrix operations are properly done
+        """
+        dim = {}
+        dim.update({'Ft': self.Ft[0].shape})
+        dim.update({'Bt': self.Bt[0].shape})
+        dim.update({'Ht': self.Ht[0].shape})
+        dim.update({'Dt': self.Dt[0].shape}) 
+        dim.update({'Qt': self.Qt[0].shape}) 
+        dim.update({'Rt': self.Rt[0].shape})
+        dim.update({'xi_t': self.xi_t_1t[0].shape})
+        dim.update({'y_t': self.Yt[0].shape}) 
+        dim.update({'x_t': self.Xt[0].shape})
+        
+        # Check whether dimension is 2-D
+        for m_name in dim.keys():
+            if len(dim[m_name]) != 2:
+                raise ValueError('{} has the wrong dimension.'.format(m_name))
+
+        # Check Ft and xi_t
+        if (dim['Ft'][1] != dim['Ft'][0]) or (dim['Ft'][1] != dim['xi_t'][0]):
+            raise ValueError('Ft and xi_t do not match in dimensions')
+
+        # Check Ht and xi_t
+        if dim['Ht'][1] != dim['xi_t'][0]:
+            raise ValueError('Ht and xi_t do not match in dimensions')
+
+        # Check Ht and y_t
+        if dim['Ht'][0] != dim['y'][0]:
+            raise ValueError('Ht and y_t do not match in dimensions')
+
+        # Check Bt and xi_t
+        if dim['Bt'][0] != dim['xi_t'][0]:
+            raise ValueError('Bt and xi_t do not match in dimensions')
+
+        # Check Bt and x_t
+        if dim['Bt'][1] != dim['x_t'][0]:
+            raise ValueError('Bt and x_t do not match in dimensions')
+
+        # Check Dt and y_t
+        if dim['Dt'][0] != dim['y_t'][0]:
+            raise ValueError('Dt and y_t do not match in dimensions')
+
+        # Check Dt and x_t
+        if dim['Dt'][1] != dim['x_t'][0]:
+            raise ValueError('Dt and x_t do not match in dimensions')
+
+        # Check Qt and xi_t
+        if (dim['Qt'][1] != dim['Qt'][0]) or (dim['Qt'][1] != dim['xi_t'][0]):
+            raise ValueError('Qt and xi_t do not match in dimensions')
+
+        # Check Rt and y_t
+        if (dim['Rt'][1] != dim['Rt'][0]) or (dim['Rt'][1] != dim['y_t'][0]):
+            raise ValueError('Rt and y_t do not match in dimensions')
+
+        # Check if y_t is a vector
+        if dim['y'][1] != 1:
+            raise ValueError('y_t must be a vector')
+
+        # Check if xi_t is a vector
+        if dim['xi'][1] != 1:
+            raise ValueError('xi_t must be a vector')
+
+        # Check if x_t is a vector
+        if dim['x'][1] != 1:
+            raise ValueError('x_t must be a vector')
 
