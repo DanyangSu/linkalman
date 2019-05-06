@@ -182,6 +182,7 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None) -> \
         X_t = Constant_M(np.zeros((x_dim, 1)), T)
     else:
         T = Xt.shape[0]
+        X_t = Xt
 
     # Initialize Xi_t
     Xi_t = [Mt['xi_1_0'] + noise(xi_dim, Mt['P_1_0'])]
@@ -202,8 +203,8 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None) -> \
     # Generate df
     y_col = ['y_{}'.format(i) for i in range(y_dim)]
     xi_col = ['xi_{}'.format(i) for i in range(xi_dim)]
-    df_Y = BaseEM._list_to_df(Y_t, y_col)
-    df_Xi = BaseEM._list_to_df(Xi_t, xi_col)
+    df_Y = list_to_df(Y_t, y_col)
+    df_Xi = list_to_df(Xi_t, xi_col)
     df = pd.concat([df_Xi, df_Y, Xt], axis=1)
     return df, y_col, xi_col
 
@@ -266,9 +267,11 @@ def ft(theta: List[float], f: Callable, T: int) -> Dict:
 
     # Set Bt if Bt is not Given
     if 'B' not in M_keys:
-        M.update({'B': np.zeros((1, 1))})
+        dim_xi = M['F'].shape[0]
+        M.update({'B': np.zeros((dim_xi, 1))})
     if 'D' not in M_keys:
-        M.update({'D': np.zeros((1, 1))})
+        dim_y = M['H'].shape[0]
+        M.update({'D': np.zeros((dim_y, 1))})
 
     # Get Bt and Dt for ft
     Bt = Constant_M(M['B'], T)

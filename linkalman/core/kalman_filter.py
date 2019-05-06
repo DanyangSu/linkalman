@@ -1,10 +1,11 @@
 import numpy as np
 from typing import List, Any, Callable, Tuple
 import scipy
-from copy import deepcopy as copy
+from copy import deepcopy 
 from .utils import mask_nan, inv, M_wrap, Constant_M
 
 __all__ = ['Filter']
+
 
 class Filter(object):
     """
@@ -57,6 +58,7 @@ class Filter(object):
         self.P_t_t = []
         self.Yt_missing = []  # Keep track of missing measurements
 
+
     def __call__(self, Yt: List[np.ndarray], Xt: List[np.ndarray]=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
@@ -67,14 +69,11 @@ class Filter(object):
         Xt : regressors, must be deterministic and has no missing values.
             If set as None, will generate zero vectors
         """
-        self.Yt = Yt
+        self.Yt = deepcopy(Yt)
 
         # Generate zeros arrays for Xt if Xt is None
-        if Xt is None:
-            self.Xt = Constant_M(np.zeros((self.Bt[0].shape[1], 1)), self.T)
-        else:
-            self.Xt = Xt
-        
+        self.gen_Xt(Xt)
+
         # Check Mt and Xt, Yt dimension consistence
         self.check_consistence()
         
@@ -89,6 +88,7 @@ class Filter(object):
         # Drop xi_T1_T and P_T1_T
         self.xi_t_1t.pop(-1)
         self.P_t_1t.pop(-1)
+
 
     def _joseph_form(self, K: np.ndarray, H: np.ndarray, 
             P_t_1t: np.ndarray, R: np.ndarray) -> np.ndarray:
@@ -110,6 +110,7 @@ class Filter(object):
         M = np.eye(self.xi_length) - K.dot(H)
         P_t_t = M.dot(P_t_1t).dot(M.T) + K.dot(R).dot(K.T)
         return P_t_t
+
 
     def _sequential_update(self, t: int) -> Tuple[np.ndarray]:
         """
@@ -154,6 +155,7 @@ class Filter(object):
         P_t1_t = self.Ft[t].dot(P_t_t).dot(self.Ft[t].T) + self.Qt[t]
         return xi_t_t, P_t_t, xi_t1_t, P_t1_t
 
+
     def _LDL(self, t: int) -> Tuple[np.ndarray]: 
         """
         Transform HMM using LDL methods. 
@@ -188,6 +190,7 @@ class Filter(object):
         D_t = L_inv.dot(self.Dt[t])
         return Y_t, H_t, D_t, R_t, is_missing
 
+
     def get_filtered_y(self) -> List[np.ndarray]:
         """
         Generated filtered Yt. It will also generate
@@ -196,14 +199,23 @@ class Filter(object):
         Returns:
         ----------
         Yt_filtered : filtered Yt
+        Yt_filtered_cov : standard error of filtered Yt
         """
         Yt_filtered = []
-        for t in self.T:
+        Yt_filtered_cov = []
+        for t in range(self.T):
+            # Get filtered y_t
             yt_f = self.Ht[t].dot(self.xi_t_1t[t]) + \
                     self.Dt[t].dot(self.Xt[t])
             Yt_filtered.append(yt_f)
-        return Yt_filtered
+
+            # Get standard error of filtered y_t
+            yt_error = self.Ht[t].dot(self.P_t_1t[t]).dot(
+                    self.Ht[t].T) + self.Rt[t]
+            Yt_filtered_cov.append(yt_error)
+        return Yt_filtered, Yt_filtered_cov
     
+
     def check_consistence(self):
         """
         Check consistence of matrix dimensions. Ensure
@@ -223,7 +235,7 @@ class Filter(object):
         # Check whether dimension is 2-D
         for m_name in dim.keys():
             if len(dim[m_name]) != 2:
-                raise ValueError('{} has the wrong dimension.'.format(m_name))
+                raise ValueError('{} has the wrong dimensions'.format(m_name))
 
         # Check Ft and xi_t
         if (dim['Ft'][1] != dim['Ft'][0]) or (dim['Ft'][1] != dim['xi_t'][0]):
@@ -234,7 +246,7 @@ class Filter(object):
             raise ValueError('Ht and xi_t do not match in dimensions')
 
         # Check Ht and y_t
-        if dim['Ht'][0] != dim['y'][0]:
+        if dim['Ht'][0] != dim['y_t'][0]:
             raise ValueError('Ht and y_t do not match in dimensions')
 
         # Check Bt and xi_t
@@ -262,14 +274,29 @@ class Filter(object):
             raise ValueError('Rt and y_t do not match in dimensions')
 
         # Check if y_t is a vector
-        if dim['y'][1] != 1:
+        if dim['y_t'][1] != 1:
             raise ValueError('y_t must be a vector')
 
         # Check if xi_t is a vector
-        if dim['xi'][1] != 1:
+        if dim['xi_t'][1] != 1:
             raise ValueError('xi_t must be a vector')
 
         # Check if x_t is a vector
-        if dim['x'][1] != 1:
+        if dim['x_t'][1] != 1:
             raise ValueError('x_t must be a vector')
 
+
+    def gen_Xt(self, Xt):
+        """
+        Generate a list of zero arrays if self.Xt is None
+
+        Parameters:
+        ----------
+        Xt : input Xt
+        """
+        if Xt is None:
+            self.Xt = Constant_M(np.zeros(
+                (self.Bt[0].shape[1], 1)), self.T)
+        else:
+            self.Xt = deepcopy(Xt)
+        

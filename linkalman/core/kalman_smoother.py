@@ -7,6 +7,7 @@ from . import Filter
 
 __all__ = ['Smoother']
 
+
 class Smoother(object):
     """
     Given a filtered object, Smoother returns smoothed state estimation.
@@ -43,6 +44,7 @@ class Smoother(object):
         self.delta2 = []
         self.chi2 = []
         
+
     def __call__(self, kf: Filter) -> None:
         """
         Run backward smoothing. 
@@ -76,6 +78,7 @@ class Smoother(object):
         for t in range(self.T):
             self.delta2.append(self._E_delta2(t))
             self.chi2.append(self._E_chi2(t))
+
 
     def _smooth(self, t: int) -> Tuple[np.ndarray]:
         """
@@ -114,6 +117,7 @@ class Smoother(object):
             xi_t1_xi_t_T = None
         return xi_t_T, P_t_T, xi2_t_T, xi_t1_xi_t_T
 
+
     def _E_delta2(self, t: int) -> np.ndarray:
         """
         Calculated expected value of delta2. See Appendix E 
@@ -144,6 +148,7 @@ class Smoother(object):
                     term6 - term3.T + term6.T + Bx.dot(Bx.T)
         return delta2
 
+
     def _E_chi2(self, t: int) -> np.ndarray:
         """
         Calculate expected value of chi2. See Appendix F 
@@ -164,6 +169,7 @@ class Smoother(object):
         chi2 = term1 - term2 - term2.T + term4
         return chi2
 
+
     def get_smoothed_y(self) -> List[np.ndarray]:
         """
         Generated smoothed Yt. It will also generate
@@ -172,11 +178,19 @@ class Smoother(object):
         Returns:
         ----------
         Yt_smoothed : smoothed Yt
+        Yt_smoothed_cov : standard error of smoothed Yt
         """
         Yt_smoothed = []
-        for t in self.T:
+        Yt_smoothed_cov = []
+        for t in range(self.T):
+            # Get smoothed y_t
             yt_s = self.Ht[t].dot(self.xi_t_T[t]) + \
                     self.Dt[t].dot(self.Xt[t])
             Yt_smoothed.append(yt_s)
-        return Yt_smoothed
+
+            # Get standard error of smoothed y_t
+            yt_error = self.Ht[t].dot(self.P_t_T[t]).dot(
+                    self.Ht[t].T) + self.Rt[t]
+            Yt_smoothed_cov.append(yt_error)
+        return Yt_smoothed, Yt_smoothed_cov
 

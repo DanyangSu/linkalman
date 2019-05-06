@@ -10,6 +10,7 @@ from typing import List, Any, Callable
 
 __all__ = ['EM']
 
+
 class EM(object):
 
     def __init__(self, Ft: Callable) -> None:
@@ -24,8 +25,10 @@ class EM(object):
         """
         self.Ft = Ft
 
-    def fit(self, theta: List[float], Xt: List[np.ndarray]=None, 
-            Yt: List[np.ndarray], threshold: float=0.01) -> List[float]:
+
+    def fit(self, theta: List[float], Yt: List[np.ndarray], 
+            Xt: List[np.ndarray]=None,  
+            threshold: float=0.01) -> List[float]:
         """
         Perform the EM algorithm until G converges
         """
@@ -39,6 +42,7 @@ class EM(object):
             theta_init = theta_opt
         return theta_init
 
+
     @staticmethod
     def E_step(Mt, Xt, Yt):
         """
@@ -49,6 +53,7 @@ class EM(object):
         ks = Smoother(kf)
         ks()
         return ks
+
 
     def _em(self, theta_init):
         """
@@ -68,6 +73,7 @@ class EM(object):
         mle_opt = opt.last_optimum_value()
         return theta_opt, mle_opt
     
+
     def _G(self, ks, theta):
         """
         Calculate expected likelihood
@@ -77,12 +83,14 @@ class EM(object):
             G += self._G1(ks, t) + self._G2(ks, t)
         return G
 
+
     def _G1(self, ks, t):
         """
         Calculate expected likelihood of xi_t
         """ 
         return -0.5 * scipy.log(ks.Qt.pdet(t)) - \
                 0.5 * np.trace(ks.Qt.pinv(t).dot(ks.delta2[t]))
+
 
     def _G2(self, ks, t):
         """

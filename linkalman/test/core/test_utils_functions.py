@@ -175,6 +175,26 @@ def test_ft_wrong_type_P():
         Mt = ft(theta, f, T)
 
 
+def test_ft_auto_complete():
+    """
+    Test if autocomplete if missing B or D
+    """
+    def f(theta):
+        array = np.array([theta[0], theta[1]])
+        F = B = H = D = Q = R = xi_1_0 = P_1_0 = array
+        return {'F': F,
+                'H': H,
+                'Q': Q,
+                'R': R,
+                'xi_1_0': xi_1_0,
+                'P_1_0': P_1_0}
+
+    theta = [2, 3]
+    T = 2
+    Mt = ft(theta, f, T)
+    np.testing.assert_equal(Mt['Dt'][0], np.zeros((1, 1)))
+
+
 # Test gen_PSD
 def test_gen_PSD():
     """
