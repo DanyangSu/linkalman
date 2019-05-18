@@ -7,6 +7,8 @@
 \usepackage[style=authoryear,sorting=nyt]{biblatex}
 \newtheorem{lemma}{Lemma}
 \addbibresource{ref.bib}
+\setlength{\parindent}{0cm}
+\setlength{\parskip}{1em}
 
 \newenvironment{boenumerate}
     {\begin{enumerate}\renewcommand\labelenumi{\textbf\theenumi}}
@@ -16,28 +18,37 @@
 \title{Notes for Kalman Filter EM algorithms}
 
 \section{Introduction:}
-This document serves as the theoretical foundation of the \texttt{linkalman} package. Compared with some other popular Kalman Filter package written in python, linkalman has several advantages:
+\texttt{linkalman} is a python package that solver linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has several advantages:
 \begin{boenumerate}
     \item Account for incomplete measurements 
-    \item flexible model structure
-    \item Robust numerical implementation
+    \item Flexible model structure
+    \item Robust and efficient implementation
+    \item Exact initialization
 \end{boenumerate}
-Kalman Filters, in its simplified form, assume constant parameter matrices such that the EM solver has closed form solutions. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman Filter involves matrix inverse and semi-positiveness of certain matrices, which likely to fail due to rounding errors. \texttt{linkalman} package, while still falls in the linear Gaussian realm, is general enough to tackle many of the challenged mentioned above. This document serves as the theoretical foundation of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed derivation of Kalman Filter and Kalman Smoother, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate the underlying parameters of the HMM, and Section (\ref{sec:apply}) applies the Kalman Filter to solving a complex time series problem. 
+Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most existing Kalman filter packages and code snippets implement algorithms based on simple textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires estimates on initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
+
+This document serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
 \begin{align}
-    \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_{t+1} \label{eq:state_evolve} \\
+    \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_t \label{eq:state_evolve} \\
     y_t = & H_t\xi_{t} + D_{t}x_t + w_t \label{eq:measure}
 \end{align}
-Equation (\ref{eq:state_evolve}) governs the Markov state transition process. $\xi_t$ $(m\times 1)$ is the latent state random vector at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogeneous process noise. We assume that $v_t\sim \mathcal{N}(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time.}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_{t+1}$ specify the transition dynamics between $t$ and $t+1$. 
+Equation (\ref{eq:state_evolve}) governs a Markov state transition process. $\xi_t$ $(m\times 1)$ is the latent state random vector at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogeneous process noise. We assume that $v_t\sim \mathcal{N}(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time. See Section (\ref{sec:apply}) for examples}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_{t+1}$ specify the transition dynamics between $t$ and $t+1$. 
 
 Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I aslo assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
 
-Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $M_t\equiv\{F_t, B_t, H_t, D_t, Q_t, R_t\}$. The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; ARMA can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$. We bind $M_t$ with some underlying parameter set $\theta$. For example cyclical pattern can be modeled by using Trigonometric Cycle (\cite{harvey_1985}).  
+Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $M_t$ defined as:
+\begin{align*}
+M_t\equiv\{F_t, B_t, H_t, D_t, Q_t, R_t\}
+\end{align*}
+The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$. We bind $M_t$ with some underlying parameter set $\theta$. For example cyclical pattern can be modeled by using Trigonometric Cycles (\cite{harvey_1985}).  
 
 \section{Kalman Filter} \label{sec:filter}
-Given a set of measurements over time, and suppose $\theta$ is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
+\subsection{Filtering with Known Initial Conditions:}
+
+Given a set of measurements over time, and suppose $\theta$ (i.e. $M_t$) is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
 \begin{align*}
     Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
     X_t &\equiv \{x_1, x_2, ..., x_t\} \\
@@ -46,17 +57,17 @@ Given a set of measurements over time, and suppose $\theta$ is known. To predict
     \hat{\xi}_{t,r,s} &\equiv E(\xi_t|\xi_r,X_{s},Y_{s};\theta) \\
     P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
 \end{align*}
-With the assumption that $w_t$ and $v_t$ are Gaussian white noise, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
+With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
 \begin{align}
     \hat{\xi}_{t,t} &= \hat{\xi}_{t,t-1} + K_t(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) \label{eq:filter_begin} \\
     K_t &= P_{t,t-1}H_t^{'}(H_tP_{t,t-1}H_t^{'}+R_t)^{-1} \label{eq:gain} \\
     P_{t,t} &= P_{t,t-1} - K_tH_tP_{t,t-1} \label{eq:p_tt} \\
-    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t} + B_tx_t \\
-    P_{t+1,t} &= F_tP_{t,t}F_t^{'}+Q_{t+1} \label{eq:filter_end}
+    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t} + B_tx_t \label{eq:xi_t1} \\
+    P_{t+1,t} &= F_tP_{t,t}F_t^{'}+Q_t \label{eq:filter_end}
 \end{align}
-The Kalman Filter proceeds as follows:
+$K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initial conditions $\hat{\xi}_{1,0}$ and $P_{1,0}$ are known. The Kalman filter proceeds as follows:
 \begin{boenumerate}
-    \item Given $\theta$, begin with initial value $\hat{\xi}_{1,0}$, and $P_{1,0}$, which can either be part of system parameter $\theta$ or be measured. 
+    \item Given $\theta$, begin with initial value $\hat{\xi}_{1,0}$ and $P_{1,0}$.
     \item Use equation (\ref{eq:filter_begin}) through (\ref{eq:filter_end}) to calculate $\hat{\xi}_{2,1}$, and $P_{2,1}$.
     \item Repeat step 2 for $t\in\{3, 4, ..., T\}$.
 \end{boenumerate}
@@ -70,8 +81,8 @@ The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{The proof in Appen
 \]
 If we guarantee $P_{t,t-1}$ and $R_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
 
-\subsection{Missing Measurements and Sequential Filtering}
-So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Squential filtering also boosts speed dramatically for large matrix, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}^2$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
+\subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
+So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Squential filtering also boosts speed dramatically for in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}^2$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
 \begin{align*}
     y_t &= 
     \begin{pmatrix}
@@ -101,7 +112,7 @@ For each successive measurement $i$, we have:
     K_{t:i} &\equiv \frac{P_{t,t:i-1}(H_{t:i})^{'}}{H_{t:i}P_{t,t:i-1}(H_{t:i})^{'}+\sigma_{t:i}^{2}} \\
     P_{t,t:i} &= [I - K_{t:i}H_{t:i}]P_{t,t:i-1}[I-K_{t:i}H_{t:i}]^{'} + K_{t:i}\sigma_{t:i}^{2}(K_{t:i})^{'} \label{eq:seq_end}
 \end{align}
-Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formular is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
+where $\sigma_{t:i}^2$ is the $i$-th diagonal value or $R_t$. Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formular is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
 \begin{boenumerate}
     \item Initialize with (\ref{eq:seq_init1}) and (\ref{eq:seq_init2})
     \item \label{step:seq_update} Update Kalman Filter using equation (\ref{eq:seq_start}) through (\ref{eq:seq_end})
@@ -111,7 +122,45 @@ If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I p
 \[
     \tilde{y}_t = \tilde{D}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t
 \]
-where $\tilde{(\cdot)}_t = L_t^{-1}(\cdot)_t$. In the following sections, I will omit the $(\sim)$ sign, and assume $R_t$ is always diagonal. 
+where $\tilde{(\cdot)}_t = L_t^{-1}(\cdot)_t$. In the following sections, I will omit the $(\sim)$ sign, and assume $R_t$ is always diagonal.
+
+\subsection{Initialization with Diffuse Filtering}
+So far we have assumed that we know values of $\hat{\xi}_{1,0}$ and $P_{1,0}$. In practice, such information are rarely available. If instead, we know that the time series is stationary, we can use the unconditional mean and variance for $\hat{\xi}_{1,0}$ and $P_{1,0}$. If the time series is at least partially non-stationary, then we should assume no prior information on the non-stationary part of $\xi_t$, that is, we should set $\hat{\xi}_{1,0}=0$ and $P_{1,0}=\infty$. A commonly used solution is to set $P_{1,0}$ to some large value (e.g. $10^7$) to approximate infinity, but better algorithms exist for exact initialization. In what follows, I discuss one such algorithm that is implemented by \texttt{linkalman}.
+
+Consider $\hat{\xi}_{1,0}$ again. Following (\cite{koopman_1997}), we define $\hat{\xi}_{1,0}$ as:
+\begin{align}
+    \hat{\xi}_{1,0} = a + A\eta + \Pi\varepsilon \label{eq:init}
+\end{align}
+$A$ and $\Pi$ are selection matrices, $\eta\sim\mathcal{N}(0,\kappa I_{\infty})$, and $\varepsilon\sim\mathcal{N}(0,Q_{*})$. Set $0$ for elements in $a$ corresponding to $A$, and stationary means for elements corresponding to $\Pi$. $I_{\infty}$ is an identity matrix with size equal to the number of non-stationary unknowns, and $Q_{*}$ is Essentially, equation (\ref{eq:init}) groups $\hat{\xi}_{1,0}$ into two categories. If $\hat{\xi}_{1,0}^i$, the $i$-th element of $\hat{\xi}_{1,0}$, is non-stationary and not known, it has a distribution $\mathcal{N}(0, \kappa)$. With $\kappa\rightarrow\infty$, $\mathcal{N}(0,\kappa)$ captures the fact that we know nothing about the initial value of a non-stationary process. If on the other hand, the initial state of $\hat{\xi}_{1,0}^i$ is either known or stationary, It has a proper distribution with unconditional mean and covariances\footnote{If $X_t$ is involved in the state transition process then most of the time the process is not stationary.}. 
+
+From equation (\ref{eq:init}), we have:
+\begin{align*}
+    \hat{\xi}_{1,0} &= a \\
+    P_{1,0} &= \kappa P_{\infty} + P_{*}
+\end{align*}
+where $P_{\infty}=AA^{'}$ and $P_{*}=\Pi Q_0 \Pi^{'}$. By linearity of the filtering process, we can write $P_{t,t-1}$ as:
+\begin{align}
+    P_{t,t-1} = \kappa P_{\infty,t,t-1} + P_{*,t,t-1} + \mathcal{O}(\kappa^{-1}) \label{eq:P_diffuse}
+\end{align}
+where $\mathcal{O}(\kappa^{-1})$ is a function $f(\kappa)<\infty$ as $\kappa\rightarrow\infty$. To use the updating procedure described in subsection \ref{subsec:seq_filter}, we need to find the expression for $\Upsilon_t^{-1}$, where $\Upsilon_t\equiv H_tP_{t,t-1}H_t^{'}+R_t$. Following Appendix \ref{ap:init_filter}, We can write $\Upsilon_{t}$ as:
+\begin{align*}
+    \Upsilon_t = \kappa\Upsilon_{\infty,t} + \Upsilon_{*,t} + \mathcal{O}(\kappa^{-1})
+\end{align*}
+In what follows, I describe the updating rule for exact initialization, for technical details, please refer to Appendix \ref{ap:init_filter}.
+
+Given $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}=\kappa P_{\infty,t} + P_{*,t} + \mathcal{O}(\kappa^{-1})$, if $\Upsilon_{\infty,t}\neq 0$:
+\begin{boenumerate}
+    \item Calculate $K_t$ using equation (\ref{eq:K1_diffuse_start}) to (\ref{eq:K1_diffuse_end})
+    \item Calculate $\hat{\xi}_{t,t}$ and $P_{t,t}$ from equation (\ref{eq:diff_xi1}) and (\ref{eq:diff_P1})
+    \item Calculate $\hat{\xi}_{t+1,t}$ and $P_{t+1,t}$ from equation (\ref{eq:xi_t1}) and (\ref{eq:filter_end})
+\end{boenumerate}
+
+If $\Upsilon_{\infty,t}=0$:
+\begin{boenumerate}
+    \item Calculate $K_t$ using equation (\ref{eq:K2_diffuse})
+    \item Calculate $\hat{\xi}_{t,t}$ and $P_{t,t}$ from equation (\ref{eq:diff_xi2}) and (\ref{eq:diff_P2})
+    \item Calculate $\hat{\xi}_{t+1,t}$ and $P_{t+1,t}$ from equation (\ref{eq:xi_t1}) and (\ref{eq:filter_end})
+\end{boenumerate}
 
 \section{Kalman Smoother} \label{sec:smoother}
 In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t,t}, K_t, P_{t,t}, \hat{\xi}_{t,t-1}, P_{t,t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t,T}$ and $P_{t,T}$\footnote{There are more efficient ways of backward smoothing, see (\cite{koopman_1993}) for details.}. 
@@ -214,6 +263,8 @@ See Appendix \ref{ap:log2} for detailed derivation of $G_2^t(\theta,\theta_{i-1}
     G(\theta,\theta_{i-1}) &= \sum_{t=1}^{T}G_1^t(\theta,\theta_{i-1}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i-1})
 \end{align*}
 We can use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_i$ that maximizes $G(\theta,\theta_{i-1})$.
+
+\section{\texttt{linkalman}} \label{sec:codebase}
 
 \section{Application} \label{sec:apply}
 In this section, I use the Kalman Filter to solve a complex time series problem from (\cite{brodersen_etal_2015}) (with some modification). Consider the following time series: 
@@ -433,4 +484,76 @@ Now look at equation (\ref{eq:log2_trace}) again. Let $M_t$ be:
     M_t \equiv Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] 
 \end{align*}
 If $y_t$ has no missing measurements, it is straightforward to calculate $M_t$. If $y_t$ has missing measurements, but $R_t^{-1}$ is diagonal, we can follow (\cite{shumway_stoffer_1982}) and modify $R_t$, $H_t$, $D_t$ and $\chi_t$, which is done in section (\ref{sec:filter}). In fact, we are calculating the marginal distribution of the observed components. 
+
+\section{Sketch Proof of Diffuse Kalman Filter} \label{ap:init_filter}
+This section derives from Section 5 of \cite{durbin_koopman_2001}, but provides an alternative formulation using the Joseph form. For original proof without the Joseph formulation, refer \cite{durbin_koopman_2001}. The key intuition is to give an exact result for the initial state distribution with arbitrarily large but finite variances, then find out the limit as the variances approach infinity. Given definition of $P_{t,t-1}$ in equation (\ref{eq:P_diffuse}), and linearity of Kalman filtering, we have:
+\begin{align*}
+    \Upsilon_t &= \kappa \Upsilon_{\infty,t} + \Upsilon_{*,t} + \mathcal{O}(\kappa^{-1}) \\
+    \Upsilon_{\infty,t} &= H_tP_{\infty,t}H_t^{'} \\ 
+    \Upsilon_{*,t} &= H_tP_{*,t}H_t^{'} + R_t
+\end{align*}
+We are interested in finding $\Upsilon_t^{-1}$. Expand $\Upsilon_t^{-1}$ as a power series in $\kappa^{-1}$, we have:
+\begin{align*}
+    \Upsilon_t^{-1} = \Upsilon_t^{(0)} + \kappa^{-1}\Upsilon_t^{(1)} + \kappa^{-2}\Upsilon_t^{(2)}+\mathcal{O}(\kappa^{-3})
+\end{align*}
+where $\Upsilon_t^{(i)}$ is the $i$-th term associated with the power series expansion. We collapse other terms of the expansion to $\mathcal{O}(\kappa^{-3})$ as they will converge to 0 as $\kappa \rightarrow \infty$. We find $\Upsilon_t^{(i)}$ by using the fact that: 
+\begin{align}
+    I =& \Upsilon_t\Upsilon_t^{-1} \nonumber \\
+    =& (\kappa \Upsilon_{\infty,t} + \Upsilon_{*,t} + \kappa^{-1}\Upsilon_{a,t} + \kappa^{-2}\Upsilon_{b,t}) \nonumber \\
+    &\times (\Upsilon_t^{(0)} + \kappa^{-1}\Upsilon_t^{(1)} + \kappa^{-2}\Upsilon_t^{(2)}+\mathcal{O}(\kappa^{-3})) \label{eq:inverse_diff}
+\end{align}
+
+Solving equation (\ref{eq:inverse_diff}), we have:
+\begin{align}
+    \Upsilon_{\infty,t}\Upsilon_t^{(0)} = 0 \label{eq:upsilon_begin} \\
+    \Upsilon_{*,t}\Upsilon_t^{(0)} + \Upsilon_{\infty,t}\Upsilon_t^{(1)} = I \\
+    \Upsilon_{a,t}\Upsilon_t^{(0)} + \Upsilon_{*,t}\Upsilon_t^{(1)} + \Upsilon_{\infty,t}\Upsilon_t^{(2)} = 0 \label{eq:upsilon_end}
+\end{align}
+For a full treatment when $\Upsilon_t$ is not 1-by-1 matrix, see \cite{koopman_1997}. If we are combine initialization with sequential filtering/smoothing, the solution to equation (\ref{eq:upsilon_begin}) to (\ref{eq:upsilon_end}) is much simpler and will be shown below.
+
+If $\Upsilon_{\infty,t}\neq 0$, we have:
+\begin{align*}
+    \Upsilon_t^{(0)} &= 0 \\
+    \Upsilon_t^{(1)} &= \Upsilon_{\infty,t}^{-1} \\
+    \Upsilon_t^{(2)} &= -\Upsilon_{\infty,t}^{-1}\Upsilon_{*,t}\Upsilon_{\infty,t}^{-1}
+\end{align*}
+By the fact that $K_t = P_{t,t-1}H_t^{'}\Upsilon_t^{-1}$, we can write $K_t$ as:
+\begin{align}
+    K_t &= K_t^{(0)} + \kappa^{-1}K_t^{(1)} + \mathcal{O}(\kappa^{-2}) \label{eq:K1_diffuse_start} \\
+    K_t^{(0)} &= P_{\infty,t}H_t^{'}\Upsilon_t^{(1)} \\
+    K_t^{(1)} &= P_{*,t}H_t^{'}\Upsilon_t^{(1)} + P_{\infty,t}H_t^{'}F_t^{(2)} \label{eq:K1_diffuse_end}
+\end{align}
+
+Now we can express $\hat{\xi}_{t,t}$ as:
+\begin{align}
+    \hat{\xi}_{t,t} = \hat{\xi}_{t,t-1} + K_t^{(0)}(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi1}
+\end{align}
+
+After a lot of algebra, we can also express $P_{t,t}$, in Joseph form, as:
+\begin{align}
+    P_{t,t} =& \kappa (I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} \nonumber \\
+    &+(I-K_t^{(0)}H_t)P_{*,t}(I-K_t^{(0)}H_t)^{'} \label{eq:diff_P1} \\
+    &+K_t^{(0)}R_t(K_t^{(0)})^{'} + \mathcal{O}(\kappa^{-1}) \nonumber
+\end{align}
+
+If $\Upsilon_{\infty,t}=0$, it is easier to get $\hat{\xi}_{t,t}$ and $P_{t,t}$:
+\begin{align}
+    K_t =& P_{*,t}H_t^{'}\Upsilon_{*,t}^{-1} + \mathcal{O}(\kappa^{-1}) \nonumber \\
+    =& K_t^{(*)} + \mathcal{O}(\kappa^{-1}) \label{eq:K2_diffuse} \\
+    \hat{\xi}_{t,t} =& \hat{\xi}_{t,t-1} + K_t^{(*)}(y_t - H_t\hat{\xi}_{t,t-1} - D_tX_t) + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi2}
+\end{align}
+
+For $P_{t,t}$, we have:
+\begin{align}
+    P_{t,t} =& \kappa(I-K_tH_t)P_{\infty,t}(I-K_tH_t)^{'} \nonumber \\
+    &+ (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \nonumber \\
+    &+ K_t^{(*)}R_t(K_t^{(*)})^{'} + \mathcal{O}(\kappa^{-1}) \nonumber \\
+    =& \kappa P_{\infty, t} + (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \nonumber \\
+    &+ K_t^{(*)}R_t(K_t^{(*)})^{'} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_P2}
+\end{align}
+The second equality follows becasuse $\Upsilon_{\infty,t}=0$.
+
+\section{Sketch Proof of Diffuse Kalman Smoother} \label{ap:init_smoother}
+
+
 \end{document}
