@@ -27,7 +27,7 @@
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most existing Kalman filter packages and code snippets implement algorithms based on simple textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires estimates on initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
+This document is a product of my learning on Kalman filter and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -35,9 +35,9 @@ Consider the following Linear Dynamic System:
     \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_t \label{eq:state_evolve} \\
     y_t = & H_t\xi_{t} + D_{t}x_t + w_t \label{eq:measure}
 \end{align}
-Equation (\ref{eq:state_evolve}) governs a Markov state transition process. $\xi_t$ $(m\times 1)$ is the latent state random vector at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogeneous process noise. We assume that $v_t\sim \mathcal{N}(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time. See Section (\ref{sec:apply}) for examples}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_{t+1}$ specify the transition dynamics between $t$ and $t+1$. 
+Equation (\ref{eq:state_evolve}) governs a Markov state transition process. $\xi_t$ $(m\times 1)$ is the latent state random vector at time $t$, $x_t$ $(k\times 1)$ is the deterministic input signal, $v_t$ $(m\times 1)$ is the exogenous process noise. We assume that $v_t\sim \mathcal{N}(0,Q_t)$ is white noise\footnote{For process noises that are not white noise, we can re-write equation (\ref{eq:state_evolve}) to maintain independence across time. See Section (\ref{sec:apply}) for examples}. $F_t$ $(m\times m)$, $B_t$ $(m\times k)$, and $v_{t+1}$ specify the transition dynamics between $t$ and $t+1$. 
 
-Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I aslo assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
+Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I also assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
 
 Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $M_t$ defined as:
 \begin{align*}
@@ -82,7 +82,7 @@ The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{The proof in Appen
 If we guarantee $P_{t,t-1}$ and $R_t$ to be PSD, then $P_{t,t}$ is PSD by construction. 
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
-So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Squential filtering also boosts speed dramatically for in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}^2$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
+So far we have assume that we observe full measurement $y_t$ for each $t$. If we do not have full observation, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Sequential filtering also boosts speed dramatically for in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. First assume that $R_t$ is diagonal, with noise variance $\sigma_{t:1}^2$ for measurement $i$ at time $t$. Equation (\ref{eq:measure}) then becomes:
 \begin{align*}
     y_t &= 
     \begin{pmatrix}
@@ -112,7 +112,7 @@ For each successive measurement $i$, we have:
     K_{t:i} &\equiv \frac{P_{t,t:i-1}(H_{t:i})^{'}}{H_{t:i}P_{t,t:i-1}(H_{t:i})^{'}+\sigma_{t:i}^{2}} \\
     P_{t,t:i} &= [I - K_{t:i}H_{t:i}]P_{t,t:i-1}[I-K_{t:i}H_{t:i}]^{'} + K_{t:i}\sigma_{t:i}^{2}(K_{t:i})^{'} \label{eq:seq_end}
 \end{align}
-where $\sigma_{t:i}^2$ is the $i$-th diagonal value or $R_t$. Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formular is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
+where $\sigma_{t:i}^2$ is the $i$-th diagonal value or $R_t$. Note that because $H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^{2}$ is a scalar, we don't have to perform matrix inverse, and this formula is agnostic to the number of measurements in $y_t$. Sequential filter proceeds as follows:
 \begin{boenumerate}
     \item Initialize with (\ref{eq:seq_init1}) and (\ref{eq:seq_init2})
     \item \label{step:seq_update} Update Kalman Filter using equation (\ref{eq:seq_start}) through (\ref{eq:seq_end})
@@ -163,7 +163,8 @@ If $\Upsilon_{\infty,t}=0$:
 \end{boenumerate}
 
 \section{Kalman Smoother} \label{sec:smoother}
-In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t,t}, K_t, P_{t,t}, \hat{\xi}_{t,t-1}, P_{t,t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t,T}$ and $P_{t,T}$\footnote{There are more efficient ways of backward smoothing, see (\cite{koopman_1993}) for details.}. 
+\subsection{State Smoother}
+In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t,t}, K_t, P_{t,t}, \hat{\xi}_{t,t-1}, P_{t,t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t,T}$ and $P_{t,T}$. 
 
 Suppose in addition to state estimates from Kalman Filter, we also know $\hat{\xi}_{t+1,T}$ and $P_{t,T}$. We have\footnote{See Appendix \ref{ap:smooth} for proof.}:
 \begin{align}
@@ -177,20 +178,85 @@ The procedure for backward smoothing is as follows:
     \item \label{step:back_smooth} For $t$, use equation (\ref{eq:smooth_start}) through (\ref{eq:smooth_end}) to get $\hat{\xi}_{t,T}$ and $P_{t,T}$.
     \item Repeat step \ref{step:back_smooth} for $t \in \{1,2,...,T-1\}$.
 \end{boenumerate}
-In practice, if we use EM algorithm to solve for system paramters, we also need to calculate two additional values\footnote{See Appendix (\ref{ap:log}) and (\ref{ap:log2}) for derivation}:
+
+(\cite{dejong_1989}) proposes a more efficient approach to calculating state smoothers. Define $d_t$ as:
 \begin{align*}
-    \Omega_t &\equiv E(\xi_t\xi_t^{'}|Y_T, X_T, \theta) \nonumber \\
-    \Lambda_{t,t-1} &\equiv E(\xi_t\xi_{t-1}|Y_T,X_T, \theta) \nonumber
+    d_t \equiv y_t - H_t\hat{\xi}_{t,t-1} - D_tX_t
 \end{align*}
-The the procedure for Kalman Smoother is:
-\begin{boenumerate}
-    \item Start with $\hat{\xi}_{T,T}$, $P_{T,T}$ and $\Omega_t$ obtained from the filtering process. 
-    \item Calculate $\Lambda_{T, T-1}$
-    \item \label{step:smooth_complete_start} For $t\in\{T-1, T-2, ..., 1\}$, calculate $\hat{\xi}_{t,T}$, $P_{t,T}$, and $\Omega_t$
-    \item \label{step:smooth_complete_end} For $t\in\{T-1, T-2, ..., 2\}$, calculate $\Lambda_{t,t-1}$
-    \item Repeat Step (\ref{step:smooth_complete_start}) and (\ref{step:smooth_complete_end})\footnote{We don't have to calculate $\Lambda_{1,0}$ because it is not needed for EM algorithm. See Section \ref{subsec:G} and Appendix \ref{ap:log} for details.}
-\end{boenumerate}
-Given $Y_t$ and $\theta$, we are able to use forward filtering and backward smoothing to infer the distribution of $\xi_t$ if we assume HMM with Gaussian noises. 
+Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. Define $L_t$ as:
+\[
+    L_t \equiv F_t(I-K_tH_t) 
+\]
+then use the fact that $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$ and $d_i \perp Y_{t-1}$ and Lemma (\ref{lem:1}), we have:
+\begin{align*}
+    \hat{\xi}_{t,T} &= E(\xi_t|Y_{t-1},d_{t},...,d_T,X_T;\theta) \\
+    &= \hat{\xi}_{t,t-1} + \sum_{j=t}^{T}Cov(\xi_t,d_j)\Upsilon_j^{-1}d_j \\
+    &= \hat{\xi}_{t,t-1} + P_{t,t-1}\sum_{j=t}^T\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j
+\end{align*}
+If $j=t$, then we replace the product operation is not carried out and is replace with $I$. Define $r_t$ as:
+\begin{align*}
+    r_{t-1} \equiv \begin{cases}
+        0 & \text{if $t=T+1$} \\
+        \sum_{j=t}^T\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j & \text{if $t\leq T$}
+    \end{cases}
+\end{align*}
+We can then write backwards recursive formulation for $\hat{\xi}_{t,T}$ as:
+\begin{align}
+    r_{t-1} &= H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \label{eq:r1t} \\
+    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} \label{eq:smooth_state2}
+\end{align}
+
+To calculate $P_{t,T}$, we use Lemma \ref{lem:1} again and have the following result:
+\begin{align*}
+    P_{t,T} &= P_{t,t-1} - \sum_{j=t}^TCov(\xi_t,d_j)\Upsilon_j^{-1}Cov(\xi_t,d_j)^{'} \\
+    &=P_{t,t-1} - P_{t,t-1}\sum_{j=t}^{T}\left[\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j\Upsilon_j^{-1}H_j^{'}\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)^{'}\right]P_{t,t-1}
+\end{align*}
+Similarly, we can find $P_{t,T}$ through backwards recursions. Define $N_t$ as:
+\begin{align*}
+    N_{t-1} \equiv \begin{cases}
+        0 & \text{if $t=T+1$} \\
+        \sum_{j=t}^{T}\left[\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j\Upsilon_j^{-1}H_j^{'}\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)^{'}\right] & \text{if $t\leq T$}
+    \end{cases}
+\end{align*}
+Then we have:
+\begin{align}
+    N_{t-1} &= H_t^{'}\Upsilon_t^{-1}H_t + L_t^{'}N_tL_t \label{eq:N1t} \\
+    P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} \label{eq:smooth_P2}
+\end{align}
+We can use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) to perform backwards recursion.
+
+\subsection{Disturbance Smoother}
+If the system dynamics, $M_t$ are known, Kalman filters are sufficient in performing predictions, as it does not require measurements. If on the other hand, we do not know $M_t$, then we need Kalman Smoother to integrate information we know about the entire training data and infer $M_t$. In this subsection, I will discuss disturbance smoother, a variation of the Kalman smoother that provides more efficient smoothed state estimates and clean forms for calculating likelihoods\footnote{This methods does not provide estimates of $P_{t,T}$. If finding $P_{t,T}$ is the goal, use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) instead}. It is also the algorithm that I use in \texttt{linkalman}. 
+
+Consider the smoothed state disturbances $\hat{v}_{t,T}$, and measurement disturbances $\hat{w}_{t,T}$. Using Lemma \ref{lem:1}, we have:
+\begin{align}
+    \hat{w}_{t,T} &= E(w_t|Y_{t-1}, d_t,...d_T,X_T;\theta) \nonumber \\
+    &= \sum_{j=t}^TE(w_t,d_j^{'})\Upsilon_j^{-1}d_j \nonumber \\
+    &= R_t\Upsilon_t^{-1}d_t - R_tK_t^{'}F_t^{'}\sum_{j=t+1}^T\left[\prod_{i=t+2}^j\left(L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right] \nonumber \\
+    &= R_t(\Upsilon_t^{-1}d_t - K_t^{'}F_t^{'}r_t) \label{eq:disturb_w}
+\end{align}
+
+To calculate $W_t \equiv Cov(w_t|Y_T,X_T;\theta)$, we again invoke Lemma \ref{lem:1} and obtain:
+\begin{align}
+    W_t &= R_t - \sum_{j=t}^TCov(w_t,d_j)\Upsilon_j^{-1}Cov(w_t,d_j)^{'} \nonumber \\
+    &= R_t - R_t(\Upsilon_t^{-1}+K_t^{'}F_t^{'}N_tF_tK_t)R_t \label{eq:disturb_W}
+\end{align}
+
+Similarly, we can express $\hat{v}_{t,T}$ and $V_t \equiv Cov(v_t|Y_T,X_T;\theta)$ as:
+\begin{align}
+    \hat{v}_{t,T} &= \sum_{j=t}^{T}E(v_td_t^{'})\Upsilon_j^{-1}d_j \nonumber \\
+    &= Q_tr_t \label{eq:disturb_v} \\
+    V_t &= Q_t - \sum_{j=t}^{T}Cov(v_t, d_j)\Upsilon_j^{-1}Cov(v_t,d_j)^{'} \nonumber \\
+    &= Q_t - Q_tN_tQ_t \label{eq:disturb_V}
+\end{align}
+
+\subsection{Sequential Smoother}
+
+\subsection{Rounding Errors and Nearest PSD}
+Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. If we are dealing with univariate state variables, we can guarantee symmetry of all the covariance matrices. If the matrix is not PSD, we can use the Nearest PSD matrix with the techniques developed in \cite{higham_1988}.  
+
+If a matrix is symmetric, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions.  
+
 
 \section{EM Algorithm} \label{sec:EM}
 Kalman Filter and Kalman Smoother are useful to predict measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer to Appendix \ref{ap:EM_proof}.
@@ -375,17 +441,22 @@ We may use the standard EM algorithm to solve $\theta$.
 
 \section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
 \begin{lemma}[Law of Iterated Projections] \label{lem:1}
-    Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have:
+    Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have projections:
     \[
         \mathcal{P}(Y_3|Y_2,Y_1) = \mathcal{P}(Y_3|Y_1)+H_{32}H_{22}^{-1}[Y_2 - \mathcal{P}(Y_2|Y_1)]
+    \]
+    and variance matrix:
+    \[
+        Var(Y_3|Y_2,Y_1) = H_{33} - H_{32}H_{22}^{-1}H_{32}^{'}
     \]
     where 
     \begin{align*}
         H_{22} &= E\{[Y_2-\mathcal{P}(Y_2|Y_1)][Y_2-\mathcal{P}(Y_2|Y_1)]^{'}\} \\
-        H_{23} &= H_{32}^{'} = E\{[Y_2-\mathcal{P}(Y_2|Y_1)][Y_3-\mathcal{P}(Y_3|Y_1)]^{'}\} 
+        H_{23} &= H_{32}^{'} = E\{[Y_2-\mathcal{P}(Y_2|Y_1)][Y_3-\mathcal{P}(Y_3|Y_1)]^{'}\} \\
+        H_{33} &= E\{[Y_3-\mathcal{P}(Y_3|Y_1)][Y_3-\mathcal{P}(Y_3|Y_1)]^{'}\}
     \end{align*}
-
 \end{lemma}
+
 Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t,t}$ and $P_{t,t}$.
 
 \section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
