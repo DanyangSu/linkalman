@@ -18,7 +18,7 @@
 \title{Notes for Kalman Filter EM algorithms}
 
 \section{Introduction:}
-\texttt{linkalman} is a python package that solver linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has several advantages:
+\texttt{linkalman} is a python package that solves linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has several advantages:
 \begin{boenumerate}
     \item Account for incomplete measurements 
     \item Flexible model structure
@@ -233,7 +233,8 @@ Consider the smoothed state disturbances $\hat{v}_{t,T}$, and measurement distur
     \hat{w}_{t,T} &= E(w_t|Y_{t-1}, d_t,...d_T,X_T;\theta) \nonumber \\
     &= \sum_{j=t}^TE(w_t,d_j^{'})\Upsilon_j^{-1}d_j \nonumber \\
     &= R_t\Upsilon_t^{-1}d_t - R_tK_t^{'}F_t^{'}\sum_{j=t+1}^T\left[\prod_{i=t+2}^j\left(L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right] \nonumber \\
-    &= R_t(\Upsilon_t^{-1}d_t - K_t^{'}F_t^{'}r_t) \label{eq:disturb_w}
+    &= R_t(\Upsilon_t^{-1}d_t - K_t^{'}F_t^{'}r_t) \nonumber \\
+    &= R_t\Upsilon_t^{-1}(d_t - H_tP_{t,t-1}F_t^{'}r_t) \label{eq:disturb_w}
 \end{align}
 
 To calculate $W_t \equiv Cov(w_t|Y_T,X_T;\theta)$, we again invoke Lemma \ref{lem:1} and obtain:
@@ -250,13 +251,44 @@ Similarly, we can express $\hat{v}_{t,T}$ and $V_t \equiv Cov(v_t|Y_T,X_T;\theta
     &= Q_t - Q_tN_tQ_t \label{eq:disturb_V}
 \end{align}
 
+Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get smoothed disturbances.
+
 \subsection{Sequential Smoother}
+As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive and subject to failure due to rounding errors. \cite{durbin_koopman_2000} propose sequential smoothing to greatly improved the efficiency and robustness of Kalman Smoothers. The univariate approach in Kalman filter essentially treats observations flowing in one at a time, so we can readily adapt our smoother.
+
+Define $y_{t,i}$ as the $i$-th non-missing measurement\footnote{Note that $i$ may not correspond to the index of the measurement if some are missing.} of $y_t$, we have:
+\begin{align}
+    r_{t:i-1} &= \begin{cases}
+        \frac{H_{t:i}^{'}d_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}r_{t:i} \\
+        F_{t-1}^{'}r_{t:0} 
+    \end{cases} \label{eq:seq_r} \\
+    \Upsilon_{t:i} &= H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^2 \nonumber \\
+    L_{t:i} &= F_t(I-K_{t:i}H_{t:i}) \nonumber \\
+    N_{t:i-1} &= \begin{cases}
+        \frac{H_{t:i}^{'}H_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}N_{t:i}L_{t:i} \\
+        F_{t-1}^{'}N_{t:0}F_{t-1}
+    \end{cases} \label{eq:N_seq}
+\end{align}
+
+For disturbance smoother, we may calculate $\hat{v}_{t,T:i}$, $V_{t:i}$, $\hat{w}_{t,T:i}$, and $W_{t:i}$ as:
+\begin{align}
+    \hat{w}_{t,T:i} &= R_{t:i}(\frac{d_{t:i}}{\Upsilon_{t:i}}-K_{t:i}^{'}H_{t:i}^{'}r_{t:i}) \\
+    W_{t:i} &= R_{t:i} - R_{t:i}^2(\Upsilon_{t:i}^{-1}+K_{t:i}^{'}F_{t:i}^{'}N_{t:i}F_{t:i}^{'}K_{t:i})  \\
+    \hat{v}_{t,T:i} &= Q_tr_{t:i} \\
+    V_{t:i} &= Q_t - Q_tN_{t:i}Q_t
+\end{align}
 
 \subsection{Rounding Errors and Nearest PSD}
-Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. If we are dealing with univariate state variables, we can guarantee symmetry of all the covariance matrices. If the matrix is not PSD, we can use the Nearest PSD matrix with the techniques developed in \cite{higham_1988}.  
+Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. If a matrix is symmetric, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions. Since we are using sequential techniques, we avoid asymmetric covariance matrices due to rounding errors of matrix inversion and are able to guarantee symmetry throughout our operations. 
 
-If a matrix is symmetric, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions.  
+If a covariance matrix $A$ is not PSD, we can use the Nearest PSD matrix with the techniques developed in \cite{higham_1988}. Omitting technical details, it amounts to replacing $A$ with $\bar{A}$, where $\bar{A}$ is be calculated as:
+\begin{align*}
+    A &= USV^{'} \\
+    \Sigma &= VSV^{'} \\
+    \bar{A} &= \frac{\Sigma + \Sigma^{'} + A + A^{'}}{4}
+\end{align*}
 
+\subsection{Diffuse Smoothing}
 
 \section{EM Algorithm} \label{sec:EM}
 Kalman Filter and Kalman Smoother are useful to predict measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer to Appendix \ref{ap:EM_proof}.
