@@ -289,6 +289,48 @@ If a covariance matrix $A$ is not PSD, we can use the Nearest PSD matrix with th
 \end{align*}
 
 \subsection{Diffuse Smoothing}
+If initial conditions are not known, we can use diffuse smoothing for exact initialization. Similar to diffuse filtering, we use exponential expansion for each term, and get the limiting solution.  
+
+Recall that $r_{t-1} = H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}$ is not singular, We can rewrite $r_{t-1}$ as:
+\begin{align*}
+    r_{t-1} =& r_{t-1}^{(0)} + \kappa^{-1}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-2}) \\
+    =& H_t^{'}(\kappa^{-1}\Upsilon_t^{(1)}+\kappa^{-2}\Upsilon_{t}^{(2)})(d_t^{(0)} + \kappa^{-1}d_t^{(1)}) \\
+    &+ (L_t^{(0)} + \kappa^{-1}L_t^{(1)})(r_t^{(0)}+\kappa^{-1}r_t^{(1)}) + \mathcal{O}(\kappa^{-2})
+\end{align*}
+Rearrange the terms and we have the recursive formula for $r_{t-1}$:
+\begin{align*}
+    r_{t-1}^{(0)} &= L_t^{(0)'}r_t^{(0)} \\
+    r_{t-1}^{(1)} &= H_t^{'}\Upsilon_t^{(1)}d_t^{(0)} + L_t^{(0)'}r_t^{(1)} + L_t^{(1)'}r_t^{(0)}
+\end{align*}
+
+If $\Upsilon_{\infty,t}$ is singular, We can rewrite $r_{t-1}$ as:
+
+
+Similarly, we can rewrite $N_{t-1}$ as\footnote{The expansion is suitable for disturbance smoother, if you are interested in computing smoothed  state variance, you need to expand $N_{t-1}$ to $\mathcal{O}(\kappa^{-3})$. Refer to \cite{durbin_koopman_2003} for details.}:
+\begin{align*}
+    N_{t-1} &= N_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \\
+    N_{t-1}^{(0)} &= L_t^{(0)'}N_t^{(0)}L_t^{(0)} \\
+\end{align*}
+
+If $\Upsilon_{\infty,t}$ is singular, We can rewrite $N_{t-1}$ as:
+
+For disturbance smoothers, we are interested in $v_t$ and $w_t$. I will give the formula below, for details, refer to Appendix \ref{ap:init_smoother}.
+
+If $\Upsilon_{\infty,t} \neq 0$, we have:
+\begin{align}
+    \hat{w}_{t:T} &= -R_tK_t^{(0)'}F_t^{'}r_t^{(0)} \\
+    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
+    W_t &= R_t - R_tK_t^{(0)'}F_t^{'}N_t^{(0)}F_tK_t^{(0)}R_t \\
+    V_t &= Q_t - Q_tN_t^{(0)}Q_t
+\end{align}
+
+If $\Upsilon_{\infty,t} = 0$, we have:
+\begin{align}
+    \hat{w}_{t:T} &= R_t(\Upsilon_{*,t}^{-1}d_t - R_tK_t^{(0)'}F_t^{'}r_t^{(0)}) \\
+    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
+    W_t &= R_t - R_t(\Upsilon_{*,t}^{-1} + K_t^{(0)'}F_t^{'}N_t^{(0)}F_tK_t^{(0)})R_t \\
+    V_t &= Q_t - Q_tN_t^{(0)}Q_t
+\end{align}
 
 \section{EM Algorithm} \label{sec:EM}
 Kalman Filter and Kalman Smoother are useful to predict measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.}. For general proof, one can refer to Appendix \ref{ap:EM_proof}.
