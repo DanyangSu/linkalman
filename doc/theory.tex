@@ -28,7 +28,7 @@
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technique details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
+This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -658,82 +658,80 @@ For $P_{t,t}$, we have:
     &+ K_t^{(*)}R_tK_t^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber
 \end{align}
 
-\section{Proof of Backward Smoothing} \label{ap:smooth}
+\section{Proof of State Smoothing} \label{ap:smooth}
 The backbone of the proof is Lemma \ref{lem:1}. Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t,t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
 
-Now consider $\hat{\xi}_{t,T}$, denote 
+Now consider $\hat{\xi}_{t,T}$, denote $\Delta_t\equiv\{d_t,d_{t+1},...,d_T\}^{'}$ 
 \begin{align*}
-    \hat{\xi}_{t,T} &= E(\xi_t|Y_{t-1},d_{t},...,d_T,X_T;\theta) \\
-    &= \hat{\xi}_{t,t-1} + Cov(\xi_t,\{d_i\}_{t,t+1,...,T}|Y_{t-1},X_T;\theta)Var(\{d_i\}_{t,t+1,...,T}|Y_{t-1},X_T;\theta)d_t
+    \hat{\xi}_{t,T} &= E(\xi_t|Y_{t-1},\Delta_{t},X_T;\theta) \\
+    &= \hat{\xi}_{t,t-1} + Cov(\xi_t,\Delta_t|Y_{t-1},X_T;\theta)Var(\Delta_t|Y_{t-1},X_T;\theta)^{-1}\Delta_t
 \end{align*}
 
-
-
-
-
-
-
-
-
-
-
-
-
-and Lemma (\ref{lem:1}), we have:
+It is straightforward to show $Var(d_j|Y_{t-1},X_T;\theta)=\Upsilon_j$. For $Cov(\xi_t,d_j|Y_{t-1},X_T;\theta)$, we have:
 \begin{align*}
-    \hat{\xi}_{t,T} &= E(\xi_t|Y_{t-1},d_{t},...,d_T,X_T;\theta) \\
-    &= \hat{\xi}_{t,t-1} + \sum_{j=t}^{T}Cov(\xi_t,d_j)\Upsilon_j^{-1}d_j \\
-    &= \hat{\xi}_{t,t-1} + P_{t,t-1}\sum_{j=t}^T\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j
+    Cov(\xi_t,d_j|Y_{t-1},X_T;\theta) &= E(\xi_td_j^{'}|Y_{t-1},X_T;\theta) \\
+    &= E[\xi_t(\xi_j-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta]H_j^{'} 
+\end{align*}
+
+If $j=t$, then:
+\[
+    E[\xi_t(\xi_t-\hat{\xi}_{t,t-1})^{'}|Y_{t-1},X_T;\theta] = P_{t,t-1}
+\]
+
+If $j=t+1$, then:
+\begin{align*}
+    E[\xi_t(\xi_{t+1}-\hat{\xi}_{t+1,t})|Y_{t-1},X_T;\theta] &= E[\xi_t(\xi_t-\hat{\xi}_{t,t-1}-K_td_t)^{'}F_t^{'}|Y_{t-1},X_T;\theta] \\
+    &= P_{t,t-1}L_t^{'}
+\end{align*}
+
+For $j>t+1$, we have:
+\begin{align*}
+    E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})|Y_{t-1},X_T;\theta] = P_{t,t-1}\prod_{i=t}^{j-1}L_i^{'}
+\end{align*}
+
+To compute $\hat{\xi}_{t,T}$, note that $Var(\Delta_{t}|Y_{t-1},X_T;\theta)$ is a block diagonal matrix, then we may express $\hat{\xi}_{t,T}$ as:
+\begin{align*}
+    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + \sum_{j=t}^{T}Cov(\xi_t,d_j)\Upsilon_j^{-1}d_j \\
+    &= \hat{\xi}_{t,t-1} + P_{t,t-1}\sum_{j=t}^T\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right]
 \end{align*}
 If $j=t$, then we replace the product operation is not carried out and is replace with $I$. Define $r_t$ as:
 \begin{align*}
     r_{t-1} \equiv \begin{cases}
         0 & \text{if $t=T+1$} \\
-        \sum_{j=t}^T\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j & \text{if $t\leq T$}
+        \sum_{j=t}^T\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j & \text{if $t\leq T$}
     \end{cases}
 \end{align*}
+
 We can then write backwards recursive formulation for $\hat{\xi}_{t,T}$ as:
-\begin{align}
+\begin{align*}
     r_{t-1} &= H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \\
-    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} \end{align}
+    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} 
+\end{align*}
 
 To calculate $P_{t,T}$, we use Lemma \ref{lem:1} again and have the following result:
 \begin{align*}
     P_{t,T} &= P_{t,t-1} - \sum_{j=t}^TCov(\xi_t,d_j)\Upsilon_j^{-1}Cov(\xi_t,d_j)^{'} \\
-    &=P_{t,t-1} - P_{t,t-1}\sum_{j=t}^{T}\left[\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j\Upsilon_j^{-1}H_j^{'}\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)^{'}\right]P_{t,t-1}
+    &=P_{t,t-1} - P_{t,t-1}\sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right]P_{t,t-1}
 \end{align*}
+
 Similarly, we can find $P_{t,T}$ through backwards recursions. Define $N_t$ as:
 \begin{align*}
     N_{t-1} \equiv \begin{cases}
         0 & \text{if $t=T+1$} \\
-        \sum_{j=t}^{T}\left[\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)H_j\Upsilon_j^{-1}H_j^{'}\left(\prod_{i=t+1}^{j}L_{i-1}^{'}\right)^{'}\right] & \text{if $t\leq T$}
+        \sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right] & \text{if $t\leq T$}
     \end{cases}
 \end{align*}
-Then we have:
-\begin{align}
+The recursive formulation for $P_{t,T}$ is:
+\begin{align*}
     N_{t-1} &= H_t^{'}\Upsilon_t^{-1}H_t + L_t^{'}N_tL_t \\
     P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} 
-\end{align}
-We can use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) to perform backwards recursion.
-Consider the following:
-\begin{align*}
-    \hat{\xi}_{t,t+1,t} &= \hat{\xi}_{t,t} + \{E[(\xi_t-\hat{\xi}_{t,t})(\xi_t-\hat{\xi}_{t+1,t})^{'}]\} \\
-    & \times \{E[(\xi_{t+1}-\hat{\xi}_{t+1,t})(\xi_{t+1}-\hat{\xi}_{t+1,t})^{'}]\}^{-1} \\
-    & \times (\xi_{t+1} - \hat{\xi}_{t+1,t}) \\
-    &= \hat{\xi}_{t,t} + P_{t,t}F_t^{'}P_{t+1,t}^{-1}(\xi_{t+1}-\hat{\xi}_{t+1,t}) \\
-    &= \hat{\xi}_{t,t} + J_t(\xi_{t+1}-\hat{\xi}_{t+1,t})
 \end{align*}
-The first equality follows from Lemma \ref{lem:1}. Note that we assume $w_t$ and $v_t$ to be white noises, then we have:
-\[
-    \hat{\xi}_{t,t+1,t} = \hat{\xi}_{t,t+1,T}
-\]
-Now take expectation over $\xi_{t+1}$, we have:
-\[
-    \hat{\xi}_{t,T} = \hat{\xi}_{t,t} + J_t(\hat{\xi}_{t+1,T}-\hat{\xi}_{t+1,t})
-\]
-With some algebra, we can get formula for $P_{t,T}$.
 
-\section{Sketch Proof of Diffuse Kalman Smoother} \label{ap:init_smoother}
+\section{Proof of Disturbance Smoothing}
+
+\section{Proof of Diffuse Smoothing} \label{ap:init_smoother}
+
+\section{Proof of Sequential Smoothing}
 
 \section{EM Algorithm Premier:} \label{ap:EM_proof}
 Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
