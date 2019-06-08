@@ -25,6 +25,8 @@
     \item Robust and efficient implementation
     \item Exact initialization
     \item Built-in EM algorithm solver
+    \item Open-source
+    \item Pure python implementation 
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
@@ -75,7 +77,7 @@ $K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initi
 \subsection{Joseph Form and Numerical Robustness}
 We define $P_{t,t}$ as a covariance matrix, which is a symmetric positive semi-definite (PSD) matrix, but in practice, we may get $P_{t,t}$ that is neither symmetric nor PSD, due to rounding errors. Look at equation (\ref{eq:p_tt}) again. The subtraction makes calculating $P_{t,t}$ susceptible to rounding errors, sometimes even resulting in negative semi-definite matrix. I use the Joseph form to numerically enforce symmetric PSD. 
 
-The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{The proof in Appendix \ref{ap:joseph}}:
+The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{For a detailed proof, see Appendix \ref{ap:joseph}}:
 \[
     P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'}    
 \]
@@ -224,7 +226,7 @@ Suppose in addition to state estimates from Kalman Filter, we also want to know 
     N_{t-1} &= H_t^{'}\Upsilon_t^{-1}H_t + L_t^{'}N_tL_t \label{eq:N1t}
 \end{align}
 
-Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the backwards formulation for $\hat{\xi}_{t,T}$ and $P_{t,T}$:
+Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the iterative formulation for $\hat{\xi}_{t,T}$ and $P_{t,T}$:
 \begin{align}
     \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} \label{eq:smooth_state2} \\
     P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} \label{eq:smooth_P2}
@@ -232,56 +234,26 @@ Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the backwards formula
 
 To perform backwards smoothing, we can simply start at time $T$ with $r_T=0$ and $N_T=0$, then use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) for $t\in\{T-1,T-2,...,1\}$ to obtain $\{\hat{\xi}_{t,T}\}_{1,2,...,T}$ and $\{P_{t,T}\}_{1,2,...,T}$.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 \subsection{Disturbance Smoother}
-If the system dynamics, $M_t$ are known, Kalman filters are sufficient in performing predictions, as it does not require measurements. If on the other hand, we do not know $M_t$, then we need Kalman Smoother to integrate information we know about the entire training data and infer $M_t$. In this subsection, I will discuss disturbance smoother, a variation of the Kalman smoother that provides more efficient smoothed state estimates and clean forms for calculating likelihoods\footnote{This methods does not provide estimates of $P_{t,T}$. If finding $P_{t,T}$ is the goal, use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) instead}. It is also the algorithm that I use in \texttt{linkalman}. 
+In this subsection, I will discuss disturbance smoother, a variation of the Kalman smoother that provides more efficient smoothed state estimates and clean forms for calculating likelihoods\footnote{This methods does not provide estimates of $P_{t,T}$. If finding $P_{t,T}$ is the goal, use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) instead}. 
 
-Consider the smoothed state disturbances $\hat{v}_{t,T}$, and measurement disturbances $\hat{w}_{t,T}$. Using Lemma \ref{lem:1}, we have:
+Consider the smoothed state disturbance estimates:
+\begin{align*}
+    \hat{v}_{t,T} &\equiv E(v_t|Y_T,X_T;\theta) \\
+    \hat{w}_{t,T} &\equiv E(w_t|Y_T,X_T;\theta) \\
+    V_t &\equiv Var(v_t|Y_T,X_T;\theta) \\
+    W_t &\equiv Var(w_t|Y_T,X_T;\theta)
+\end{align*}
+
+Following derivations in Appendix \ref{ap:disturb_smooth}, we have the iterative formulation:
 \begin{align}
-    \hat{w}_{t,T} &= E(w_t|Y_{t-1}, d_t,...d_T,X_T;\theta) \nonumber \\
-    &= \sum_{j=t}^TE(w_t,d_j^{'})\Upsilon_j^{-1}d_j \nonumber \\
-    &= R_t\Upsilon_t^{-1}d_t - R_tK_t^{'}F_t^{'}\sum_{j=t+1}^T\left[\prod_{i=t+2}^j\left(L_{i-1}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right] \nonumber \\
-    &= R_t(\Upsilon_t^{-1}d_t - K_t^{'}F_t^{'}r_t) \nonumber \\
-    &= R_t\Upsilon_t^{-1}(d_t - H_tP_{t,t-1}F_t^{'}r_t) \label{eq:disturb_w}
+    \hat{w}_{t,T} &= R_t(\Upsilon_t^{-1}d_t - M_t^{'}r_t) \label{eq:disturb_w} \\
+    \hat{v}_{t,T} &= Q_tr_t \label{eq:disturb_v} \\
+    W_t &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t \label{eq:disturb_W} \\
+    V_t &= Q_t - Q_tN_tQ_t \label{eq:disturb_V}
 \end{align}
 
-To calculate $W_t \equiv Cov(w_t|Y_T,X_T;\theta)$, we again invoke Lemma \ref{lem:1} and obtain:
-\begin{align}
-    W_t &= R_t - \sum_{j=t}^TCov(w_t,d_j)\Upsilon_j^{-1}Cov(w_t,d_j)^{'} \nonumber \\
-    &= R_t - R_t(\Upsilon_t^{-1}+K_t^{'}F_t^{'}N_tF_tK_t)R_t \label{eq:disturb_W}
-\end{align}
-
-Similarly, we can express $\hat{v}_{t,T}$ and $V_t \equiv Cov(v_t|Y_T,X_T;\theta)$ as:
-\begin{align}
-    \hat{v}_{t,T} &= \sum_{j=t}^{T}E(v_td_t^{'})\Upsilon_j^{-1}d_j \nonumber \\
-    &= Q_tr_t \label{eq:disturb_v} \\
-    V_t &= Q_t - \sum_{j=t}^{T}Cov(v_t, d_j)\Upsilon_j^{-1}Cov(v_t,d_j)^{'} \nonumber \\
-    &= Q_t - Q_tN_tQ_t \label{eq:disturb_V}
-\end{align}
-
-Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get smoothed disturbances.
+Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get estimates for smoothed disturbances through backwards recursion.
 
 \subsection{Diffuse Smoothing}
 If initial conditions are not known, we can use diffuse smoothing for exact initialization. Similar to diffuse filtering, we use exponential expansion for each term, and get the limiting solution.  
@@ -543,7 +515,8 @@ We may use the standard EM algorithm to solve $\theta$.
 \pagebreak
 \appendix
 
-\section{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
+\section{Kalman Filter}
+\subsection{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
 \begin{lemma}[Law of Iterated Projections] \label{lem:1}
     Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have projections:
     \[
@@ -563,7 +536,7 @@ We may use the standard EM algorithm to solve $\theta$.
 
 Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t,t}$ and $P_{t,t}$.
 
-\section{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
+\subsection{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
 \begin{align*}
     P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
     &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
@@ -573,7 +546,7 @@ Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain fo
 \end{align*}
 The fourth equality follows from equation (\ref{eq:gain}).
 
-\section{Proof of Diffuse Kalman Filter} \label{ap:init_filter}
+\subsection{Proof of Diffuse Kalman Filter} \label{ap:init_filter}
 This section derives from Section 5 of (\cite{durbin_koopman_2001}), but provides an alternative formulation using the Joseph form. For the original proof without the Joseph formulation, please refer to (\cite{durbin_koopman_2001}). The key intuition is to give an exact result for the initial state distribution with arbitrarily large but finite variances, then find out the limit as the variances approach infinity. Given definition of $P_{t,t-1}$ in equation (\ref{eq:P_diffuse}), and linearity of Kalman filtering, we have:
 \begin{align*}
     \Upsilon_t &= \kappa \Upsilon_{\infty,t} + \Upsilon_{*,t} + \mathcal{O}(\kappa^{-1}) \\
@@ -658,7 +631,8 @@ For $P_{t,t}$, we have:
     &+ K_t^{(*)}R_tK_t^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber
 \end{align}
 
-\section{Proof of State Smoothing} \label{ap:smooth}
+\section{Kalman Smoother}
+\subsection{Proof of State Smoothing} \label{ap:smooth}
 The backbone of the proof is Lemma \ref{lem:1}. Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t,t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
 
 Now consider $\hat{\xi}_{t,T}$, denote $\Delta_t\equiv\{d_t,d_{t+1},...,d_T\}^{'}$ 
@@ -697,8 +671,8 @@ To compute $\hat{\xi}_{t,T}$, note that $Var(\Delta_{t}|Y_{t-1},X_T;\theta)$ is 
 If $j=t$, then we replace the product operation is not carried out and is replace with $I$. Define $r_t$ as:
 \begin{align*}
     r_{t-1} \equiv \begin{cases}
-        0 & \text{if $t=T+1$} \\
-        \sum_{j=t}^T\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j & \text{if $t\leq T$}
+        0, & t=T+1 \\
+        \sum_{j=t}^T\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j, & t\leq T
     \end{cases}
 \end{align*}
 
@@ -717,8 +691,8 @@ To calculate $P_{t,T}$, we use Lemma \ref{lem:1} again and have the following re
 Similarly, we can find $P_{t,T}$ through backwards recursions. Define $N_t$ as:
 \begin{align*}
     N_{t-1} \equiv \begin{cases}
-        0 & \text{if $t=T+1$} \\
-        \sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right] & \text{if $t\leq T$}
+        0, & t=T+1 \\
+        \sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right], & t\leq T
     \end{cases}
 \end{align*}
 The recursive formulation for $P_{t,T}$ is:
@@ -727,7 +701,90 @@ The recursive formulation for $P_{t,T}$ is:
     P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} 
 \end{align*}
 
-\section{Proof of Disturbance Smoothing}
+\section{Proof of Disturbance Smoothing} \label{ap:disturb_smooth}
+The derivation of disturbance smoothers is similar to that of state smoothers in Appendix \ref{ap:smooth}. We have:
+\begin{align*}
+    \hat{v}_{t,T} &= \sum_{j=t}^{T}E(v_td_j^{'})\Upsilon_j^{-1}d_j \\
+    \hat{w}_{t,T} &= \sum_{j=t}^{T}E(w_td_j^{'})\Upsilon_j^{-1}d_j \\
+    V_t &= Q_t - \sum_{j=t}^{T}Cov(v_t,d_j^{'})\Upsilon_j^{-1}Cov(v_t,d_j^{'})^{'} \\
+    W_t &= R_t - \sum_{j=t}^{T}Cov(w_t,d_j^{'})\Upsilon_j^{-1}Cov(w_t,d_j^{'})^{'} 
+\end{align*}
+
+First consider measurement errors $w_t$. Note that:
+\begin{align*}
+    E(w_td_j^{'}|Y_{t-1},X_T;\theta)=&Cov(w_t, d_j|Y_{t-1},X_T;\theta) \\
+    =&E[w_t(\xi_j-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta]H_j^{'} \\ 
+    &+ E(w_tw_j^{'}|Y_{t-1}X_T;\theta)
+\end{align*}
+We have:
+\begin{align*}
+    E(w_td_j^{'}|Y_{t-1},X_T;\theta) = \begin{cases}
+        R_t, & j=t \\
+        -R_tM_t^{'}H_{t+1}^{'}, & j=t+1 \\
+        -R_tM_t^{'}\prod_{i=t+1}^{j-1}(L_i^{'})H_{j}^{'}, & j=t+2,...,T
+    \end{cases}
+\end{align*}
+
+We can write $\hat{w}_{t,T}$ and $W_t$ as:
+\begin{align*}
+    \hat{w}_{t,T} &= R_t\Upsilon_t^{-1}d_t - R_tM_t^{'}\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}d_j] \\
+    &= R_t(\Upsilon_t^{-1}d_t-M_t^{'}r_t) \\
+    W_t &= R_t - R_t\{\Upsilon_t^{-1} + M_t^{'}\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}
+    \Upsilon_j^{-1}H_j\prod_{i=t+1}^{j-1}(L_i^{'})^{'}]M_t\}R_t \\
+    &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t
+\end{align*}
+
+Next consider state transition errors $v_t$. Note that:
+\begin{align*}
+    E(v_td_j^{'}|Y_{t-1},X_T;\theta) &= Cov(v_t,d_j|Y_{t-1},X_T;\theta) \\
+    &= E[v_t(\xi_j-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta]H_j^{'}
+\end{align*}
+
+We have:
+\begin{align*}
+    E(v_td_j^{'}|Y_{t-1},X_T;\theta) = \begin{cases}
+        0, & j=t \\
+        Q_tH_{t+1}^{'}, & j=t+1 \\
+        Q_t\prod_{i=t+1}^{j-1}(L_i^{'})H_{j}^{'}, & j=t+2,...,T
+    \end{cases}
+\end{align*}
+
+We can write $\hat{v}_{t,T}$ and $V_t$ as:
+\begin{align*}
+    \hat{v}_{t,T} &= Q_t\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}d_j] \\
+    &= Q_tr_t \\
+    V_t &= Q_t - Q_t\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}H_j\prod_{i=t+1}^{j-1}(L_i^{'})^{'}]Q_t \\
+    &= Q_t - Q_tN_tQ_t
+\end{align*}
+
+Now we have the recursive formula for disturbance smoothers:
+\begin{align*}
+    \hat{w}_{t,T} &= R_t(\Upsilon_t^{-1}d_t - M_t^{'}r_t) \\
+    \hat{v}_{t,T} &= Q_tr_t \\
+    W_t &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t \\
+    V_t &= Q_t - Q_tN_tQ_t 
+\end{align*}
+where $r_t$ and $N_t$ are defined in Appendix \ref{ap:smooth}.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \section{Proof of Diffuse Smoothing} \label{ap:init_smoother}
 
