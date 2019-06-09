@@ -95,7 +95,7 @@ We are able to obtain a more concise updating rule:
 Using equation (\ref{eq:joseph_update_xi}) through (\ref{eq:joseph_update_P}) recursively, we may implement Kalman filtering in the Joseph form. 
 
 \subsection{Initialization with Diffuse Filtering} \label{subsec:diff_filter}
-So far we have assumed that we know values of $\hat{\xi}_{1,0}$ and $P_{1,0}$. In practice, such information are rarely available. If instead, we know that the time series is stationary, we can use the unconditional mean and variance for $\hat{\xi}_{1,0}$ and $P_{1,0}$. If the time series is at least partially non-stationary, then we should assume no prior information and set $\hat{\xi}_{1,0}=0$ and $P_{1,0}=\infty$ for the non-stationary part of $\xi_t$. A commonly used solution is to set $P_{1,0}$ to some large value (e.g. $\kappa=10^7$) to approximate infinity, but better algorithms exist for exact initialization. In what follows, I discuss one such algorithm that is implemented by \texttt{linkalman}.
+So far we have assumed that we know values of $\hat{\xi}_{1,0}$ and $P_{1,0}$. In practice, such information are rarely available. If instead, we know that the time series is stationary, we can use the unconditional mean and variance for $\hat{\xi}_{1,0}$ and $P_{1,0}$. If the time series is at least partially non-stationary, then we should assume no prior information and set $\hat{\xi}_{1,0}=0$ and $P_{1,0}=\infty$ for the non-stationary part of $\xi_t$. A commonly used solution is to set $P_{1,0}$ to some large value (e.g. $\kappa=10^7$) to approximate infinity, but this technique is difficult to implement when the initial condition structure is complex\footnote{See Section 3 of (\cite{doan_2010}) for further discussions.}. Better algorithms exist for exact initialization, and I will discuss one such algorithm that is implemented by \texttt{linkalman}.
 
 Consider $\hat{\xi}_{1,0}$ again. Following (\cite{koopman_1997}), we define $\hat{\xi}_{1,0}$ as:
 \begin{align}
@@ -131,6 +131,20 @@ If $\Upsilon_{\infty,t}=0$:
 \end{boenumerate}
 
 We can update the diffuse Kalman filter with the new expressions for $K_t$, $\hat{\xi}_{t+1,t}$, and $P_{t+1,t}$.
+
+\subsection{Transition to the Usual Kalman Filter}
+Diffused initial state is to represent the fact the we have no prior knowledge of initial the state of non-stationary processes. As a result, that state estimate will be dominated by initial data. In other words, the few initial observations are used for form the informative initial conditions, and the rest of the data are used to perform usual Kalman filtering. (\cite{dejong_1991}) and (\cite{durbin_koopman_2003}) show that a diffuse Kalman filter will degenerate to a usual Kalman filter after a few time periods $t_n$, which in general is the number of diffuse initial states. 
+
+A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and in addition a proof in Appendix \ref{ap:transition} to verify his approach, which is not available in the original source. 
+
+Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q$ as the number of diffuse states, then by construction of $P_{1,0}$, it has rank $q$. Let $\varepsilon_t>0$ be some small threshold value such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, we decrease $q$ by $1$. When $q=0$, the diffuse Kalman filter degenerates into a usual one. 
+
+
+
+
+
+
+
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
 So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
@@ -209,7 +223,7 @@ where
 Now we may proceed with sequential filtering as follows:
 \begin{boenumerate}
     \item Initialize state conditions using equation (\ref{eq:init_xi}) and (\ref{eq:init_P}) 
-    \item For each time period $t$, calculate $\hat{\xi}_{t:(0)}$ and $P_{t:{(0)}}$ using equation (\ref{eq:diff_xi_seq0}) and (\ref{eq:diff_P_seq0}) \label{step:seq_filter_begin}
+    \item For period $t$, calculate $\hat{\xi}_{t:(0)}$ and $P_{t:{(0)}}$ using equation (\ref{eq:diff_xi_seq0}) and (\ref{eq:diff_P_seq0}) \label{step:seq_filter_begin}
     \item Use LDL transformation to obtain diagonalized measurement equation (\ref{eq:ldl})
     \item If $\Upsilon_{\infty,t:(i)}\neq0$, use equation (\ref{eq:diff_seq_xi1}) and (\ref{eq:diff_seq_P1}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$
     \item If $\Upsilon_{\infty,t:(i)}=0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:diff_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ \label{step:seq_filter_end}
@@ -256,7 +270,7 @@ Following derivations in Appendix \ref{ap:disturb_smooth}, we have the iterative
 Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get estimates for smoothed disturbances through backwards recursion.
 
 \subsection{Diffuse Smoothing}
-If initial conditions are not known, we can use diffuse smoothing for exact initialization. Similar to diffuse filtering, we use exponential expansion for each term, and get the limiting solution.  
+In this subsection, I discuss smoothing when initial conditions are not fully known. From section \ref{subsec:diff_filter}, we know that $P_{\infty,t}=0 \ \forall\ t\geq t_n$ after period $t_n$ where a diffuse Kalman filter degenerates into a usual one, and we can proceed with standard Kalman filtering. Therefore, for $t\in \{t_n,...,T\}$, we can proceed with standard Kalman smoothing as well. For $t\in\{1,...,t_n-1\}$, we need to perform diffuse smoothing as $P_{\infty,t}\neq0$.
 
 Recall that $r_{t-1} = H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}$ is not singular, We can rewrite $r_{t-1}$ as:
 \begin{align*}
@@ -630,6 +644,45 @@ For $P_{t,t}$, we have:
     =& \kappa P_{\infty, t} + (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \label{eq:diff_P2} \\
     &+ K_t^{(*)}R_tK_t^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber
 \end{align}
+
+\subsection{Proof of the Degeneration Algorithm} \label{ap:transition}
+Define $P_{\infty,t,t}$ as the diffuse part of $P_{t,t}$. From Appendix \ref{ap:init_filter}, we have:
+\begin{align*}
+    P_{\infty,t,t} = P_{\infty,t}[I - H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}]
+\end{align*}
+
+Without loss of generality, we can re-arrange indices of $\xi_t$ such that:
+\begin{align*}
+    P_{\infty,1}=\begin{pmatrix}
+        I_q & 0 \\
+        0 & 0
+    \end{pmatrix}
+\end{align*}
+
+In the univariate case, $H_t$ is a row vector, and $H_t^{'}H_tP_{\infty,t}$ is a similarly partitioned matrix as $P_{\infty, 1}$. Therefore, any change to the matrix only affects the non-zero partition, and we can focus solely on this partition. In what follows I will provide a proof in the case where $P_{\infty,1}$ has full rank (i.e. the initial condition is completely uninformative), and the conclusion is readily adapted to the mixed diffuse case where $P_{\infty,1}$ does not have full rank through partitioning operations. 
+
+If $P_{\infty,t}=0$, $P_{\infty,t,t} = P_{\infty,t}$ and is not updated. If $P_{\infty,t}\neq0$, $H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}$ is an idempotent matrix. If a matrix $A$ is idempotent, then:
+\begin{boenumerate}
+    \item $Trace(A)=rank(A)$
+    \item $I-A$ is also idempotent
+\end{boenumerate}
+
+Using the fact that $Trace(AB)=Trace(BA)$, we have:
+\begin{align*}
+    Trace[H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}] = Trace[H_tP_{\infty,t}H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}] = 1
+\end{align*}
+
+Using the fact that $Trace(A+B) = Trace(A) + Trace(B)$, we have:
+\begin{align*}
+    Trace[I - H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}]=q-1
+\end{align*}
+
+If $A$ has full rank, then by the fact that $Trace(AB)=Trace(B)$, we have:
+\begin{align*}
+    Trace(P_{\infty,t,t}) = q-1
+\end{align*}
+
+Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced by $1$ with each update, and when $q=0$, the diffuse Kalman filter degenerates into a usual one.  
 
 \section{Kalman Smoother}
 \subsection{Proof of State Smoothing} \label{ap:smooth}
