@@ -133,18 +133,15 @@ If $\Upsilon_{\infty,t}=0$:
 We can update the diffuse Kalman filter with the new expressions for $K_t$, $\hat{\xi}_{t+1,t}$, and $P_{t+1,t}$.
 
 \subsection{Transition to the Usual Kalman Filter}
-Diffused initial state is to represent the fact the we have no prior knowledge of initial the state of non-stationary processes. As a result, that state estimate will be dominated by initial data. In other words, the few initial observations are used for form the informative initial conditions, and the rest of the data are used to perform usual Kalman filtering. (\cite{dejong_1991}) and (\cite{durbin_koopman_2003}) show that a diffuse Kalman filter will degenerate to a usual Kalman filter after a few time periods $t_n$, which in general is the number of diffuse initial states. 
+Diffused initial state is to represent the fact the we have no prior knowledge of initial the state of non-stationary processes. As a result, that state estimate will be dominated by initial data. In other words, the few initial observations are used for form the informative initial conditions, and the rest of the data are used to perform usual Kalman filtering. (\cite{dejong_1991}) and (\cite{durbin_koopman_2003}) show that a diffuse Kalman filter will degenerate to a usual Kalman filter after a few time periods $t_q$, which in general is the number of diffuse initial states. 
 
-A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and in addition a proof in Appendix \ref{ap:transition} to verify his approach, which is not available in the original source. 
+A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and interested readers may refer to Appendix \ref{ap:transition} for a simple proof\footnote{For a complete treatment, refer to \cite{koopman_1997} for details.}. 
 
-Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q$ as the number of diffuse states, then by construction of $P_{1,0}$, it has rank $q$. Let $\varepsilon_t>0$ be some small threshold value such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, we decrease $q$ by $1$. When $q=0$, the diffuse Kalman filter degenerates into a usual one. 
-
-
-
-
-
-
-
+Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_t\equiv rank(P_{\infty,t})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>0)^2$,  where $\varepsilon$ is some base threshold, and $min(|H_t|;|H_t|>0)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, we decrease $q$ by $1$. After each period, we set: 
+\[
+    q_{t+1}=min[rank(P_{\infty,t,t}),rank(F_t), rank(F_tP_{\infty,t,t}F_t^{'})]
+\]
+When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. 
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
 So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
@@ -209,7 +206,7 @@ where
         =\frac{P_{\infty,t:(i-1)}H_{t:(i-1)}^{'}}{H_{t:(i)}P_{\infty, t:(i-1)}H_{t:(i)}^{'}}
 \end{align*}
 
-If $\Upsilon_{\infty,t:(i)}=0$, we have:
+If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,t:(i-1)}\neq 0$, we have:
 \begin{align}
     \hat{\xi}_{t:(i)} =& \hat{\xi}_{t:(i-1)} + K_{t:(i)}^{(*)}d_{t:(i)} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_seq_xi0} \\
     P_{t:(i)} =& \kappa P_{\infty,t:(i-1)} + (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i-1)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} \label{eq:diff_seq_P0} \\
@@ -220,13 +217,20 @@ where
     K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i-1)}H_{t:(i)}^{'}}{\Upsilon_{*,t:(i)}} = \frac{P_{*,t:(i-1)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i-1)}H_{t:(i)}^{'} + R_{t:(i)}}
 \end{align*}
 
+If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,t:(i-1)}=0$, the diffuse Kalman filter degenerates into a usual one, and instead of using equation (\ref{eq:diff_seq_P0}), we use:
+\begin{align}
+    P_{t:(i)} =& (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i-1)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} + K_{t:(i)}^{(*)}R_{t:(i)}K_{t:(i)}^{(*)'} \label{eq:usual_seq_P0} 
+\end{align}
+
 Now we may proceed with sequential filtering as follows:
 \begin{boenumerate}
     \item Initialize state conditions using equation (\ref{eq:init_xi}) and (\ref{eq:init_P}) 
     \item For period $t$, calculate $\hat{\xi}_{t:(0)}$ and $P_{t:{(0)}}$ using equation (\ref{eq:diff_xi_seq0}) and (\ref{eq:diff_P_seq0}) \label{step:seq_filter_begin}
     \item Use LDL transformation to obtain diagonalized measurement equation (\ref{eq:ldl})
     \item If $\Upsilon_{\infty,t:(i)}\neq0$, use equation (\ref{eq:diff_seq_xi1}) and (\ref{eq:diff_seq_P1}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$
-    \item If $\Upsilon_{\infty,t:(i)}=0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:diff_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ \label{step:seq_filter_end}
+    \item If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,0}\neq0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:diff_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ 
+    \item If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,0}=0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:usual_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ 
+    \item If $t<t_q$, update $q_{t+1} = min[rank(P_{\infty,t,t}), rank(F_t)]$. \label{step:seq_filter_end}
     \item Repeat step (\ref{step:seq_filter_begin}) through (\ref{step:seq_filter_end}) for $t\in\{1,2,...,T\}$
 \end{boenumerate}
 
@@ -269,59 +273,21 @@ Following derivations in Appendix \ref{ap:disturb_smooth}, we have the iterative
 
 Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get estimates for smoothed disturbances through backwards recursion.
 
-\subsection{Diffuse Smoothing}
-In this subsection, I discuss smoothing when initial conditions are not fully known. From section \ref{subsec:diff_filter}, we know that $P_{\infty,t}=0 \ \forall\ t\geq t_n$ after period $t_n$ where a diffuse Kalman filter degenerates into a usual one, and we can proceed with standard Kalman filtering. Therefore, for $t\in \{t_n,...,T\}$, we can proceed with standard Kalman smoothing as well. For $t\in\{1,...,t_n-1\}$, we need to perform diffuse smoothing as $P_{\infty,t}\neq0$.
+\subsection{Diffuse Disturbance Smoothing}
+In this subsection, I discuss smoothing when initial conditions are not fully known. From section \ref{subsec:diff_filter}, we know that $P_{\infty,t}=0 \ \forall\ t\geq t_q$ after period $t_q$ where a diffuse Kalman filter degenerates into a usual one, and we can proceed with standard Kalman filtering. Therefore, for $t\in \{T,T-1,...,t_q\}$, we can proceed with standard Kalman smoothing as well. For $t\in\{t_q-1,t_q-2,...,1\}$, we need to perform diffuse smoothing.
 
-Recall that $r_{t-1} = H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}$ is not singular, We can rewrite $r_{t-1}$ as:
-\begin{align*}
-    r_{t-1} =& r_{t-1}^{(0)} + \kappa^{-1}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-2}) \\
-    =& H_t^{'}(\kappa^{-1}\Upsilon_t^{(1)}+\kappa^{-2}\Upsilon_{t}^{(2)})(d_t^{(0)} + \kappa^{-1}d_t^{(1)}) \\
-    &+ (L_t^{(0)} + \kappa^{-1}L_t^{(1)})(r_t^{(0)}+\kappa^{-1}r_t^{(1)}) + \mathcal{O}(\kappa^{-2})
-\end{align*}
-Rearrange the terms and we have the recursive formula for $r_{t-1}$:
-\begin{align*}
-    r_{t-1}^{(0)} &= L_t^{(0)'}r_t^{(0)} \\
-    r_{t-1}^{(1)} &= H_t^{'}\Upsilon_t^{(1)}d_t^{(0)} + L_t^{(0)'}r_t^{(1)} + L_t^{(1)'}r_t^{(0)}
-\end{align*}
-
-If $\Upsilon_{\infty,t}$ is singular, We can rewrite $r_{t-1}$ as:
-
-
-Similarly, we can rewrite $N_{t-1}$ as\footnote{The expansion is suitable for disturbance smoother, if you are interested in computing smoothed  state variance, you need to expand $N_{t-1}$ to $\mathcal{O}(\kappa^{-3})$. Refer to \cite{durbin_koopman_2003} for details.}:
-\begin{align*}
-    N_{t-1} &= N_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \\
-    N_{t-1}^{(0)} &= L_t^{(0)'}N_t^{(0)}L_t^{(0)} \\
-\end{align*}
-
-If $\Upsilon_{\infty,t}$ is singular, We can rewrite $N_{t-1}$ as:
-
-For disturbance smoothers, we are interested in $v_t$ and $w_t$. I will give the formula below, for details, refer to Appendix \ref{ap:init_smoother}.
-
-If $\Upsilon_{\infty,t} \neq 0$, we have:
-\begin{align}
-    \hat{w}_{t:T} &= -R_tK_t^{(0)'}F_t^{'}r_t^{(0)} \\
-    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
-    W_t &= R_t - R_tK_t^{(0)'}F_t^{'}N_t^{(0)}F_tK_t^{(0)}R_t \\
-    V_t &= Q_t - Q_tN_t^{(0)}Q_t
-\end{align}
-
-If $\Upsilon_{\infty,t} = 0$, we have:
-\begin{align}
-    \hat{w}_{t:T} &= R_t(\Upsilon_{*,t}^{-1}d_t - R_tK_t^{(0)'}F_t^{'}r_t^{(0)}) \\
-    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
-    W_t &= R_t - R_t(\Upsilon_{*,t}^{-1} + K_t^{(0)'}F_t^{'}N_t^{(0)}F_tK_t^{(0)})R_t \\
-    V_t &= Q_t - Q_tN_t^{(0)}Q_t
-\end{align}
+For $t\in\{T,T-1,...,t_q\}$, we can perform usual disturbance smoothing where $r_t=r_t^{(0)}$ and $N_t=N_t^{(0)}$. For $t\in\{t_q-1,t_q-2,...,1\}$, if $\Upsilon_{\infty,t}\neq0$, we use equation (\ref{eq:diff_disturb1_start}) through (\ref{eq:diff_disturb1_end}) for diffuse disturbance smoothing. If $\Upsilon_{\infty,t}=0$, we use equation (\ref{eq:diff_disturb0_start}) through (\ref{eq:diff_disturb0_end}) for diffuse disturbance smoothing. 
 
 \subsection{Rounding Errors and Nearest PSD}
-Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. If a matrix is symmetric, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions. Since we are using sequential techniques, we avoid asymmetric covariance matrices due to rounding errors of matrix inversion and are able to guarantee symmetry throughout our operations. 
+Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. By construction, I guarantee symmetry of covariance matrices. Therefore, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions.
 
-If a covariance matrix $A$ is not PSD, we can use the Nearest PSD matrix with the techniques developed in \cite{higham_1988}. Omitting technical details, it amounts to replacing $A$ with $\bar{A}$, where $\bar{A}$ is be calculated as:
+If a covariance matrix $A$ is not PSD, we can use the nearest PSD matrix with the techniques developed by (\cite{higham_1988}). Omitting technical details, it amounts to replacing $A$ with $\bar{A}$, where $\bar{A}$ is be calculated as:
 \begin{align*}
     A &= USV^{'} \\
     \Sigma &= VSV^{'} \\
     \bar{A} &= \frac{\Sigma + \Sigma^{'} + A + A^{'}}{4}
 \end{align*}
+where the first equality is the SVD decomposition of $A$.
 
 \subsection{Sequential Smoother}
 As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive and subject to failure due to rounding errors. \cite{durbin_koopman_2000} propose sequential smoothing to greatly improved the efficiency and robustness of Kalman Smoothers. The univariate approach in Kalman filter essentially treats observations flowing in one at a time, so we can readily adapt our smoother.
@@ -659,7 +625,7 @@ Without loss of generality, we can re-arrange indices of $\xi_t$ such that:
     \end{pmatrix}
 \end{align*}
 
-In the univariate case, $H_t$ is a row vector, and $H_t^{'}H_tP_{\infty,t}$ is a similarly partitioned matrix as $P_{\infty, 1}$. Therefore, any change to the matrix only affects the non-zero partition, and we can focus solely on this partition. In what follows I will provide a proof in the case where $P_{\infty,1}$ has full rank (i.e. the initial condition is completely uninformative), and the conclusion is readily adapted to the mixed diffuse case where $P_{\infty,1}$ does not have full rank through partitioning operations. 
+In the univariate case, $H_t$ is a row vector, and $H_t^{'}H_tP_{\infty,t}$ is a similarly partitioned matrix as $P_{\infty, 1}$. Therefore, any change to the matrix only affects the non-zero partition, and we can focus solely on this partition. In what follows I will provide a proof in the case where $P_{\infty,1}$ has full rank (i.e. the initial condition is completely uninformative), and the conclusion is readily adapted to the mixed diffuse case where $P_{\infty,1}$ does not have full rank through partitioning operations and LDL decomposition of $P_{\infty,t}$. 
 
 If $P_{\infty,t}=0$, $P_{\infty,t,t} = P_{\infty,t}$ and is not updated. If $P_{\infty,t}\neq0$, $H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}$ is an idempotent matrix. If a matrix $A$ is idempotent, then:
 \begin{boenumerate}
@@ -682,7 +648,7 @@ If $A$ has full rank, then by the fact that $Trace(AB)=Trace(B)$, we have:
     Trace(P_{\infty,t,t}) = q-1
 \end{align*}
 
-Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced by $1$ with each update, and when $q=0$, the diffuse Kalman filter degenerates into a usual one.  
+Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced by $1$ with each update. If after period $t$, $rank(P_{\infty,t,t})>0$, we have $P_{\infty,t+1} = F_tP_{\infty,t,t}F_t^{'}$. By the fact that $rank(AB)\leq min[rank(A), rank(B)]$, we have $q_{t+1}=min[rank(P_{\infty,t,t}),rank(F_t), rank(P_{\infty,t+1})]$. I use this updating rule instead of $q_{t} = rank(P_{\infty,t+1})$ to avoid numerical instability. 
 
 \section{Kalman Smoother}
 \subsection{Proof of State Smoothing} \label{ap:smooth}
@@ -819,6 +785,60 @@ Now we have the recursive formula for disturbance smoothers:
 \end{align*}
 where $r_t$ and $N_t$ are defined in Appendix \ref{ap:smooth}.
 
+\subsection{Proof of Diffuse Disturbance Smoothing} \label{ap:init_smoother}
+For disturbance smoothers, we are interested in $v_t$ and $w_t$, which fortunately require less computational expenses than do smoothed estimates for $\xi_t$. In what follows I simplify the proof in (\cite{durbin_koopman_2003}) to better adapt to the need of disturbance smoothers in the univariate case\footnote{The difference lies in the magnitude of exponential expansion. Disturbance smoothers require less expansion than do state smoothers.If readers are interested in computing smoothed state variance, refer to (\cite{durbin_koopman_2003}) for details.}. 
+
+Recall that $r_{t-1} = H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}\neq0$, we can rewrite $r_{t-1}$ as:
+\begin{align*}
+    r_{t-1} =& r_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \\
+    =& H_t^{'}(\kappa^{-1}\Upsilon_t^{(1)}+\kappa^{-2}\Upsilon_{t}^{(2)})(d_t^{(0)} + \kappa^{-1}d_t^{(1)}) \\
+    &+ (L_t^{(0)} + \kappa^{-1}L_t^{(1)})(r_t^{(0)}+\kappa^{-1}r_t^{(1)}) + \mathcal{O}(\kappa^{-2})
+\end{align*}
+Rearrange the terms and we have the recursive formula for $r_{t-1}^{(0)}$:
+\begin{align}
+    r_{t-1}^{(0)} &= L_t^{(0)'}r_t^{(0)} \label{eq:diff_disturb1_start}
+\end{align}
+where $L_t^{(0)}=F_t(I-P_{\infty,t}H_t^{'}\Upsilon_{\infty,t}^{-1}H_t)$.
+
+Similarly, we can rewrite $N_{t-1}$ as:
+\begin{align}
+    N_{t-1} &= N_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \nonumber \\
+    N_{t-1}^{(0)} &= L_t^{(0)'}N_t^{(0)}L_t^{(0)} 
+\end{align}
+
+Now we can calculate the diffuse disturbance smoother for $\Upsilon_{\infty,t}\neq0$ as:
+\begin{align}
+    \hat{w}_{t:T} &= -R_tK_t^{(0)'}F_t^{'}r_t^{(0)} \\
+    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
+    W_t &= R_t - R_tK_t^{(0)'}F_t^{'}N_t^{(0)}F_tK_t^{(0)}R_t \\
+    V_t &= Q_t - Q_tN_t^{(0)}Q_t \label{eq:diff_disturb1_end}
+\end{align}
+
+
+If $\Upsilon_{\infty,t}=0$, we can rewrite $r_{t-1}$ as:
+\begin{align*}
+    r_{t-1} =& r_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \\
+    =& H_t^{'}\Upsilon_{*,t}^{-1}d_t + L_{*,t}^{'}r_{t}^{(0)} + \mathcal{O}(\kappa^{-1})
+\end{align*}
+Rearrange the terms and we have the recursive formula for $r_{t-1}^{(0)}$:
+\begin{align}
+    r_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}d_t + L_{*,t}^{'}r_{t}^{(0)} \label{eq:diff_disturb0_start}
+\end{align}
+where $L_{*,t}=F_t(I-P_{*,t}H_t^{'}\Upsilon_{*,t}^{-1}H_t)$.
+
+Similarly, we can rewrite $N_{t-1}$ as:
+\begin{align}
+    N_{t-1} &= N_{t-1}^{(0)} + \mathcal{O}(\kappa^{-1}) \nonumber \\
+    N_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}H_t + L_{*,t}^{'}N_t^{(0)}L_{*,t} 
+\end{align}
+
+Now we can calculate the diffuse disturbance smoother for $\Upsilon_{\infty,t}=0$ as:
+\begin{align}
+    \hat{w}_{t:T} &= R_t(\Upsilon_{*,t}^{-1}d_t - K_t^{(*)'}F_t^{'}r_t^{(0)}) \\
+    \hat{v}_{t:T} &= Q_tr_t^{(0)} \\
+    W_t &= R_t - R_t(\Upsilon_{*,t}^{-1} + K_t^{(*)'}F_t^{'}N_t^{(0)}F_tK_t^{(*)})R_t \\
+    V_t &= Q_t - Q_tN_t^{(0)}Q_t \label{eq:diff_disturb0_end}
+\end{align}
 
 
 
@@ -827,19 +847,6 @@ where $r_t$ and $N_t$ are defined in Appendix \ref{ap:smooth}.
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-\section{Proof of Diffuse Smoothing} \label{ap:init_smoother}
 
 \section{Proof of Sequential Smoothing}
 
