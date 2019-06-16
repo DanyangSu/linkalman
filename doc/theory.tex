@@ -58,14 +58,14 @@ Given a set of measurements over time, and suppose $M_t$ is known. To predict $y
     \hat{\xi}_{t,s} &\equiv E(\xi_t|X_{s},Y_{s};\theta) \\
     P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
 \end{align*}
-With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
+With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t|t-1}$ and $P_{t|t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
 \begin{align}
-    \hat{\xi}_{t,t} &= \hat{\xi}_{t,t-1} + K_t(y_t-H_t\hat{\xi}_{t,t-1}-D_tx_t) \label{eq:filter_begin} \\
-    K_t &= P_{t,t-1}H_t^{'}\Upsilon_t^{-1} \label{eq:gain} \\
-    \Upsilon_t &\equiv H_tP_{t,t-1}H_t^{'} + R_t \\
-    P_{t,t} &= P_{t,t-1} - K_tH_tP_{t,t-1} \label{eq:p_tt} \\
-    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t} + B_tx_t \label{eq:xi_t1} \\
-    P_{t+1,t} &= F_tP_{t,t}F_t^{'}+Q_t \label{eq:filter_end}
+    \hat{\xi}_{t|t} &= \hat{\xi}_{t|t-1} + K_t(y_t-H_t\hat{\xi}_{t|t-1}-D_tx_t) \label{eq:filter_begin} \\
+    K_t &= P_{t|t-1}H_t^{'}\Upsilon_t^{-1} \label{eq:gain} \\
+    \Upsilon_t &\equiv H_tP_{t|t-1}H_t^{'} + R_t \\
+    P_{t|t} &= P_{t|t-1} - K_tH_tP_{t|t-1} \label{eq:p_tt} \\
+    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t|t} + B_tx_t \label{eq:xi_t1} \\
+    P_{t+1,t} &= F_tP_{t|t}F_t^{'}+Q_t \label{eq:filter_end}
 \end{align}
 $K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initial conditions $\hat{\xi}_{1,0}$ and $P_{1,0}$ are known. The Kalman filter proceeds as follows:
 \begin{boenumerate}
@@ -75,22 +75,22 @@ $K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initi
 \end{boenumerate}
 
 \subsection{Joseph Form and Numerical Robustness}
-We define $P_{t,t}$ as a covariance matrix, which is a symmetric positive semi-definite (PSD) matrix, but in practice, we may get $P_{t,t}$ that is neither symmetric nor PSD, due to rounding errors. Look at equation (\ref{eq:p_tt}) again. The subtraction makes calculating $P_{t,t}$ susceptible to rounding errors, sometimes even resulting in negative semi-definite matrix. I use the Joseph form to numerically enforce symmetric PSD. 
+We define $P_{t|t}$ as a covariance matrix, which is a symmetric positive semi-definite (PSD) matrix, but in practice, we may get $P_{t|t}$ that is neither symmetric nor PSD, due to rounding errors. Look at equation (\ref{eq:p_tt}) again. The subtraction makes calculating $P_{t|t}$ susceptible to rounding errors, sometimes even resulting in negative semi-definite matrix. I use the Joseph form to numerically enforce symmetric PSD. 
 
-The Joseph form (\cite{joseph_1968}) of $P_{t,t}$ is\footnote{For a detailed proof, see Appendix \ref{ap:joseph}}:
+The Joseph form (\cite{joseph_1968}) of $P_{t|t}$ is\footnote{For a detailed proof, see Appendix \ref{ap:joseph}}:
 \[
-    P_{t,t} = [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'}    
+    P_{t|t} = [I - K_tH_t]P_{t|t-1}[I - K_tH_t]' + K_tR_tK_t^{'}    
 \]
-If we guarantee $P_{t,t-1}$ and $R_t$ to be PSD, then $P_{t,t}$ is PSD by construction. Define $M_t$, $L_t$, and $d_t$ as:
+If we guarantee $P_{t|t-1}$ and $R_t$ to be PSD, then $P_{t|t}$ is PSD by construction. Define $M_t$, $L_t$, and $d_t$ as:
 \begin{align*}
     M_t &\equiv F_tK_t \\
     L_t &\equiv F_t-M_tH_t \\
-    d_t &\equiv y_t - H_t\hat{\xi}_{t,t-1} - D_tx_t
+    d_t &\equiv y_t - H_t\hat{\xi}_{t|t-1} - D_tx_t
 \end{align*}
 We are able to obtain a more concise updating rule:
 \begin{align}
-    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t,t-1} + M_td_t \label{eq:joseph_update_xi} \\
-    P_{t+1,t} &= L_tP_{t,t-1}L_t^{'} + M_tR_tM_t^{'} + Q_t \label{eq:joseph_update_P}
+    \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t|t-1} + M_td_t \label{eq:joseph_update_xi} \\
+    P_{t+1,t} &= L_tP_{t|t-1}L_t^{'} + M_tR_tM_t^{'} + Q_t \label{eq:joseph_update_P}
 \end{align}
 Using equation (\ref{eq:joseph_update_xi}) through (\ref{eq:joseph_update_P}) recursively, we may implement Kalman filtering in the Joseph form. 
 
@@ -108,9 +108,9 @@ From equation (\ref{eq:init}), we have:
     \hat{\xi}_{1,0} &= a  \label{eq:init_xi}\\
     P_{1,0} &= \kappa P_{\infty} + P_{*} \label{eq:init_P}
 \end{align}
-where $P_{\infty}=AA^{'}$ and $P_{*}=\Pi Q_0 \Pi^{'}$. By linearity of the filtering process, we can write $P_{t,t-1}$ as:
+where $P_{\infty}=AA^{'}$ and $P_{*}=\Pi Q_0 \Pi^{'}$. By linearity of the filtering process, we can write $P_{t|t-1}$ as:
 \begin{align}
-    P_{t,t-1} = \kappa P_{\infty,t} + P_{*,t} + \mathcal{O}(\kappa^{-1}) \label{eq:P_diffuse}
+    P_{t|t-1} = \kappa P_{\infty,t} + P_{*,t} + \mathcal{O}(\kappa^{-1}) \label{eq:P_diffuse}
 \end{align}
 where $\mathcal{O}(\kappa^{-1})$ is a function $f(\kappa)<\infty$ as $\kappa\rightarrow\infty$. We can write $\Upsilon_{t}$ as:
 \begin{align*}
@@ -118,16 +118,16 @@ where $\mathcal{O}(\kappa^{-1})$ is a function $f(\kappa)<\infty$ as $\kappa\rig
 \end{align*}
 In what follows, I describe the updating rule for exact initialization, for technical details, please refer to Appendix \ref{ap:init_filter}.
 
-Given $\hat{\xi}_{t,t-1}$ and $P_{t,t-1}$, if $\Upsilon_{\infty,t}\neq 0$:
+Given $\hat{\xi}_{t|t-1}$ and $P_{t|t-1}$, if $\Upsilon_{\infty,t}\neq 0$:
 \begin{boenumerate}
     \item Calculate $K_t$ using equation (\ref{eq:K1_diffuse_start}) to (\ref{eq:K1_diffuse_end})
-    \item Calculate $\hat{\xi}_{t,t}$ and $P_{t,t}$ from equation (\ref{eq:diff_xi1}) and (\ref{eq:diff_P1})
+    \item Calculate $\hat{\xi}_{t|t}$ and $P_{t|t}$ from equation (\ref{eq:diff_xi1}) and (\ref{eq:diff_P1})
 \end{boenumerate}
 
 If $\Upsilon_{\infty,t}=0$:
 \begin{boenumerate}
     \item Calculate $K_t$ using equation (\ref{eq:K2_diffuse})
-    \item Calculate $\hat{\xi}_{t,t}$ and $P_{t,t}$ from equation (\ref{eq:diff_xi2}) and (\ref{eq:diff_P2})
+    \item Calculate $\hat{\xi}_{t|t}$ and $P_{t|t}$ from equation (\ref{eq:diff_xi2}) and (\ref{eq:diff_P2})
 \end{boenumerate}
 
 We can update the diffuse Kalman filter with the new expressions for $K_t$, $\hat{\xi}_{t+1,t}$, and $P_{t+1,t}$.
@@ -139,7 +139,7 @@ A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In pract
 
 Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_t\equiv rank(P_{\infty,t})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>0)^2$,  where $\varepsilon$ is some base threshold, and $min(|H_t|;|H_t|>0)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, we decrease $q$ by $1$. After each period, we set: 
 \[
-    q_{t+1}=min[rank(P_{\infty,t,t}),rank(F_t), rank(F_tP_{\infty,t,t}F_t^{'})]
+    q_{t+1}=min[rank(P_{\infty,t|t}),rank(F_t), rank(F_tP_{\infty,t|t}F_t^{'})]
 \]
 When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. 
 
@@ -230,48 +230,42 @@ Now we may proceed with sequential filtering as follows:
     \item If $\Upsilon_{\infty,t:(i)}\neq0$, use equation (\ref{eq:diff_seq_xi1}) and (\ref{eq:diff_seq_P1}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$
     \item If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,0}\neq0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:diff_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ 
     \item If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,0}=0$, use equation (\ref{eq:diff_seq_xi0}) and (\ref{eq:usual_seq_P0}) to update $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ 
-    \item If $t<t_q$, update $q_{t+1} = min[rank(P_{\infty,t,t}), rank(F_t)]$. \label{step:seq_filter_end}
+    \item If $t<t_q$, update $q_{t+1} = min[rank(P_{\infty,t|t}), rank(F_t)]$. \label{step:seq_filter_end}
     \item Repeat step (\ref{step:seq_filter_begin}) through (\ref{step:seq_filter_end}) for $t\in\{1,2,...,T\}$
 \end{boenumerate}
 
 \section{Kalman Smoother} \label{sec:smoother}
 \subsection{State Smoother}
-In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t,t}, K_t, P_{t,t}, \hat{\xi}_{t,t-1}, P_{t,t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t,T}$ and $P_{t,T}$. 
+In Section \ref{sec:filter}, we use Kalman Filter to find $\{\hat{\xi}_{t|t}, K_t, P_{t|t}, \hat{\xi}_{t|t-1}, P_{t|t-1}\}$ for each $t$. If a dataset is given, we have the entire measurement sequence $Y_T$. Kalman Smoother is a technique of integrating information up to $T$ to infer $\xi_t$ at time $t$, $\hat{\xi}_{t|T}$ and $P_{t|T}$. 
 
-Suppose in addition to state estimates from Kalman Filter, we also want to know $\hat{\xi}_{t+1,T}$ and $P_{t,T}$. The technique for computing $\hat{\xi}_{t+1,T}$ and $P_{t,T}$ is called backwards smoothing\footnote{See (\cite{dejong_1989}) for details. I also provided a proof in Appendix \ref{ap:smooth} that is consistent with notations in this document and has more details.}. Here I present the iterative formula for Kalman smoothing. Following derivations in Appendix \ref{ap:smooth}, I define two auxiliary variables: $r_{t}$ and $N_{t}$, where $r_T=0$, $N_T=0$, and:
+Suppose in addition to state estimates from Kalman Filter, we also want to know $\hat{\xi}_{t+1,T}$ and $P_{t|T}$. The technique for computing $\hat{\xi}_{t+1,T}$ and $P_{t|T}$ is called backwards smoothing\footnote{See (\cite{dejong_1989}) for details. I also provided a proof in Appendix \ref{ap:smooth} that is consistent with notations in this document and has more details.}. Here I present the iterative formula for Kalman smoothing. Following derivations in Appendix \ref{ap:smooth}, I define two auxiliary variables: $r_{t}$ and $N_{t}$, where $r_T=0$, $N_T=0$, and:
 \begin{align}
     r_{t-1} &= H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \label{eq:r1t} \\
     N_{t-1} &= H_t^{'}\Upsilon_t^{-1}H_t + L_t^{'}N_tL_t \label{eq:N1t}
 \end{align}
 
-Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the iterative formulation for $\hat{\xi}_{t,T}$ and $P_{t,T}$:
+Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the iterative formulation for $\hat{\xi}_{t|T}$ and $P_{t|T}$:
 \begin{align}
-    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} \label{eq:smooth_state2} \\
-    P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} \label{eq:smooth_P2}
+    \hat{\xi}_{t|T} &= \hat{\xi}_{t|t-1} + P_{t|t-1}r_{t-1} \label{eq:smooth_state2} \\
+    P_{t|T} &= P_{t|t-1}- P_{t|t-1}N_{t-1}P_{t|t-1} \label{eq:smooth_P2}
 \end{align}
 
-To perform backwards smoothing, we can simply start at time $T$ with $r_T=0$ and $N_T=0$, then use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) for $t\in\{T-1,T-2,...,1\}$ to obtain $\{\hat{\xi}_{t,T}\}_{1,2,...,T}$ and $\{P_{t,T}\}_{1,2,...,T}$.
-
-\subsection{Disturbance Smoother}
-In this subsection, I will discuss disturbance smoother, a variation of the Kalman smoother that provides more efficient smoothed state estimates and clean forms for calculating likelihoods\footnote{This methods does not provide estimates of $P_{t,T}$. If finding $P_{t,T}$ is the goal, use equation (\ref{eq:r1t}) through (\ref{eq:smooth_P2}) instead}. 
-
-Consider the smoothed state disturbance estimates:
+As we will see in section \ref{sec:EM} and Appendix \ref{ap:log}, we also need to calculate covariance matrices of smoothed estimators. Define $P_{t,s|n}$ as:
 \begin{align*}
-    \hat{v}_{t,T} &\equiv E(v_t|Y_T,X_T;\theta) \\
-    \hat{w}_{t,T} &\equiv E(w_t|Y_T,X_T;\theta) \\
-    V_t &\equiv Var(v_t|Y_T,X_T;\theta) \\
-    W_t &\equiv Var(w_t|Y_T,X_T;\theta)
+    P_{t,s|n}\equiv Cov(\xi_t,\xi_{s}|Y_n,X_T;\theta)
 \end{align*}
 
-Following derivations in Appendix \ref{ap:disturb_smooth}, we have the iterative formulation:
+Following (\cite{koopman_1992}), (\cite{dejong_1988}), and (\cite{dejong_1989})\footnote{See Appendix \ref{ap:cov_smooth} for details.}, we have for $1\leq t < j \leq T$:
+\begin{align*}
+    P_{t,j|T} = P_{t|t-1}\prod_{i=t}^{j-1}L_i^{'}(I-N_{j-1}P_{j|j-1}) 
+\end{align*}
+
+In particular, we are interested in:
 \begin{align}
-    \hat{w}_{t,T} &= R_t(\Upsilon_t^{-1}d_t - M_t^{'}r_t) \label{eq:disturb_w} \\
-    \hat{v}_{t,T} &= Q_tr_t \label{eq:disturb_v} \\
-    W_t &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t \label{eq:disturb_W} \\
-    V_t &= Q_t - Q_tN_tQ_t \label{eq:disturb_V}
+    P_{t,t+1|T} = P_{t+1,t|T}^{'} = P_{t|t-1}L_t^{'}(I-N_tP_{t+1|t}) \label{eq:cov_smooth}
 \end{align}
 
-Using equation (\ref{eq:disturb_w}) through (\ref{eq:disturb_V}), we can get estimates for smoothed disturbances through backwards recursion.
+To perform backwards smoothing, we can simply start at time $T$ with $r_T=0$ and $N_T=0$, then use equation (\ref{eq:r1t}) through (\ref{eq:cov_smooth}) for $t\in\{T-1,T-2,...,1\}$ to obtain $\{\hat{\xi}_{t|T}\}_{1,2,...,T}$, $\{P_{t|T}\}_{1,2,...,T}$ and $\{P_{t,t+1|T}\}_{1,2,...,T}$.
 
 \subsection{Diffuse Disturbance Smoothing}
 In this subsection, I discuss smoothing when initial conditions are not fully known. From section \ref{subsec:diff_filter}, we know that $P_{\infty,t}=0 \ \forall\ t\geq t_q$ after period $t_q$ where a diffuse Kalman filter degenerates into a usual one, and we can proceed with standard Kalman filtering. Therefore, for $t\in \{T,T-1,...,t_q\}$, we can proceed with standard Kalman smoothing as well. For $t\in\{t_q-1,t_q-2,...,1\}$, we need to perform diffuse smoothing.
@@ -298,7 +292,7 @@ Define $y_{t,i}$ as the $i$-th non-missing measurement\footnote{Note that $i$ ma
         \frac{H_{t:i}^{'}d_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}r_{t:i} \\
         F_{t-1}^{'}r_{t:0} 
     \end{cases} \label{eq:seq_r} \\
-    \Upsilon_{t:i} &= H_{t:i}P_{t,t:i-1}H_{t:i}^{'}+\sigma_{t:i}^2 \nonumber \\
+    \Upsilon_{t:i} &= H_{t:i}P_{t|t:i-1}H_{t:i}^{'}+\sigma_{t:i}^2 \nonumber \\
     L_{t:i} &= F_t(I-K_{t:i}H_{t:i}) \nonumber \\
     N_{t:i-1} &= \begin{cases}
         \frac{H_{t:i}^{'}H_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}N_{t:i}L_{t:i} \\
@@ -306,11 +300,11 @@ Define $y_{t,i}$ as the $i$-th non-missing measurement\footnote{Note that $i$ ma
     \end{cases} \label{eq:N_seq}
 \end{align}
 
-For disturbance smoother, we may calculate $\hat{v}_{t,T:i}$, $V_{t:i}$, $\hat{w}_{t,T:i}$, and $W_{t:i}$ as:
+For disturbance smoother, we may calculate $\hat{v}_{t|T:i}$, $V_{t:i}$, $\hat{w}_{t|T:i}$, and $W_{t:i}$ as:
 \begin{align}
-    \hat{w}_{t,T:i} &= R_{t:i}(\frac{d_{t:i}}{\Upsilon_{t:i}}-K_{t:i}^{'}H_{t:i}^{'}r_{t:i}) \\
+    \hat{w}_{t|T:i} &= R_{t:i}(\frac{d_{t:i}}{\Upsilon_{t:i}}-K_{t:i}^{'}H_{t:i}^{'}r_{t:i}) \\
     W_{t:i} &= R_{t:i} - R_{t:i}^2(\Upsilon_{t:i}^{-1}+K_{t:i}^{'}F_{t:i}^{'}N_{t:i}F_{t:i}^{'}K_{t:i})  \\
-    \hat{v}_{t,T:i} &= Q_tr_{t:i} \\
+    \hat{v}_{t|T:i} &= Q_tr_{t:i} \\
     V_{t:i} &= Q_t - Q_tN_{t:i}Q_t
 \end{align}
 
@@ -496,7 +490,7 @@ We may use the standard EM algorithm to solve $\theta$.
 \appendix
 
 \section{Kalman Filter}
-\subsection{Derivation of $\hat{\xi}_{t,t}$ and $P_{t,t}$} \label{ap:iter_proj}
+\subsection{Derivation of $\hat{\xi}_{t|t}$ and $P_{t|t}$} \label{ap:iter_proj}
 \begin{lemma}[Law of Iterated Projections] \label{lem:1}
     Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have projections:
     \[
@@ -514,20 +508,20 @@ We may use the standard EM algorithm to solve $\theta$.
     \end{align*}
 \end{lemma}
 
-Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t,t}$ and $P_{t,t}$.
+Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t|t}$ and $P_{t|t}$.
 
-\subsection{Derivation of Joseph Form of $P_{t,t}$} \label{ap:joseph}
+\subsection{Derivation of Joseph Form of $P_{t|t}$} \label{ap:joseph}
 \begin{align*}
-    P_{t,t} &= [I - K_tH_t]P_{t,t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_tH_tP_{t,t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t,t-1}H_t^{'} + R_t)K_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1} - P_{t,t-1}H_t^{'}K_t^{'} + P_{t,t-1}H_t^{'}K_t^{'} \\
-    &= P_{t,t-1} - K_tH_tP_{t,t-1}
+    P_{t|t} &= [I - K_tH_t]P_{t|t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
+    &= P_{t|t-1} - K_tH_tP_{t|t-1} - P_{t|t-1}H_t^{'}K_t^{'} + K_tH_tP_{t|t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
+    &= P_{t|t-1} - K_tH_tP_{t|t-1} - P_{t|t-1}H_t^{'}K_t^{'} + K_t(H_tP_{t|t-1}H_t^{'} + R_t)K_t^{'} \\
+    &= P_{t|t-1} - K_tH_tP_{t|t-1} - P_{t|t-1}H_t^{'}K_t^{'} + P_{t|t-1}H_t^{'}K_t^{'} \\
+    &= P_{t|t-1} - K_tH_tP_{t|t-1}
 \end{align*}
 The fourth equality follows from equation (\ref{eq:gain}).
 
 \subsection{Proof of Diffuse Kalman Filter} \label{ap:init_filter}
-This section derives from Section 5 of (\cite{durbin_koopman_2001}), but provides an alternative formulation using the Joseph form. For the original proof without the Joseph formulation, please refer to (\cite{durbin_koopman_2001}). The key intuition is to give an exact result for the initial state distribution with arbitrarily large but finite variances, then find out the limit as the variances approach infinity. Given definition of $P_{t,t-1}$ in equation (\ref{eq:P_diffuse}), and linearity of Kalman filtering, we have:
+This section derives from Section 5 of (\cite{durbin_koopman_2001}), but provides an alternative formulation using the Joseph form. For the original proof without the Joseph formulation, please refer to (\cite{durbin_koopman_2001}). The key intuition is to give an exact result for the initial state distribution with arbitrarily large but finite variances, then find out the limit as the variances approach infinity. Given definition of $P_{t|t-1}$ in equation (\ref{eq:P_diffuse}), and linearity of Kalman filtering, we have:
 \begin{align*}
     \Upsilon_t &= \kappa \Upsilon_{\infty,t} + \Upsilon_{*,t} + \mathcal{O}(\kappa^{-1}) \\
     \Upsilon_{\infty,t} &= H_tP_{\infty,t}H_t^{'} \\ 
@@ -559,7 +553,7 @@ If $\Upsilon_{\infty,t}\neq 0$, we have:
     \Upsilon_t^{(1)} &= \Upsilon_{\infty,t}^{-1} \\
     \Upsilon_t^{(2)} &= -\Upsilon_{\infty,t}^{-1}\Upsilon_{*,t}\Upsilon_{\infty,t}^{-1}
 \end{align*}
-By the fact that $K_t = P_{t,t-1}H_t^{'}\Upsilon_t^{-1}$, we can write $K_t$ as:
+By the fact that $K_t = P_{t|t-1}H_t^{'}\Upsilon_t^{-1}$, we can write $K_t$ as:
 \begin{align}
     K_t &= K_t^{(0)} + \kappa^{-1}K_t^{(1)} + \mathcal{O}(\kappa^{-2}) \label{eq:K1_diffuse_start} \\
     K_t^{(0)} &= P_{\infty,t}H_t^{'}\Upsilon_t^{(1)} \\
@@ -568,11 +562,11 @@ By the fact that $K_t = P_{t,t-1}H_t^{'}\Upsilon_t^{-1}$, we can write $K_t$ as:
 
 Similarly, we can rewrite $\hat{\xi}_{t+1,t}$ as:
 \begin{align}
-    \hat{\xi}_{t,t} =& \hat{\xi}_{t,t-1} + K_t^{(0)}d_t + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi1} 
+    \hat{\xi}_{t|t} =& \hat{\xi}_{t|t-1} + K_t^{(0)}d_t + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi1} 
 \end{align}
-For $P_{t,t}$, we have:
+For $P_{t|t}$, we have:
 \begin{align*}
-    P_{t,t} =& [I-K_tH_t]P_{t,t-1}[I-K_tH_t]^{'}+K_tR_tK_t^{'} \\
+    P_{t|t} =& [I-K_tH_t]P_{t|t-1}[I-K_tH_t]^{'}+K_tR_tK_t^{'} \\
     =& [I-(K_t^{(0)}+\kappa^{-1}K_t^{(1)})H_t](\kappa P_{\infty,t}+P_{*,t})[I-(K_t^{(0)}+\kappa^{-1}K_t^{(1)})H_t]^{'} \\ 
     &+ K_t^{(0)}R_tK_t^{(0)} + \mathcal{O}(\kappa^{-1}) \\
     =& \kappa(I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} + (I-K_t^{(0)}H_t)P_{*,t}(I-K_t^{(0)}H_t)^{'} \\
@@ -590,21 +584,21 @@ Note that $K_t^{(0)} = P_{\infty,t}H_t^{'}\Upsilon_t^{(1)} = P_{\infty,t}H_t^{'}
 \end{align*}
 Now we have a clean Joseph form for the diffuse filter as:
 \begin{align}
-    P_{t,t}=& \kappa (I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} \label{eq:diff_P1} \\
+    P_{t|t}=& \kappa (I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} \label{eq:diff_P1} \\
     &+(I-K_t^{(0)}H_t)P_{*,t}(I-K_t^{(0)}H_t)^{'} \nonumber \\
     &+K_t^{(0)}R_tK_t^{(0)'} + \mathcal{O}(\kappa^{-1}) \nonumber
 \end{align}
 
-If $\Upsilon_{\infty,t}=0$, then $H_tP_{\infty,t}=0$ by PSD properties. It is easier to get $\hat{\xi}_{t,t}$ and $P_{t,t}$:
+If $\Upsilon_{\infty,t}=0$, then $H_tP_{\infty,t}=0$ by PSD properties. It is easier to get $\hat{\xi}_{t|t}$ and $P_{t|t}$:
 \begin{align}
     K_t =& P_{*,t}H_t^{'}\Upsilon_{*,t}^{-1} + \mathcal{O}(\kappa^{-1}) \nonumber \\
     =& K_t^{(*)} + \mathcal{O}(\kappa^{-1}) \label{eq:K2_diffuse} \\
-    \hat{\xi}_{t,t} =& \hat{\xi}_{t,t-1} + K_t^{(*)}d_t + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi2} 
+    \hat{\xi}_{t|t} =& \hat{\xi}_{t|t-1} + K_t^{(*)}d_t + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi2} 
 \end{align}
 
-For $P_{t,t}$, we have:
+For $P_{t|t}$, we have:
 \begin{align}
-    P_{t,t} =& \kappa (I-K_tH_t)P_{\infty,t}(I-K_tH_t)^{'} \nonumber \\
+    P_{t|t} =& \kappa (I-K_tH_t)P_{\infty,t}(I-K_tH_t)^{'} \nonumber \\
     &+ (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \nonumber \\
     &+ K_t^{(*)}R_tK_t^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber \\
     =& \kappa P_{\infty, t} + (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \label{eq:diff_P2} \\
@@ -612,9 +606,9 @@ For $P_{t,t}$, we have:
 \end{align}
 
 \subsection{Proof of the Degeneration Algorithm} \label{ap:transition}
-Define $P_{\infty,t,t}$ as the diffuse part of $P_{t,t}$. From Appendix \ref{ap:init_filter}, we have:
+Define $P_{\infty,t|t}$ as the diffuse part of $P_{t|t}$. From Appendix \ref{ap:init_filter}, we have:
 \begin{align*}
-    P_{\infty,t,t} = P_{\infty,t}[I - H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}]
+    P_{\infty,t|t} = P_{\infty,t}[I - H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}]
 \end{align*}
 
 Without loss of generality, we can re-arrange indices of $\xi_t$ such that:
@@ -627,7 +621,7 @@ Without loss of generality, we can re-arrange indices of $\xi_t$ such that:
 
 In the univariate case, $H_t$ is a row vector, and $H_t^{'}H_tP_{\infty,t}$ is a similarly partitioned matrix as $P_{\infty, 1}$. Therefore, any change to the matrix only affects the non-zero partition, and we can focus solely on this partition. In what follows I will provide a proof in the case where $P_{\infty,1}$ has full rank (i.e. the initial condition is completely uninformative), and the conclusion is readily adapted to the mixed diffuse case where $P_{\infty,1}$ does not have full rank through partitioning operations and LDL decomposition of $P_{\infty,t}$. 
 
-If $P_{\infty,t}=0$, $P_{\infty,t,t} = P_{\infty,t}$ and is not updated. If $P_{\infty,t}\neq0$, $H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}$ is an idempotent matrix. If a matrix $A$ is idempotent, then:
+If $P_{\infty,t}=0$, $P_{\infty,t|t} = P_{\infty,t}$ and is not updated. If $P_{\infty,t}\neq0$, $H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}$ is an idempotent matrix. If a matrix $A$ is idempotent, then:
 \begin{boenumerate}
     \item $Trace(A)=rank(A)$
     \item $I-A$ is also idempotent
@@ -645,19 +639,19 @@ Using the fact that $Trace(A+B) = Trace(A) + Trace(B)$, we have:
 
 If $A$ has full rank, then by the fact that $Trace(AB)=Trace(B)$, we have:
 \begin{align*}
-    Trace(P_{\infty,t,t}) = q-1
+    Trace(P_{\infty,t|t}) = q-1
 \end{align*}
 
-Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced by $1$ with each update. If after period $t$, $rank(P_{\infty,t,t})>0$, we have $P_{\infty,t+1} = F_tP_{\infty,t,t}F_t^{'}$. By the fact that $rank(AB)\leq min[rank(A), rank(B)]$, we have $q_{t+1}=min[rank(P_{\infty,t,t}),rank(F_t), rank(P_{\infty,t+1})]$. I use this updating rule instead of $q_{t} = rank(P_{\infty,t+1})$ to avoid numerical instability. 
+Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced by $1$ with each update. If after period $t$, $rank(P_{\infty,t|t})>0$, we have $P_{\infty,t+1} = F_tP_{\infty,t|t}F_t^{'}$. By the fact that $rank(AB)\leq min[rank(A), rank(B)]$, we have $q_{t+1}=min[rank(P_{\infty,t|t}),rank(F_t), rank(P_{\infty,t+1})]$. I use this updating rule instead of $q_{t} = rank(P_{\infty,t+1})$ to avoid numerical instability. 
 
 \section{Kalman Smoother}
 \subsection{Proof of State Smoothing} \label{ap:smooth}
-The backbone of the proof is Lemma \ref{lem:1}. Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t,t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
+The backbone of the proof is Lemma \ref{lem:1}. Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t|t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
 
-Now consider $\hat{\xi}_{t,T}$, denote $\Delta_t\equiv\{d_t,d_{t+1},...,d_T\}^{'}$ 
+Now consider $\hat{\xi}_{t|T}$, denote $\Delta_t\equiv\{d_t,d_{t+1},...,d_T\}^{'}$ 
 \begin{align*}
-    \hat{\xi}_{t,T} &= E(\xi_t|Y_{t-1},\Delta_{t},X_T;\theta) \\
-    &= \hat{\xi}_{t,t-1} + Cov(\xi_t,\Delta_t|Y_{t-1},X_T;\theta)Var(\Delta_t|Y_{t-1},X_T;\theta)^{-1}\Delta_t
+    \hat{\xi}_{t|T} &= E(\xi_t|Y_{t-1},\Delta_{t},X_T;\theta) \\
+    &= \hat{\xi}_{t|t-1} + Cov(\xi_t,\Delta_t|Y_{t-1},X_T;\theta)Var(\Delta_t|Y_{t-1},X_T;\theta)^{-1}\Delta_t
 \end{align*}
 
 It is straightforward to show $Var(d_j|Y_{t-1},X_T;\theta)=\Upsilon_j$. For $Cov(\xi_t,d_j|Y_{t-1},X_T;\theta)$, we have:
@@ -668,24 +662,24 @@ It is straightforward to show $Var(d_j|Y_{t-1},X_T;\theta)=\Upsilon_j$. For $Cov
 
 If $j=t$, then:
 \[
-    E[\xi_t(\xi_t-\hat{\xi}_{t,t-1})^{'}|Y_{t-1},X_T;\theta] = P_{t,t-1}
+    E[\xi_t(\xi_t-\hat{\xi}_{t|t-1})^{'}|Y_{t-1},X_T;\theta] = P_{t|t-1}
 \]
 
 If $j=t+1$, then:
 \begin{align*}
-    E[\xi_t(\xi_{t+1}-\hat{\xi}_{t+1,t})|Y_{t-1},X_T;\theta] &= E[\xi_t(\xi_t-\hat{\xi}_{t,t-1}-K_td_t)^{'}F_t^{'}|Y_{t-1},X_T;\theta] \\
-    &= P_{t,t-1}L_t^{'}
+    E[\xi_t(\xi_{t+1}-\hat{\xi}_{t+1,t})^{'}|Y_{t-1},X_T;\theta] &= E[\xi_t(\xi_t-\hat{\xi}_{t|t-1}-K_td_t)^{'}F_t^{'}|Y_{t-1},X_T;\theta] \\
+    &= P_{t|t-1}L_t^{'}
 \end{align*}
 
 For $j>t+1$, we have:
 \begin{align*}
-    E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})|Y_{t-1},X_T;\theta] = P_{t,t-1}\prod_{i=t}^{j-1}L_i^{'}
+    E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta] = P_{t|t-1}\prod_{i=t}^{j-1}L_i^{'}
 \end{align*}
 
-To compute $\hat{\xi}_{t,T}$, note that $Var(\Delta_{t}|Y_{t-1},X_T;\theta)$ is a block diagonal matrix, then we may express $\hat{\xi}_{t,T}$ as:
+To compute $\hat{\xi}_{t|T}$, note that $Var(\Delta_{t}|Y_{t-1},X_T;\theta)$ is a block diagonal matrix, then we may express $\hat{\xi}_{t|T}$ as:
 \begin{align*}
-    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + \sum_{j=t}^{T}Cov(\xi_t,d_j)\Upsilon_j^{-1}d_j \\
-    &= \hat{\xi}_{t,t-1} + P_{t,t-1}\sum_{j=t}^T\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right]
+    \hat{\xi}_{t|T} &= \hat{\xi}_{t|t-1} + \sum_{j=t}^{T}Cov(\xi_t,d_j)\Upsilon_j^{-1}d_j \\
+    &= \hat{\xi}_{t|t-1} + P_{t|t-1}\sum_{j=t}^T\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}d_j\right]
 \end{align*}
 If $j=t$, then we replace the product operation is not carried out and is replace with $I$. Define $r_t$ as:
 \begin{align*}
@@ -695,97 +689,77 @@ If $j=t$, then we replace the product operation is not carried out and is replac
     \end{cases}
 \end{align*}
 
-We can then write backwards recursive formulation for $\hat{\xi}_{t,T}$ as:
+We can then write backwards recursive formulation for $\hat{\xi}_{t|T}$ as:
 \begin{align*}
     r_{t-1} &= H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \\
-    \hat{\xi}_{t,T} &= \hat{\xi}_{t,t-1} + P_{t,t-1}r_{t-1} 
+    \hat{\xi}_{t|T} &= \hat{\xi}_{t|t-1} + P_{t|t-1}r_{t-1} 
 \end{align*}
 
-To calculate $P_{t,T}$, we use Lemma \ref{lem:1} again and have the following result:
+To calculate $P_{t|T}$, we use Lemma \ref{lem:1} again and have the following result:
 \begin{align*}
-    P_{t,T} &= P_{t,t-1} - \sum_{j=t}^TCov(\xi_t,d_j)\Upsilon_j^{-1}Cov(\xi_t,d_j)^{'} \\
-    &=P_{t,t-1} - P_{t,t-1}\sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right]P_{t,t-1}
+    P_{t|T} &= P_{t|t-1} - \sum_{j=t}^TCov(\xi_t,d_j)\Upsilon_j^{-1}Cov(\xi_t,d_j)^{'} \\
+    &=P_{t|t-1} - P_{t|t-1}\sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right]P_{t|t-1}
 \end{align*}
 
-Similarly, we can find $P_{t,T}$ through backwards recursions. Define $N_t$ as:
+Similarly, we can find $P_{t|T}$ through backwards recursions. Define $N_t$ as:
 \begin{align*}
     N_{t-1} \equiv \begin{cases}
         0, & t=T+1 \\
         \sum_{j=t}^{T}\left[\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)H_j^{'}\Upsilon_j^{-1}H_j\left(\prod_{i=t}^{j-1}L_{i}^{'}\right)^{'}\right], & t\leq T
     \end{cases}
 \end{align*}
-The recursive formulation for $P_{t,T}$ is:
+The recursive formulation for $P_{t|T}$ is:
 \begin{align*}
     N_{t-1} &= H_t^{'}\Upsilon_t^{-1}H_t + L_t^{'}N_tL_t \\
-    P_{t,T} &= P_{t,t-1}- P_{t,t-1}N_{t-1}P_{t,t-1} 
+    P_{t|T} &= P_{t|t-1}- P_{t|t-1}N_{t-1}P_{t|t-1} 
 \end{align*}
 
-\section{Proof of Disturbance Smoothing} \label{ap:disturb_smooth}
-The derivation of disturbance smoothers is similar to that of state smoothers in Appendix \ref{ap:smooth}. We have:
+\subsection{Proof of Covariance between Smoothed States} \label{ap:cov_smooth}
+First of all, to simplify notations, I define: 
 \begin{align*}
-    \hat{v}_{t,T} &= \sum_{j=t}^{T}E(v_td_j^{'})\Upsilon_j^{-1}d_j \\
-    \hat{w}_{t,T} &= \sum_{j=t}^{T}E(w_td_j^{'})\Upsilon_j^{-1}d_j \\
-    V_t &= Q_t - \sum_{j=t}^{T}Cov(v_t,d_j^{'})\Upsilon_j^{-1}Cov(v_t,d_j^{'})^{'} \\
-    W_t &= R_t - \sum_{j=t}^{T}Cov(w_t,d_j^{'})\Upsilon_j^{-1}Cov(w_t,d_j^{'})^{'} 
+    E[f(t,j)]\equiv E[f(t,j)|Y_{t-1},X_T;\theta] \  \forall\  1\leq t < j \leq T
+\end{align*}
+where $f(t,j)$ is a mapping indexed by $(t,j)$. To find the representation of $P_{t,j|T}$, note that:
+\begin{align*}
+    P_{t,j|T} &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})] - E[\hat{\xi}_{t|T}(\xi_j-\hat{\xi}_{j|T})] \\
+     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})] - E[\hat{\xi}_{t|T}E(\xi_j-\hat{\xi}_{j|T})] \\
+     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})]
 \end{align*}
 
-First consider measurement errors $w_t$. Note that:
+Recall that $\xi_t-\hat{\xi}_{t|T} = \xi_t - \hat{\xi}_{t|t-1} - P_{t|t-1}r_{t-1}$, then:
 \begin{align*}
-    E(w_td_j^{'}|Y_{t-1},X_T;\theta)=&Cov(w_t, d_j|Y_{t-1},X_T;\theta) \\
-    =&E[w_t(\xi_j-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta]H_j^{'} \\ 
-    &+ E(w_tw_j^{'}|Y_{t-1}X_T;\theta)
-\end{align*}
-We have:
-\begin{align*}
-    E(w_td_j^{'}|Y_{t-1},X_T;\theta) = \begin{cases}
-        R_t, & j=t \\
-        -R_tM_t^{'}H_{t+1}^{'}, & j=t+1 \\
-        -R_tM_t^{'}\prod_{i=t+1}^{j-1}(L_i^{'})H_{j}^{'}, & j=t+2,...,T
-    \end{cases}
+    E[\xi_t(\xi_j-\hat{\xi}_{j,T})^{'}] &= E[\xi_t(\xi_j-\hat{\xi}_{j|j-1})^{'}] - E(\xi_tr_{j-1}^{'})P_{j|j-1}
 \end{align*}
 
-We can write $\hat{w}_{t,T}$ and $W_t$ as:
+From Appendix \ref{ap:smooth}, we have:
 \begin{align*}
-    \hat{w}_{t,T} &= R_t\Upsilon_t^{-1}d_t - R_tM_t^{'}\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}d_j] \\
-    &= R_t(\Upsilon_t^{-1}d_t-M_t^{'}r_t) \\
-    W_t &= R_t - R_t\{\Upsilon_t^{-1} + M_t^{'}\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}
-    \Upsilon_j^{-1}H_j\prod_{i=t+1}^{j-1}(L_i^{'})^{'}]M_t\}R_t \\
-    &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t
+    E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})^{'}] = P_{t|t-1}\prod_{i=t}^{j-1}L_i^{'}
 \end{align*}
 
-Next consider state transition errors $v_t$. Note that:
+To compute $E(\xi_tr_{j-1}^{'})$, consider the following:
 \begin{align*}
-    E(v_td_j^{'}|Y_{t-1},X_T;\theta) &= Cov(v_t,d_j|Y_{t-1},X_T;\theta) \\
-    &= E[v_t(\xi_j-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta]H_j^{'}
+    E(\xi_td_j^{'}) &= E[\xi_t(\xi_j - \hat{\xi}_{j|T})^{'}]H_j^{'} \\
+    &= P_{t|t-1}\left(\prod_{i=t}^{j-1}L_i^{'}\right)H_j^{'}
 \end{align*}
 
-We have:
+Then using definition of $r_t$, we have:
 \begin{align*}
-    E(v_td_j^{'}|Y_{t-1},X_T;\theta) = \begin{cases}
-        0, & j=t \\
-        Q_tH_{t+1}^{'}, & j=t+1 \\
-        Q_t\prod_{i=t+1}^{j-1}(L_i^{'})H_{j}^{'}, & j=t+2,...,T
-    \end{cases}
+    E(\xi_tr_{j-1}^{'}) &= \sum_{i=j}^{T}\left[E(\xi_td_i^{'})\Upsilon_i^{-1}H_i\left(\prod_{k=j+1}^{i}L_{k-1}^{'}\right)^{'}\right] \\
+    &= P_{t|t-1}\left(\prod_{i=t}^{j-1}L_i^{'}\right)\sum_{i=j}^{T}\left[\left(\prod_{k=j+1}^{i}L_{k-1}^{'}\right)H_i^{'}\Upsilon_i^{-1}H_i\left(\prod_{k=j+1}^{i}L_{k-1}^{'}\right)^{'}\right] \\
+    &= P_{t|t-1}\left(\prod_{i=t}^{j-1}L_i^{'}\right)N_{j-1}
 \end{align*}
 
-We can write $\hat{v}_{t,T}$ and $V_t$ as:
+Now using the expressions for $E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})^{'}]$ and $E(\xi_tr_{j-1}^{'})$, we have:
 \begin{align*}
-    \hat{v}_{t,T} &= Q_t\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}d_j] \\
-    &= Q_tr_t \\
-    V_t &= Q_t - Q_t\sum_{j=t+1}^{T}[\prod_{i=t+1}^{j-1}(L_i^{'})H_j^{'}\Upsilon_j^{-1}H_j\prod_{i=t+1}^{j-1}(L_i^{'})^{'}]Q_t \\
-    &= Q_t - Q_tN_tQ_t
+    P_{t,j|T} = P_{t|t-1}\left(\prod_{i=t}^{j-1}L_i^{'}\right)(I-N_{j-1}P_{j|j-1})
 \end{align*}
 
-Now we have the recursive formula for disturbance smoothers:
+In particular, for $j=t+1$, we have:
 \begin{align*}
-    \hat{w}_{t,T} &= R_t(\Upsilon_t^{-1}d_t - M_t^{'}r_t) \\
-    \hat{v}_{t,T} &= Q_tr_t \\
-    W_t &= R_t - R_t(\Upsilon_t^{-1}+M_t^{'}N_tM_t)R_t \\
-    V_t &= Q_t - Q_tN_tQ_t 
+    P_{t,t+1|T} = P_{t|t-1}L_{t}^{'}(I-N_{t}P_{t+1|t})
 \end{align*}
-where $r_t$ and $N_t$ are defined in Appendix \ref{ap:smooth}.
 
-\subsection{Proof of Diffuse Disturbance Smoothing} \label{ap:init_smoother}
+\subsection{Proof of Diffuse Smoothing} \label{ap:init_smoother}
 For disturbance smoothers, we are interested in $v_t$ and $w_t$, which fortunately require less computational expenses than do smoothed estimates for $\xi_t$. In what follows I simplify the proof in (\cite{durbin_koopman_2003}) to better adapt to the need of disturbance smoothers in the univariate case\footnote{The difference lies in the magnitude of exponential expansion. Disturbance smoothers require less expansion than do state smoothers.If readers are interested in computing smoothed state variance, refer to (\cite{durbin_koopman_2003}) for details.}. 
 
 Recall that $r_{t-1} = H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}\neq0$, we can rewrite $r_{t-1}$ as:
@@ -848,7 +822,11 @@ Now we can calculate the diffuse disturbance smoother for $\Upsilon_{\infty,t}=0
 
 
 
-\section{Proof of Sequential Smoothing}
+
+
+
+
+\subsection{Proof of Sequential Smoothing}
 
 \section{EM Algorithm Premier:} \label{ap:EM_proof}
 Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
@@ -884,20 +862,20 @@ If $t>1$, recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}
 We already derive expression for $E(\xi_t|\Theta)$ in (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
 \begin{align*}
     E(\xi_t\xi_t^{'}|\Theta) & = E(\xi_t|\Theta)E(\xi_t^{'}|\Theta) + Var(\xi_t|\Theta) \\
-    &= \hat{\xi}_{t,T}(\hat{\xi}_{t,T})^{'} + P_{t,T}
+    &= \hat{\xi}_{t|T}(\hat{\xi}_{t|T})^{'} + P_{t|T}
 \end{align*}
-To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This derivation adapts the general strategy in deriving $\hat{\xi}_{t,T}$ in Chapter 13 of (\cite{hamilton_1994}).}:
+To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This derivation adapts the general strategy in deriving $\hat{\xi}_{t|T}$ in Chapter 13 of (\cite{hamilton_1994}).}:
 \begin{align}
     E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) &= \xi_tE(\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) \nonumber \\
-    &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \label{eq:xi_t,t-1}
+    &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t|t-1})^{'}J_{t-1}^{'} \label{eq:xi_t|t-1}
 \end{align}
-By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change the value of $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t,t-1}) over $\xi_t$, we have:
+By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change the value of $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t|t-1}) over $\xi_t$, we have:
 \begin{align*}
-    E(\xi_t\xi_{t-1}^{'})|\Theta) &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + E(\xi_t\xi_t^{'}|\Theta)J_{t-1}^{'}
-    -\hat{\xi}_{t,T}(\hat{\xi}_{t,t-1})^{'}J_{t-1}^{'} \\
-    &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + [\hat{\xi}_{t,T}(\hat{\xi}_{t,T})^{'} + P_{t,T} 
-    -\hat{\xi}_{t,T}(\hat{\xi}_{t,t-1})^{'}]J_{t-1}^{'} \\
-    &= \hat{\xi}_{t,T}(\hat{\xi}_{t-1,t-1})^{'} + [P_{t,T} + \hat{\xi}_{t,T}(\hat{\xi}_{t,T}-\hat{\xi}_{t,t-1})^{'}]J_{t-1}^{'}
+    E(\xi_t\xi_{t-1}^{'})|\Theta) &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + E(\xi_t\xi_t^{'}|\Theta)J_{t-1}^{'}
+    -\hat{\xi}_{t|T}(\hat{\xi}_{t|t-1})^{'}J_{t-1}^{'} \\
+    &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + [\hat{\xi}_{t|T}(\hat{\xi}_{t|T})^{'} + P_{t|T} 
+    -\hat{\xi}_{t|T}(\hat{\xi}_{t|t-1})^{'}]J_{t-1}^{'} \\
+    &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + [P_{t|T} + \hat{\xi}_{t|T}(\hat{\xi}_{t|T}-\hat{\xi}_{t|t-1})^{'}]J_{t-1}^{'}
 \end{align*}
 If $t=1$, we have:
 \begin{align*}
