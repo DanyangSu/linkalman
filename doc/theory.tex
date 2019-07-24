@@ -1,19 +1,19 @@
-\documentclass[12pt]{article}
+\documentclass[10pt]{article}
 \usepackage{enumitem}
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{bbm}
-\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage[legalpaper,portrait,margin=1in]{geometry}
 \usepackage[style=authoryear,sorting=nyt]{biblatex}
-\newtheorem{lemma}{Lemma}
 \addbibresource{ref.bib}
 \setlength{\parindent}{0cm}
 \setlength{\parskip}{1em}
-
+\newtheorem{lemma}{Lemma}
 \newenvironment{boenumerate}
     {\begin{enumerate}\renewcommand\labelenumi{\textbf\theenumi}}
     {\end{enumerate}}
 \numberwithin{equation}{section}
+
 \begin{document}
 \title{Notes for Kalman Filter EM algorithms}
 
@@ -24,13 +24,13 @@
     \item Flexible and convenient model structure
     \item Robust and efficient implementation
     \item Exact initialization
-    \item Built-in EM algorithm solver
+    \item Built-in numerical and EM algorithm solvers
     \item Open-source
     \item Pure python implementation 
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:EM}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
+This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the EM algorithm to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -101,7 +101,7 @@ Consider $\hat{\xi}_{1,0}$ again. Following (\cite{koopman_1997}), we define $\h
 \begin{align}
     \hat{\xi}_{1,0} = a + A\eta + \Pi\varepsilon \label{eq:init}
 \end{align}
-$A$ and $\Pi$ are selection matrices, $\eta\sim\mathcal{N}(0,\kappa I_{\infty})$, and $\varepsilon\sim\mathcal{N}(0,Q_{*})$. Set $0$ for elements in $a$ corresponding to $A$, and stationary means for elements corresponding to $\Pi$. $I_{\infty}$ is an identity matrix with size equal to the number of non-stationary unknowns, and $Q_{*}$ is Essentially, equation (\ref{eq:init}) groups $\hat{\xi}_{1,0}$ into two categories. If $\hat{\xi}_{1,0}^i$, the $i$-th element of $\hat{\xi}_{1,0}$, is non-stationary and not known, it has a distribution $\mathcal{N}(0, \kappa)$. With $\kappa\rightarrow\infty$, $\mathcal{N}(0,\kappa)$ captures the fact that we know nothing about the initial value of a non-stationary process. If on the other hand, the initial state of $\hat{\xi}_{1,0}^i$ is either known or stationary, It has a proper distribution with unconditional mean and covariances\footnote{If $X_t$ is involved in the state transition process then most of the time the process is not stationary.}. 
+$A$ and $\Pi$ are selection matrices, $\eta\sim\mathcal{N}(0,\kappa I)$, and $\varepsilon\sim\mathcal{N}(0,Q_{*})$. Set $0$ for elements in $a$ corresponding to $A$, and stationary means for elements corresponding to $\Pi$. $Q_{*}$ is the ergodic covariance of the stationary component of the model (or process with known initial values). Essentially, equation (\ref{eq:init}) groups $\hat{\xi}_{1,0}$ into two categories. If $\hat{\xi}_{1,0}^i$, the $i$-th element of $\hat{\xi}_{1,0}$, is non-stationary and not known, it has a distribution $\mathcal{N}(0, \kappa)$. With $\kappa\rightarrow\infty$, $\mathcal{N}(0,\kappa)$ captures the fact that we know nothing about the initial value of a non-stationary process\footnote{The specification of equation (\ref{eq:init}), despite its seemingly arbitrariness, is valid, because of the invariance property of diffuse prior. Interested readers can refer to Appendix B of \cite{doan_2010} for details.}. If on the other hand, the initial state of $\hat{\xi}_{1,0}^i$ is either known or stationary, It has a proper distribution with unconditional mean and covariances\footnote{If $X_t$ is involved in the state transition process then a process is not stationary unless its transition is not affected by $X_T$.}. 
 
 From equation (\ref{eq:init}), we have:
 \begin{align}
@@ -144,7 +144,7 @@ Here I focus on the univariate measurement case, because it is less complex and 
 When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. 
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
-So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
+So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 and \cite{durbin_koopman_2000} for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. In addition, univariate treatment of Kalman filters allows clean formulation with diffuse priors. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
 
 Denote $y_{t:(i)}$ as the $i$-th observed measurement at time $t$, then $y_{t:(1)}$ is the first non-missing univariate measurement at time $t$. Let $(n_t)$ as the index for the last non-missing univatriate measurement at time $t$. Define $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ as the state estimates after updating univariate measurement $(i)$ at time $t$:
 \begin{align*}
@@ -160,7 +160,7 @@ In addition, we use $(0)$ as index of the state estimates before any updating, t
     &= F_{t-1}P_{t-1:(n_{t-1})}F_{t-1} + Q_{t-1} \label{eq:diff_P_seq0}
 \end{align}
 
-For sequential filtering to work, we need $R_t$ to be diagonal. If $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original HMM into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
+For sequential filtering to work, we need $R_t$ to be diagonal. In the case where $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original HMM into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, in practice, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
 \begin{align}
     \tilde{y}_t = \tilde{H}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t \label{eq:ldl}
 \end{align}
@@ -184,42 +184,42 @@ where $H_{t:(i)}$ and $D_{t:(i)}$ are the $(i)$-th row of $H_t$ and $D_t$.
 
 We initialize the measurement update process with $\hat{\xi}_{1,0}$ and $P_{1,0}$ from equation (\ref{eq:init_xi}) and (\ref{eq:init_P}). Define $\Upsilon_{t:(i)}$ as:
 \begin{align*}
-    \Upsilon_{t:(i)} = H_{t:(i)}P_{t:(i-1)}H_{t:(i)}^{'} + R_{t:(i)}
+    \Upsilon_{t:(i)} = H_{t:(i)}P_{t:(i)}H_{t:(i)}^{'} + R_{t:(i)}
 \end{align*}
 where $R_{t:(i)}$ is the $(i)$-th diagonal value of $R_{t}$. For $\Upsilon_{t:(i)}$, we have:
 \begin{align*}
-    \Upsilon_{\infty, t:(i)} &= H_{t:(i)}P_{\infty, t:(i-1)}H_{t:(i)}^{'} \\
-    \Upsilon_{*,t:(i)} &= H_{t:(i)}P_{*,t:(i-1)}H_{t:(i)}^{'} + R_{t:(i)}
+    \Upsilon_{\infty, t:(i)} &= H_{t:(i)}P_{\infty, t:(i)}H_{t:(i)}^{'} \\
+    \Upsilon_{*,t:(i)} &= H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'} + R_{t:(i)}
 \end{align*}
 
 For each successive measurement $i$, if $\Upsilon_{\infty,t:(i)}\neq0$, we have:
 \begin{align}
-    \hat{\xi}_{t:(i)} = & \hat{\xi}_{t:(i-1)} + K_{t:(i)}^{(0)}d_{t:(i)} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_seq_xi1} \\
-    P_{t:(i)} =& \kappa(I-K_{t:(i)}^{(0)}H_{t:(i)})P_{\infty,t:(i-1)}(I-K_{t:(i)}^{(0)}H_{t:(i)})^{'} \label{eq:diff_seq_P1} \\
-        & + (I-K_{t:(i)}^{(0)}H_{t:(i)})P_{*,t:(i-1)}(I-K_{t:(i)}^{(0)}H_{t:(i)})^{'} \nonumber \\
+    \hat{\xi}_{t:(i+1)} = & \hat{\xi}_{t:(i)} + K_{t:(i)}^{(0)}d_{t:(i)} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_seq_xi1} \\
+    P_{t:(i+1)} =& \kappa(I-K_{t:(i)}^{(0)}H_{t:(i)})P_{\infty,t:(i)}(I-K_{t:(i)}^{(0)}H_{t:(i)})^{'} \label{eq:diff_seq_P1} \\
+        & + (I-K_{t:(i)}^{(0)}H_{t:(i)})P_{*,t:(i)}(I-K_{t:(i)}^{(0)}H_{t:(i)})^{'} \nonumber \\
         & + K_{t:(i)}^{(0)}R_{t:(i)}K_{t:(i)}^{(0)'} + \mathcal{O}(\kappa^{-1}) \nonumber
 \end{align}
 where
 \begin{align*}
-    d_{t:(i)} &= y_{t:(i)} - H_{t:(i)}\hat{\xi}_{t:(i-1)}-D_{t:(i)}x_t \\
-    K_{t:(i)}^{(0)} &= \frac{P_{\infty,t:(i-1)}H_{t:(i)}^{'}}{\Upsilon_{\infty,t:(i)}} 
-        =\frac{P_{\infty,t:(i-1)}H_{t:(i-1)}^{'}}{H_{t:(i)}P_{\infty, t:(i-1)}H_{t:(i)}^{'}}
+    d_{t:(i)} &= y_{t:(i)} - H_{t:(i)}\hat{\xi}_{t:(i)}-D_{t:(i)}x_t \\
+    K_{t:(i)}^{(0)} &= \frac{P_{\infty,t:(i)}H_{t:(i)}^{'}}{\Upsilon_{\infty,t:(i)}} 
+        =\frac{P_{\infty,t:(i)}H_{t:(i)}^{'}}{H_{t:(i)}P_{\infty, t:(i)}H_{t:(i)}^{'}}
 \end{align*}
 
 If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,t:(i-1)}\neq 0$, we have:
 \begin{align}
-    \hat{\xi}_{t:(i)} =& \hat{\xi}_{t:(i-1)} + K_{t:(i)}^{(*)}d_{t:(i)} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_seq_xi0} \\
-    P_{t:(i)} =& \kappa P_{\infty,t:(i-1)} + (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i-1)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} \label{eq:diff_seq_P0} \\
+    \hat{\xi}_{t:(i+1)} =& \hat{\xi}_{t:(i)} + K_{t:(i)}^{(*)}d_{t:(i)} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_seq_xi0} \\
+    P_{t:(i+1)} =& \kappa P_{\infty,t:(i)} + (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} \label{eq:diff_seq_P0} \\
         &+ K_{t:(i)}^{(*)}R_{t:(i)}K_{t:(i)}^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber 
 \end{align}
 where
 \begin{align*}
-    K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i-1)}H_{t:(i)}^{'}}{\Upsilon_{*,t:(i)}} = \frac{P_{*,t:(i-1)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i-1)}H_{t:(i)}^{'} + R_{t:(i)}}
+    K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i)}H_{t:(i)}^{'}}{\Upsilon_{*,t:(i)}} = \frac{P_{*,t:(i)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'} + R_{t:(i)}}
 \end{align*}
 
 If $\Upsilon_{\infty,t:(i)}=0$ and $P_{\infty,t:(i-1)}=0$, the diffuse Kalman filter degenerates into a usual one, and instead of using equation (\ref{eq:diff_seq_P0}), we use:
 \begin{align}
-    P_{t:(i)} =& (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i-1)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} + K_{t:(i)}^{(*)}R_{t:(i)}K_{t:(i)}^{(*)'} \label{eq:usual_seq_P0} 
+    P_{t:(i+1)} =& (I-K_{t:(i)}^{(*)}H_{t:(i)})P_{*,t:(i)}(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'} + K_{t:(i)}^{(*)}R_{t:(i)}K_{t:(i)}^{(*)'} \label{eq:usual_seq_P0} 
 \end{align}
 
 Now we may proceed with sequential filtering as follows:
@@ -233,6 +233,8 @@ Now we may proceed with sequential filtering as follows:
     \item If $t<t_q$, update $q_{t+1} = min[rank(P_{\infty,t|t}), rank(F_t)]$. \label{step:seq_filter_end}
     \item Repeat step (\ref{step:seq_filter_begin}) through (\ref{step:seq_filter_end}) for $t\in\{1,2,...,T\}$
 \end{boenumerate}
+
+An alternative view of the procedure is to treat $y_t$ as $(y_{t:(1)},...,y_{t:(n_t)})$, with $F_{t:(i)}=I$, $Q_{t:(i)}=0$, and $B_{t:(i)}=0$ for $i\in{1,...,n_t-1}$. The transition from $[t:(n_t)]$ to $[t+1:(1)]$ with transition matrices $F_t$ and $B_t$ is broken down into two steps: $[t:(n_t)]$ to $[t+1:(0)]$ with $F_{t:(n_t)}=F_t$, $Q_{t:(n_t)}=Q_t$, and $B_{t:(n_t)}=B_t$, then $[t+1:(0)]$ to $[t+1:(1)]$ with $F_{t+1:(0)}=I$, $Q_{t+1:(0)}=0$, and $B_{t:(0)}=0$.
 
 \section{Kalman Smoother} \label{sec:smoother}
 \subsection{State Smoother}
@@ -250,7 +252,7 @@ Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the iterative formula
     P_{t|T} &= P_{t|t-1}- P_{t|t-1}N_{t-1}P_{t|t-1} \label{eq:smooth_P2}
 \end{align}
 
-As we will see in section \ref{sec:EM} and Appendix \ref{ap:log}, we also need to calculate covariance matrices of smoothed estimators. Define $P_{t,s|n}$ as:
+As we will see in section \ref{subsec:EM} and Appendix \ref{ap:log}, we also need to calculate covariance matrices of smoothed estimators. Define $P_{t,s|n}$ as:
 \begin{align*}
     P_{t,s|n}\equiv Cov(\xi_t,\xi_{s}|Y_n,X_T;\theta)
 \end{align*}
@@ -278,38 +280,98 @@ If a covariance matrix $A$ is not PSD, we can use the nearest PSD matrix with th
 \end{align*}
 where the first equality is the SVD decomposition of $A$.
 
+\subsection{Diffuse Smoother}
+When initial conditions are unknown, we can use diffuse smoothers. Similar to diffuse filters, we expand $P_{t|t-1}$, $r_{t-1}$, and $N_{t-1}$. Appendix \ref{ap:init_smoother} provide detailed derivation of recursive formula, so here I will just give the result. First of all, I give the expression for $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ as:
+\begin{align}
+    \hat{\xi}_{t|T} =& \hat{\xi}_{t|t-1} + P_{*,t}r_{t-1}^{(0)}+P_{\infty,t}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-1}) \label{eq:diff_xi} \\
+    P_{t|T} =& P_{*,t} - \langle P_{\infty,t}N_{t-1}^{(1)}P_{*,t}\rangle - P_{*,t}N_{t-1}^{(0)}P_{*,t} 
+        - P_{\infty,t}N_{t-1}^{(2)}P_{\infty,t} + \mathcal{O}(\kappa^{-1}) \label{eq:diff_P} \\
+    P_{t,t+1|T} =& (P_{*,t}L_t^{(0)'}+P_{\infty,t}L_t^{(1)'})(I-N_t^{(1)}P_{\infty,t+1}-N_t^{(0)}P_{*,t+1}) \nonumber \\
+    &- P_{\infty,t}L_t^{(0)'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1}) \label{eq:diff_Pcov}
+\end{align}
+
+Now we need to compute $r_{t-1}$, and $N_{t-1}$. If $\Upsilon_{\infty,t}\neq 0$, we use:
+\begin{boenumerate}
+    \item Begin with $r_{t}^{(0)}=r_{t_q}$, $r_t^{(1)}=0$, $N_t^{(0)}=N_{t_q}$, and $N_t^{(1)}=N_{t}^{(2)}=0$ at $t=t_q$
+    \item Use equation (\ref{eq:r_inf_start}) through (\ref{eq:r_inf_end}) to compute expansions of $r_{t-1}$
+    \item Use equation (\ref{eq:N_inf_start}) through (\ref{eq:N_inf_end}) to compute expansions of $N_{t-1}$
+\end{boenumerate}
+
+If $\Upsilon_{\infty,t}=0$, we instead use\footnote{Note that we do not have to provide initial values in this case, as diffuse filters always end with $\Upsilon_{\infty,t}\neq 0$.}:
+\begin{boenumerate}
+    \item Use equation (\ref{eq:r_0_start}) through (\ref{eq:r_0_end}) to compute expansions of $r_{t-1}$
+    \item Use equation (\ref{eq:N_0_start}) through (\ref{eq:N_0_end}) to compute expansions of $N_{t-1}$
+\end{boenumerate}
+
+We can then calculate $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ through equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). 
+
 \subsection{Sequential Smoother}
 As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive and subject to failure due to rounding errors. \cite{durbin_koopman_2000} propose sequential smoothing to greatly improved the efficiency and robustness of Kalman Smoothers. The univariate approach in Kalman filter essentially treats observations flowing in one at a time, so we can readily adapt our smoother.
 
-Define $y_{t,i}$ as the $i$-th non-missing measurement\footnote{Note that $i$ may not correspond to the index of the measurement if some are missing.} of $y_t$, we have:
+Define $y_{t:(i)}$ as the $i$-th non-missing measurement of $y_t$. To derive the univariate formula for diffuse smoothers, we can treat smoothing between two observations within the same period as if the transition matrix is $F_{t-1}$ between $t-1:(n_t)$ and $t:(1)$, and is an identity matrix if otherwise. In addition, for notational purpose, we can add $r_{t:(0)}$ and $N_{t:(0)}$. It is easy to see $r_{t:(0)}=r_t$, and $N_{t:(0)}=N_t$. For the case $(i)<(n_t)$, if $\Upsilon_{\infty,t:(i+1)}\neq0$, the recursive formula for $r_{t-1}$ and $N_{t-1}$ are:
 \begin{align}
-    r_{t:i-1} &= \begin{cases}
-        \frac{H_{t:i}^{'}d_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}r_{t:i} \\
-        F_{t-1}^{'}r_{t:0} 
-    \end{cases} \label{eq:seq_r} \\
-    \Upsilon_{t:i} &= H_{t:i}P_{t|t:i-1}H_{t:i}^{'}+\sigma_{t:i}^2 \nonumber \\
-    L_{t:i} &= F_t(I-K_{t:i}H_{t:i}) \nonumber \\
-    N_{t:i-1} &= \begin{cases}
-        \frac{H_{t:i}^{'}H_{t:i}}{\Upsilon_{t:i}} + L_{t:i}^{'}N_{t:i}L_{t:i} \\
-        F_{t-1}^{'}N_{t:0}F_{t-1}
-    \end{cases} \label{eq:N_seq}
+    r_{t:(i)}^{(0)} =& L_{t:(i+1)}^{(0)'}r_{t:(i+1)}^{(0)} \label{eq:diff_uni_start} \\ 
+    r_{t:(i)}^{(1)} =& H_{t:(i+1)}^{'}\left(\frac{d_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}}-K_{t:(i+1)}^{(1)'}r_{t:(i+1)}^{(0)}\right)+L_{t:(i+1)}^{(0)'}r_{t:(i+1)}^{(1)} \\
+    N_{t:(i)}^{(0)} =& L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(0)} \\
+    N_{t:(i)}^{(1)} =& \frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}} + \langle L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(0)}\rangle + L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(1)}L_{t:(i+1)}^{(0)} \\
+    N_{t:(i)}^{(2)} =& -\frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}^{-1}\Upsilon_{*,t:(i+1)}\Upsilon_{\infty,t:(i+1)}^{-1}} + \langle L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(1)}L_{t:(i+1)}\rangle \nonumber \\
+    &+L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(2)}L_{t:(i+1)}^{(0)} + L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(1)} \\
+    L_{t:(i+1)}^{(0)} &= 1-K_{t:(i+1)}^{(0)}H_{t:(i+1)}= 1-\frac{P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}H_{t:(i+1)}}{H_{t:(i+1)}P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}} \\
+    L_{t:(i+1)}^{(1)} &= K_{t:(i+1)}^{(1)}H_{t:(i+1)}=-\frac{(P_{*,t:(i+1)}H_{t:(i+1)}^{'}-K_{t:(i+1)}^{(0)}\Upsilon_{*,t:(i+1)})H_{t:(t+1)}}{H_{t:(i+1)}P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}}
 \end{align}
 
-For disturbance smoother, we may calculate $\hat{v}_{t|T:i}$, $V_{t:i}$, $\hat{w}_{t|T:i}$, and $W_{t:i}$ as:
+Similarly, if $\Upsilon_{\infty,t:(i+1)}=0$, the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ are:
 \begin{align}
-    \hat{w}_{t|T:i} &= R_{t:i}(\frac{d_{t:i}}{\Upsilon_{t:i}}-K_{t:i}^{'}H_{t:i}^{'}r_{t:i}) \\
-    W_{t:i} &= R_{t:i} - R_{t:i}^2(\Upsilon_{t:i}^{-1}+K_{t:i}^{'}F_{t:i}^{'}N_{t:i}F_{t:i}^{'}K_{t:i})  \\
-    \hat{v}_{t|T:i} &= Q_tr_{t:i} \\
-    V_{t:i} &= Q_t - Q_tN_{t:i}Q_t
+    r_{t:(i)}^{(0)} &= \frac{H_{t:(i+1)}^{'}d_{t:(i+1)}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}} + (I-K_{t:(i+1)}^{(*)}H_{t:(i+1)})^{'}r_{t:(i+1)}^{(0)} \\
+    r_{t:(i)}^{(1)} &= r_{t:(i+1)}^{(1)} \\ 
+    N_{t:(i)}^{(0)} &= \frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}}+(I-K_{t:(i+1)}^{(*)}H_{t:(i+1)})^{'}N_{t:(i+1)}^{(0)}(1-K_{t:(i+1)}^{(*)}H_{t:(i+1)}) \\
+    N_{t:(i)}^{(1)} &= N_{t:(i+1)}^{(1)}(1-K_{t:(i+1)}^{(*)}H_{t:(i+1)}) \\
+    N_{t:(i)}^{(2)} &= N_{t:(i+1)}^{(2)} \\
+    K_{t:(i+1)}^{(*)} &= \frac{P_{*,t:(i+1)}H_{t:(i+1)}^{'}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}}
 \end{align}
 
-\section{EM Algorithm} \label{sec:EM}
-Kalman Filter and Kalman Smoother are useful to predict measurements if we know $\theta$. Quite often, we need to estimate $\theta$ as well. A popular method that I implement here is EM algorithm\footnote{There are many other algorithms as well. For example, Newton-Raphson, and MCMC algorithm. EM algorithm is notable for its ease to implement. But it is difficult to generate a confidence interval of the parameters, unlike methods such as Newton-Raphson algorithm. For large enough time series data and decent parameter dimensions, this negligence does not affect the confidence of the prediction by much.} proposed by (\cite{shumway_stoffer_1982}). For general proof, one can refer to Appendix \ref{ap:EM_proof}.
+For the case $(i)=(n_t)$, then the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ become:
+\begin{align}
+    r_{t:(n_{t})}^{(0)} &= F_{t}^{'}r_{t+1:(0)}^{(0)} \\
+    r_{t:(n_t)}^{(1)} &= F_{t}^{'}r_{t+1:(0)}^{(1)} \\
+    N_{t:(n_t)}^{(0)} &= F_{t}^{'}N_{t+1:(0)}^{(0)}F_{t} \\
+    N_{t:(n_t)}^{(1)} &= F_{t}^{'}N_{t+1:(0)}^{(1)}F_{t} \\
+    N_{t:(n_t)}^{(2)} &= F_{t}^{'}N_{t+1:(0)}^{(2)}F_{t} \label{eq:diff_uni_end}
+\end{align}
+
+Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). 
+
+\section{Parameter Estimation} \label{sec:param}
+Up to this point, we have assumed that system matrices of a HMM is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
+
+\subsection{Numerical Maximization} \label{subsec:NM}
+This section follows closely \cite{francke2010likelihood} with supplemental content from \cite{durbin_koopman_2001}. First, we can re-write our HMM in matrix system as:
+\begin{align*}
+    Y &= c + h\eta + \varepsilon \\
+    Y & = (y_1^{'},...,y_{T}^{'}) & (c,h) = z\left[I, T_1^{'},...,\left(\prod_{t=T-1}^{1}\right)^{'}\right]^{'}(a, \eta)
+\end{align*}
+where $z=diag(Z_1,...,Z_T)$. \cite{harville1974bayesian} and \cite{francke2010likelihood} show that marginal likelihood integrates out initial diffuse prior $\eta$ and is the preferred choice of MLE. Without going into the detail\footnote{Interested readers may refer to Appendix \ref{ap:NL}.}, the marginal likelihood $logL_M(Y_T)$ is:
+\begin{align}
+    logL_M(Y_T|\theta) =& Const - \frac{1}{2}\sum_{t=1}^{t_q}\Psi_t - \frac{1}{2}\sum_{t=t_q+1}^{T}(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t) \nonumber \\
+    &+ \frac{1}{2}log\left| \sum_{t=1}^{T}\langle(H_t\prod_{i=1}^{t-1}F_iA)^{'} \rangle\right| \label{eq:NM_likelihood} \\
+    \Psi_t =& \begin{cases}
+        log|\Upsilon_{\infty,t}| & \Upsilon_{\infty,t} > 0 \\
+        log|\Upsilon_{*,t}| + d_t^{'}\Upsilon_{*,t}^{-1}d_t & \Upsilon_{\infty,t}=0
+    \end{cases} \nonumber
+\end{align}
+
+The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces matrices related to $Y_T$ with their counterpart expressions in the univariate case. The formular is omitted here.
+
+Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt}.
+
+\subsection{EM Algorithm} \label{subsec:EM}
+One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. As an alternative, EM algorithm proposed by \cite{shumway_stoffer_1982} is much faster to converge at the beginning. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
 
 The log likelihood function for a HMM system is:
 \begin{align*}
-    L(Y_T,X_T, \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
+    L(Y_T|X_T; \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
 \end{align*}
+
 Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing: 
 \begin{align*}
     G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T 
@@ -480,6 +542,7 @@ The system paramter is $\theta\equiv(\hat{\xi}_{1,0}, P_{1,0}, \rho_{\delta}, \D
 \end{align*}
 We may use the standard EM algorithm to solve $\theta$.
 
+\pagebreak
 \printbibliography
 \pagebreak
 \appendix
@@ -575,7 +638,7 @@ For $P_{t|t}$, we have:
 \end{align*}
 Note that $K_t^{(0)} = P_{\infty,t}H_t^{'}\Upsilon_t^{(1)} = P_{\infty,t}H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}$, we have:
 \begin{align*}
-    K_t^{(0)}H_tP_{\infty,t}H_t^{'} &= P_{\infty,t}H_t^{'}(H_tP_{\infty,t}H_t^{'})H_tP_{\infty,t}H_t^{'} \\
+    K_t^{(0)}H_tP_{\infty,t}H_t^{'} &= P_{\infty,t}H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}H_tP_{\infty,t}H_t^{'} \\
     &= P_{\infty,t}H_t^{'}
 \end{align*}
 Now we have a clean Joseph form for the diffuse filter as:
@@ -594,7 +657,7 @@ If $\Upsilon_{\infty,t}=0$, then $H_tP_{\infty,t}=0$ by PSD properties. It is ea
 
 For $P_{t|t}$, we have:
 \begin{align}
-    P_{t|t} =& \kappa (I-K_tH_t)P_{\infty,t}(I-K_tH_t)^{'} \nonumber \\
+    P_{t|t} =& \kappa (I-K_t^{(*)}H_t)P_{\infty,t}(I-K_t^{(*)}H_t)^{'} \nonumber \\
     &+ (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \nonumber \\
     &+ K_t^{(*)}R_tK_t^{(*)'} + \mathcal{O}(\kappa^{-1}) \nonumber \\
     =& \kappa P_{\infty, t} + (I-K_t^{(*)}H_t)P_{*,t}(I-K_t^{(*)}H_t)^{'} \label{eq:diff_P2} \\
@@ -642,7 +705,7 @@ Therefore, if $\Upsilon_{\infty,t}\neq0$, the rank of $P_{\infty,t}$ is reduced 
 
 \section{Kalman Smoother}
 \subsection{Proof of State Smoothing} \label{ap:smooth}
-The backbone of the proof is Lemma \ref{lem:1}. Note that knowing $\{Y_T, X_T\}$ is equivalent to knowing $\{Y_{t-1},d_t,d_{t+1},...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t|t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
+The backbone of the proof is Lemma \ref{lem:1}. Note that $\{Y_T, X_T\}$ is equivalent to $\{Y_{t-1},d_t,...,d_T, X_T\}$. In addition, $d_i \perp Y_{t-1}$ from the fact that $\hat{\xi}_{t|t-1}$ is a linear projection of $Y_{t-1}$ with Gaussian distribution. Applying this result iteratively, we can also obtain $d_i \perp d_j \:\forall\: \{i,j\} \in \{t,...,T\}$.
 
 Now consider $\hat{\xi}_{t|T}$, denote $\Delta_t\equiv\{d_t,d_{t+1},...,d_T\}^{'}$ 
 \begin{align*}
@@ -759,13 +822,13 @@ In particular, for $j=t+1$, we have:
 \subsubsection{General Expressions for State Smoothing:}
 We use similar techniques to derive diffuse smoothers as we do diffuse filters. I follow closely (\cite{durbin_koopman_2003}) and (\cite{koopman_1997}) in deriving diffuse smoothers, and fill the gaps in proofs omitted by the original paper.
 
-Following the practice in deriving diffuse Kalman filters, we can write $r_{T-1}$ and $N_{t-1}$ as: 
+Following the practice in deriving diffuse Kalman filters, we can write $r_{t-1}$ and $N_{t-1}$ as: 
 \begin{align*}
     r_{t-1} &= r_{t-1}^{(0)} + \kappa^{-1}r_{t-1}^{(1)} + \mathcal{O}(\kappa^{-2}) \\
     N_{t-1} &= N_{t-1}^{(0)} + \kappa^{-1}N_{t-1}^{(1)} + \kappa^{-2}N_{t-1}^{(2)} + \mathcal{O}(\kappa^{-3})
 \end{align*}
 
-To compute $\hat{\xi}_{t|T}$, note that $Var(\xi_t|Y_{t_q},X_T;\theta)<\infty$ by definition of $t_q$. Therefore, we have $Var(\xi_t|Y_T,X_T;\theta)<\infty$, which means $\hat{\xi}_{t|T}<\infty$. We have:
+To compute $\hat{\xi}_{t|T}$, note that $Var(\xi_t|Y_{t_q},X_T;\theta)<\infty$ by definition of $t_q$. If we conditioned on $Y_t$, we have $Var(\xi_t|Y_T,X_T;\theta)<\infty$, which means $\hat{\xi}_{t|T}<\infty$. We have:
 \begin{align*}
     \hat{\xi}_{t|T} &= \hat{\xi}_{t|t-1} + P_{t|t-1}r_{t-1} \\
     &= \hat{\xi}_{t|t-1} + \kappa P_{\infty,t}r_{t-1}^{(0)}+P_{*,t}r_{t-1}^{(0)}+P_{\infty,t}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-1}) \\
@@ -791,7 +854,7 @@ Finally, for $P_{t,t+1|T}$, we have:
     P_{t,t+1|T} =& P_{t|t-1}L_t^{'}(I-N_tP_{t+1|t})
 \end{align*}
 
-Note that $(I-N_tP_{t+1|t})$ is $\mathcal{O}(\kappa^0)$. Therefore, we only need to expand $P_{t|t-1}$ and $L_t$ as:
+Note that $(I-N_tP_{t+1|t})$ is $\mathcal{O}(\kappa^0)$ because $P_{\infty,t+1}N_{t}^{(0)}=0$. Therefore, we only need to expand $P_{t|t-1}$ and $L_t$ as:
 \begin{align*}
     P_{t|t-1} &= \kappa P_{\infty,t} + P_{*,t} + \mathcal{O}(\kappa^{-1}) \\
     L_t &= L_t^{(0)} + \kappa^{-1}L_t^{(1)} + \mathcal{O}(\kappa^{-2})
@@ -808,14 +871,14 @@ For $I-N_tP_{t+1|t}$, we have:
     &-\kappa^{-1}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1})+\mathcal{O}(\kappa^{-2})
 \end{align*}
 
-by the fact that $P_{t|T}P_{t+1|T}-P_{t,t+1|T}P_{t,t+1|T}^{'}$ is PSD and that $P_{t|T}$ and $P_{t+1|T}$ are both finite, we know that $P_{t,t+1|T}$ is finite as well. Therefore we can express $P_{t,t+1|T}$ as:
+by the fact that $P_{t|T}P_{t+1|T}-P_{t,t+1|T}P_{t,t+1|T}^{'}$ is PSD and that $P_{t|T}$ and $P_{t+1|T}$ are both finite, we know that $P_{t,t+1|T}$ is finite as well. Note that we do not expand $P_{t+1|t}$ beyond $\mathcal{O}(\kappa^0)$ in $N_tP_{t+1|t}$, because by Lemma \ref{lem:2} in Appendix \ref{ap:r_N}, $P_{\infty,t}L_t^{(0)'}N_t^{(0)}=0$. Now we can express $P_{t,t+1|T}$ as:
 \begin{align*}
     P_{t,t+1|T} =& (P_{*,t}L_t^{(0)'}+P_{\infty,t}L_t^{(1)'})(I-N_t^{(1)}P_{\infty,t+1}-N_t^{(0)}P_{*,t+1}) \\
     &- P_{\infty,t}L_t^{(0)'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1})
 \end{align*}
 
-\subsubsection{Recursive Formula for $r_{t-1}$ and $N_{t-1}$}
-Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$.
+\subsubsection{Recursive Formula for $r_{t-1}$ and $N_{t-1}$} \label{ap:r_N}
+Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$. The derivation follows closely \cite{durbin_koopman_2003} with some additional details. 
 
 First of all, consider $r_{t-1}$:
 \begin{align*}
@@ -826,7 +889,7 @@ First of all, consider $r_{t-1}$:
 
 After some algebra, we have:
 \begin{align*}
-    r_{t-1}^{(0)} &= H_t^{'}\Upsilon_t^{(0)}d_t + L_t^{(0)}r_t^{(0)} \\
+    r_{t-1}^{(0)} &= H_t^{'}\Upsilon_t^{(0)}d_t + L_t^{(0)'}r_t^{(0)} \\
     r_{t-1}^{(1)} &= H_t^{'}\Upsilon_t^{(1)}d_t+L_t^{(0)'}r_t^{(1)} + L_t^{(1)'}r_t^{(0)} \\
     L_t^{(0)} &= F_t(I-K_t^{(0)}H_t) \\
     L_t^{(1)} &= -F_tK_t^{(1)}H_t 
@@ -849,7 +912,7 @@ After a lot of algebra, we have:
     &- \langle H_t^{'}K_t^{(2)'}F_t^{'}N_t^{(0)}L_t^{(0)}\rangle +  L_t^{(1)'}N_t^{(0)}L_t^{(1)}
 \end{align*}
 
-Before I proceed, I will prove the following auxiliary result:
+Before I proceed, I will prove the following auxiliary result\footnote{I am embarrassing myself, but you get the point...}:
 \begin{lemma}[Law of Equivalent Recursion] \label{lem:2}
     Consider the following system:
     \begin{align*}
@@ -865,33 +928,79 @@ Before I proceed, I will prove the following auxiliary result:
 
 To prove Lemma \ref{lem:2}, note that if $P_{\infty,t}a_t=0$, then we have for any $j<t$:
 \begin{align*}
-    & L_{t-1}^{(0)'}...L_{j}^{(0)'}P_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0 \\
-    \Rightarrow & a_tL_{t-1}^{(0)'}...L_{j}^{(0)'}P_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0 \\
-    \Rightarrow & P_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0 
+    & F_{t-1}...F_jP_{\infty,j}L_{j}^{(0)'}...L_{t-1}^{(0)'}a_t=0 \\
+    \Rightarrow & a_t^{'}F_{t-1}...F_jP_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0 \\
 \end{align*}
 
-For $c_{j-1}$, the term that involves $a_t$ is $P_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0$. Therefore, we can ignore $a_t$ in the recursion formula for $c_{t-1}$. 
+Note that $F_jP_{\infty,j}L_j^{(0)'}$ is PSD, then if $a_tF_{t-1}P_{\infty,t-1}L_{t-1}^{(0)'}a_t=0$, we have:
+\begin{align*}
+    a_t^{'}F_t(P_{\infty,t-1}-P_{\infty,t-1}H_{t-1}^{'}\Upsilon_{\infty,t-1}^{-1}H_{t-1}P_{\infty,t-1})F_t^{'}a_t=0\ &,\ \text{if } \Upsilon_{\infty,t-1}>0 \\
+    a_t^{'}F_{t-1}P_{\infty,t-1}F_{t-1}^{'}a_t=0\ &,\ \text{if } \Upsilon_{\infty,t-1}=0 
+\end{align*}
+
+By properties of PSD matrices, we have:
+\begin{align*}
+    P_{\infty,t-1}L_{t-1}^{(0)'}a_t=0\ &,\ \text{if } \Upsilon_{\infty,t-1}=0 \\
+    P_{\infty,t-1}F_t^{'}a_t=0\ &,\ \text{if } \Upsilon_{\infty,t-1}=0
+\end{align*}
+
+By applying the above result recursively, we have the desired result. For $c_{j-1}$, the term that involves $a_t$ is $P_{\infty,j}L_{j}^{(0)}...L_{t-1}^{(0)}a_t=0$. Therefore, we can ignore $a_t$ in the recursion formula for $c_{t-1}$. 
 
 Now we can derive the recursion formula for $r_{t-1}$ and $N_{t-1}$. First consider the case $\Upsilon_{\infty,t}\neq0$\footnote{Here we consider the univariate case.}. Recall that $r_{t-1} = H_t^{'}\Upsilon_{t}^{-1}d_t + L_t^{'}r_t$. If $\Upsilon_{\infty,t}\neq0$, we have the recursion formula for $r_{t-1}$ as:
-\begin{align*}
-    r_{t-1}^{(0)} &= L_t^{(0)'}r_t^{(0)} \\
-    r_{t-1}^{(1)} &= H_t^{'}\Upsilon_{t}^{(1)}d_t+L_t^{(0)'}r_t^{(1)} + L_t^{(1)'}r_t^{(0)} \\
-        &= H_t^{'}(\Upsilon_{\infty,t}^{-1}d_t-K_t^{(1)'}F_t^{'}r_t^{(0)}) + L_t^{(0)'}r_t^{(1)} \\
-    L_t^{(0)} &= F_t(I-K_t^{(0)}H_t) \\
-    L_t^{(1)} &= -F_tK_t^{(1)}H_t 
-\end{align*}
+\begin{align}
+    r_{t-1}^{(0)} &= L_t^{(0)'}r_t^{(0)} \label{eq:r_inf_start} \\
+    r_{t-1}^{(1)} &= H_t^{'}\Upsilon_{t}^{(1)}d_t+L_t^{(0)'}r_t^{(1)} + L_t^{(1)'}r_t^{(0)} \nonumber \\
+        &= H_t^{'}(\Upsilon_{\infty,t}^{-1}d_t-K_t^{(1)'}F_t^{'}r_t^{(0)}) + L_t^{(0)'}r_t^{(1)} \label{eq:r_inf_end} \\
+    L_t^{(0)} &= F_t(I-K_t^{(0)}H_t) \nonumber \\
+    L_t^{(1)} &= -F_tK_t^{(1)}H_t \nonumber
+\end{align}
 
 We can perform backwards recursion for $t\in\{t_q,...,1\}$ with $r_{t_q}^{(0)}=r_{t_q}$ and $r_{t_q}^{(1)}=0$, where $K_t^{(0)}$ and $K_t^{(1)}$ are defined in equation (\ref{eq:K1_diffuse_start}) through (\ref{eq:K1_diffuse_end}). 
 
-To compute $N_{t-1}$, note that we do not have expressions for $K_t^{(2)}$, but by Lemma \ref{lem:2}, we know that $N_{t-1}$ is pre and post-multiplied by $P_{\infty,t}$ (or by $P_{t}L_{t}^{(0)'}$ or $P_{\infty,t+1}$ in the case of $P_{t,t+1|T}$), and we have established that $P_{\infty,t}L_t^{(0)'}N_{t}^{(0)}=0$, we have the simplified formula for $N_{t-1}$:
-\begin{align*}
-    N_{t-1}^{(0)} =& H_t^{'}\Upsilon_t^{(0)}H_t + L_t^{(0)'}N_t^{(0)}L_t^{(0)} \\
+To compute $N_{t-1}$, note that we do not have expressions for $K_t^{(2)}$, but by Lemma \ref{lem:2}, we know that $N_{t-1}$ is pre and post-multiplied by $P_{\infty,t}$ (or by $P_{t}L_{t}^{(0)'}$ or $P_tF_t^{'}$ or $P_{\infty,t+1}$ in the case of $P_{t,t+1|T}$), and we have established that $P_{\infty,t}L_t^{(0)'}N_{t}^{(0)}=0$, we have the simplified formula for $N_{t-1}$:
+\begin{align}
+    N_{t-1}^{(0)} =& L_t^{(0)'}N_t^{(0)}L_t^{(0)} \label{eq:N_inf_start} \\
     N_{t-1}^{(1)} =& H_t^{'}\Upsilon_t^{(1)}H_t + \langle L_t^{(1)'}N_t^{(0)}L_t^{(0)}\rangle + L_t^{(0)'}N_t^{(1)}L_t^{(0)} \\
     N_{t-1}^{(2)} =& H_t^{'}\Upsilon_t^{(2)}H_t + \langle L_t^{(1)'}N_t^{(1)}L_t^{(0)}\rangle + L_t^{(0)'}N_t^{(2)}L_t^{(0)}
-        + L_t^{(1)'}N_t^{(0)}L_t^{(1)}
-\end{align*}
+        + L_t^{(1)'}N_t^{(0)}L_t^{(1)} \label{eq:N_inf_end}
+\end{align}
 
 Now consider the case where $\Upsilon_{\infty,t}=0$. Write $r_t$ as:
+
+
+% Likelihood
+% 1) provide proof of log(y) 
+% 2) finish numerical opt
+% 3) follow socre to rewrite EM part
+% 4) provide formula in proof
+% 5) provide formula for univariate case
+% 6) clean up proof section
+
+% codebase
+% design
+% modular
+% plug in optimizer
+
+% example
+% two example:
+% 1) unit root 
+% 2) complete time series model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 \begin{align*}
     r_{t-1} =& H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \\
     =& H_t^{'}(\Upsilon_{*,t}^{-1}+\kappa^{-1}\Upsilon_t^{(1)})d_t \\
@@ -902,15 +1011,14 @@ where $K_t^{(0)}\equiv K_t^{(*)}=P_{*,t}H_t^{'}\Upsilon_{*,t}^{-1}$ from Appendi
 Rearrange terms and we have:
 \begin{align*}
     r_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}d_t + (I-K_{t}^{(0)}H_t)^{'}F_t^{'}r_t^{(0)} \\
-    r_{t-1}^{(1)} &= H_t^{'}(\Upsilon_t^{(1)}d_t-K_t^{(1)'}F_t^{'}r_t^{(0)}-K_t^{(0)'}F_t^{'})+L_t^{(0)'}r_t^{(1)} \\
-    L_t^{(0)} &= F_t
+    r_{t-1}^{(1)} &= H_t^{'}(\Upsilon_t^{(1)}d_t-K_t^{(1)'}F_t^{'}r_t^{(0)}-K_t^{(0)'}F_t^{'}r_t^{(1)})+F_t^{'}r_t^{(1)} \\
 \end{align*}
 
-By Lemma \ref{lem:2}, we can drop the term that inovlves $H_t^{'}$ in $r_{t-1}^{(1)}$. The simplified recursive formular for $r_{t-1}$ are:
-\begin{align*}
-    r_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}d_t + (I-K_{t}^{(*)}H_t)^{'}F_t^{'}r_t^{(0)} \\
-    r_{t-1}^{(1)} &= F_t^{'}r_t^{(1)} 
-\end{align*}
+By Lemma \ref{lem:2}, we can drop the term that involves $H_t^{'}$ in $r_{t-1}^{(1)}$. The simplified recursive formula for $r_{t-1}$ are:
+\begin{align}
+    r_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}d_t + (I-K_{t}^{(*)}H_t)^{'}F_t^{'}r_t^{(0)} \label{eq:r_0_start} \\
+    r_{t-1}^{(1)} &= F_t^{'}r_t^{(1)} \label{eq:r_0_end}
+\end{align}
 
 Now consider $N_{t-1}$. Expand $N_{t-1}$ as:
 \begin{align*}
@@ -930,17 +1038,21 @@ After some algebra, we have:
     &+ H_t^{'}K_t^{(1)'}F_t^{'}N_t^{(0)}F_tK_t^{(1)}H_t^{'} + \mathcal{O}(\kappa^{-1})
 \end{align*}
 
-By similar argument, we can simplify the resursive formula for $N_{t-1}$ as: 
-
-\begin{align*}
-    N_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}H_t+(I-K_t^{(*)}H_t)^{'}F_t^{'}N_t^{(0)}F_t(I-K_t^{(*)}H_t) \\
+By similar argument, we can simplify the recursive formula for $N_{t-1}$ as: 
+\begin{align}
+    N_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}H_t+(I-K_t^{(*)}H_t)^{'}F_t^{'}N_t^{(0)}F_t(I-K_t^{(*)}H_t) \label{eq:N_0_start} \\
     N_{t-1}^{(1)} &= F_t^{'}N_t^{(1)}F_t(I-K_t^{(*)}H_t) \\
-    N_{t-1}^{(2)} &= F_t^{'}N_t^{(2)}F_t
-\end{align*}
+    N_{t-1}^{(2)} &= F_t^{'}N_t^{(2)}F_t \label{eq:N_0_end}
+\end{align}
 
 Note that since recursion for $N_{t-1}^{(2)}$ involves $N_{t-1}^{(1)}$ as well, we need to make sure dropping terms in $N_{t-1}^{(1)}$ does not affect recursion for $N_{t-1}^{(2)}$. 
 
-\subsection{Proof of Sequential Smoothing}
+\section{Parameter Estimation}
+\subsection{Derivation of Likelihood Evaluation} \label{ap:NL}
+
+
+
+
 
 \section{EM Algorithm Premier:} \label{ap:EM_proof}
 Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
@@ -973,7 +1085,7 @@ If $t>1$, recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}
     &- E(\xi_t|\Theta)x_{t-1}^{'}B_{t-1}^{'} + F_{t-1}E(\xi_{t-1}|\Theta)x_{t-1}^{'}B_{t-1}^{'}
     +B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'}
 \end{align*}
-We already derive expression for $E(\xi_t|\Theta)$ in (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
+We already derive expression for $E(\xi_t|\Theta)$ in equation (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
 \begin{align*}
     E(\xi_t\xi_t^{'}|\Theta) & = E(\xi_t|\Theta)E(\xi_t^{'}|\Theta) + Var(\xi_t|\Theta) \\
     &= \hat{\xi}_{t|T}(\hat{\xi}_{t|T})^{'} + P_{t|T}
@@ -983,19 +1095,6 @@ To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This der
     E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) &= \xi_tE(\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) \nonumber \\
     &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t|t-1})^{'}J_{t-1}^{'} \label{eq:xi_t|t-1}
 \end{align}
-By the nature of Markov Dynamics, adding $\{y_t, y_{t+1}, ..., y_T\}$ does not change the value of $E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},x_{t-1},\theta_i)$. Taking expectations of equation (\ref{eq:xi_t|t-1}) over $\xi_t$, we have:
-\begin{align*}
-    E(\xi_t\xi_{t-1}^{'})|\Theta) &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + E(\xi_t\xi_t^{'}|\Theta)J_{t-1}^{'}
-    -\hat{\xi}_{t|T}(\hat{\xi}_{t|t-1})^{'}J_{t-1}^{'} \\
-    &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + [\hat{\xi}_{t|T}(\hat{\xi}_{t|T})^{'} + P_{t|T} 
-    -\hat{\xi}_{t|T}(\hat{\xi}_{t|t-1})^{'}]J_{t-1}^{'} \\
-    &= \hat{\xi}_{t|T}(\hat{\xi}_{t-1,t-1})^{'} + [P_{t|T} + \hat{\xi}_{t|T}(\hat{\xi}_{t|T}-\hat{\xi}_{t|t-1})^{'}]J_{t-1}^{'}
-\end{align*}
-If $t=1$, we have:
-\begin{align*}
-    E(\delta_1\delta_1^{'}) &= E(\xi_1\xi_1^{'}|\Theta) - \hat{\xi}_{1,0}(\hat{\xi}_{1,T})^{'}
-    -\hat{\xi}_{1,T}(\hat{\xi}_{1,0})^{'} + \hat{\xi}_{1,0}(\hat{\xi}_{1,0})^{'}
-\end{align*}
 
 \section{Derivation of Log-likelihood for $Y_T$} \label{ap:log2}
 Recall that $\chi_t \equiv y_t - H_t\xi_t - D_tx_t$. Expanding the expectation terms in equation (\ref{eq:log2_trace}), and denoting $\Theta \equiv (Y_T,X_T,\theta_i)$, we have:
