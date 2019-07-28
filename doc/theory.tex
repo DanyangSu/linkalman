@@ -3,7 +3,7 @@
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{bbm}
-\usepackage[legalpaper,portrait,margin=1in]{geometry}
+\usepackage[a4paper,margin=1in]{geometry}
 \usepackage[style=authoryear,sorting=nyt]{biblatex}
 \addbibresource{ref.bib}
 \setlength{\parindent}{0cm}
@@ -42,23 +42,21 @@ Equation (\ref{eq:state_evolve}) governs a Markov state transition process. $\xi
 
 Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I also assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
 
-Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $M_t$ defined as:
-\begin{align*}
-M_t\equiv\{F_t, B_t, H_t, D_t, Q_t, R_t\}
-\end{align*}
+Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $\{F_t, B_t, H_t, D_t, Q_t, R_t\}$ parameterized by $\theta$.
+
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$. We bind $M_t$ with some underlying parameter set $\theta$. For example cyclical pattern can be modeled by using Trigonometric Cycles (\cite{harvey_1985}).  
 
 \section{Kalman Filter} \label{sec:filter}
 \subsection{Filtering with Known Initial Conditions:}
-Given a set of measurements over time, and suppose $M_t$ is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
+Given a set of measurements over time, and suppose $\theta$ is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
 \begin{align*}
     Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
     X_t &\equiv \{x_1, x_2, ..., x_t\} \\
     \Xi_t &\equiv \{\xi_1,\xi_2,...,\xi_t\} \\
-    \hat{\xi}_{t,s} &\equiv E(\xi_t|X_{s},Y_{s};\theta) \\
-    P_{t,s} &\equiv E[(\xi_t-\hat{\xi}_{t,s})(\xi_t-\hat{\xi}_{t,s})']
+    \hat{\xi}_{t|s} &\equiv E(\xi_t|X_{s},Y_{s};\theta) \\
+    P_{t|s} &\equiv E[(\xi_t-\hat{\xi}_{t|s})(\xi_t-\hat{\xi}_{t|s})']
 \end{align*}
-With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t,s}$ and $P_{t,s}$. Now consider at time $t$, we know $Y_t$ and $M_t$, and suppose we also know $\hat{\xi}_{t|t-1}$ and $P_{t|t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
+With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional distribution of $y_t$ and $\xi_t$ are fully characterized by Gaussian process with $\hat{\xi}_{t|s}$ and $P_{t|s}$. Now consider at time $t$, we know $Y_t$ and $X_t$, $\hat{\xi}_{t|t-1}$, and $P_{t|t-1}$. By equation (\ref{eq:state_evolve}), we have\footnote{The derivation closely follows Chapter 13 in (\cite{hamilton_1994}). In particular, derivation of equation (\ref{eq:p_tt}) is given in Appendix \ref{ap:iter_proj}.}:
 \begin{align}
     \hat{\xi}_{t|t} &= \hat{\xi}_{t|t-1} + K_t(y_t-H_t\hat{\xi}_{t|t-1}-D_tx_t) \label{eq:filter_begin} \\
     K_t &= P_{t|t-1}H_t^{'}\Upsilon_t^{-1} \label{eq:gain} \\
@@ -67,10 +65,10 @@ With the assumption that $w_t$ and $v_t$ are Gaussian white noises, conditional 
     \hat{\xi}_{t+1,t} &= F_t\hat{\xi}_{t|t} + B_tx_t \label{eq:xi_t1} \\
     P_{t+1,t} &= F_tP_{t|t}F_t^{'}+Q_t \label{eq:filter_end}
 \end{align}
-$K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initial conditions $\hat{\xi}_{1,0}$ and $P_{1,0}$ are known. The Kalman filter proceeds as follows:
+$K_t$ is the famous Kalman gain matrix. In this subsection, we assume that initial conditions $\hat{\xi}_{1|0}$ and $P_{1|0}$ are known. The Kalman filter proceeds as follows:
 \begin{boenumerate}
-    \item Given $\theta$, begin with initial value $\hat{\xi}_{1,0}$ and $P_{1,0}$.
-    \item Use equation (\ref{eq:filter_begin}) through (\ref{eq:filter_end}) to calculate $\hat{\xi}_{2,1}$, and $P_{2,1}$.
+    \item Given $\theta$, begin with initial value $\hat{\xi}_{1|0}$ and $P_{1|0}$.
+    \item Use equation (\ref{eq:filter_begin}) through (\ref{eq:filter_end}) to calculate $\hat{\xi}_{2|1}$, and $P_{2|1}$.
     \item Repeat step 2 for $t\in\{3, 4, ..., T\}$.
 \end{boenumerate}
 
@@ -95,20 +93,20 @@ We are able to obtain a more concise updating rule:
 Using equation (\ref{eq:joseph_update_xi}) through (\ref{eq:joseph_update_P}) recursively, we may implement Kalman filtering in the Joseph form. 
 
 \subsection{Initialization with Diffuse Filtering} \label{subsec:diff_filter}
-So far we have assumed that we know values of $\hat{\xi}_{1,0}$ and $P_{1,0}$. In practice, such information are rarely available. If instead, we know that the time series is stationary, we can use the unconditional mean and variance for $\hat{\xi}_{1,0}$ and $P_{1,0}$. If the time series is at least partially non-stationary, then we should assume no prior information and set $\hat{\xi}_{1,0}=0$ and $P_{1,0}=\infty$ for the non-stationary part of $\xi_t$. A commonly used solution is to set $P_{1,0}$ to some large value (e.g. $\kappa=10^7$) to approximate infinity, but this technique is difficult to implement when the initial condition structure is complex\footnote{See Section 3 of (\cite{doan_2010}) for further discussions.}. Better algorithms exist for exact initialization, and I will discuss one such algorithm that is implemented by \texttt{linkalman}.
+So far we have assumed that we know values of $\hat{\xi}_{1|0}$ and $P_{1|0}$. In practice, such information are rarely available. If instead, we know that the time series is stationary, we can use the unconditional mean and variance for $\hat{\xi}_{1|0}$ and $P_{1|0}$. If the time series is at least partially non-stationary, then we should assume no prior information and set $\hat{\xi}_{1|0}=0$ and $P_{1|0}=\infty$ for the non-stationary part of $\xi_t$. A commonly used solution is to set $P_{1|0}$ to some large value (e.g. $\kappa=10^7$) to approximate infinity, but this technique is difficult to implement when the initial condition structure is complex\footnote{See Section 3 of (\cite{doan_2010}) for further discussions.}. Better algorithms exist for exact initialization, and I will discuss one such algorithm that is implemented by \texttt{linkalman}.
 
-Consider $\hat{\xi}_{1,0}$ again. Following (\cite{koopman_1997}), we define $\hat{\xi}_{1,0}$ as:
+Consider $\hat{\xi}_{1|0}$ again. Following (\cite{koopman_1997}), we define $\hat{\xi}_{1|0}$ as:
 \begin{align}
-    \hat{\xi}_{1,0} = a + A\eta + \Pi\varepsilon \label{eq:init}
+    \hat{\xi}_{1|0} = a + A\eta + \Pi\varepsilon \label{eq:init}
 \end{align}
-$A$ and $\Pi$ are selection matrices, $\eta\sim\mathcal{N}(0,\kappa I)$, and $\varepsilon\sim\mathcal{N}(0,Q_{*})$. Set $0$ for elements in $a$ corresponding to $A$, and stationary means for elements corresponding to $\Pi$. $Q_{*}$ is the ergodic covariance of the stationary component of the model (or process with known initial values). Essentially, equation (\ref{eq:init}) groups $\hat{\xi}_{1,0}$ into two categories. If $\hat{\xi}_{1,0}^i$, the $i$-th element of $\hat{\xi}_{1,0}$, is non-stationary and not known, it has a distribution $\mathcal{N}(0, \kappa)$. With $\kappa\rightarrow\infty$, $\mathcal{N}(0,\kappa)$ captures the fact that we know nothing about the initial value of a non-stationary process\footnote{The specification of equation (\ref{eq:init}), despite its seemingly arbitrariness, is valid, because of the invariance property of diffuse prior. Interested readers can refer to Appendix B of \cite{doan_2010} for details.}. If on the other hand, the initial state of $\hat{\xi}_{1,0}^i$ is either known or stationary, It has a proper distribution with unconditional mean and covariances\footnote{If $X_t$ is involved in the state transition process then a process is not stationary unless its transition is not affected by $X_T$.}. 
+$A$ and $\Pi$ are selection matrices, $\eta\sim\mathcal{N}(0,\kappa I)$, and $\varepsilon\sim\mathcal{N}(0,Q_{*})$. Set $0$ for elements in $a$ corresponding to $A$, and stationary means for elements corresponding to $\Pi$. $Q_{*}$ is the ergodic covariance of the stationary component of the model (or process with known initial values). Essentially, equation (\ref{eq:init}) groups $\hat{\xi}_{1|0}$ into two categories. If $\hat{\xi}_{1|0}^i$, the $i$-th element of $\hat{\xi}_{1|0}$, is non-stationary and not known, it has a distribution $\mathcal{N}(0, \kappa)$. With $\kappa\rightarrow\infty$, $\mathcal{N}(0,\kappa)$ captures the fact that we know nothing about the initial value of a non-stationary process\footnote{The specification of equation (\ref{eq:init}), despite its seemingly arbitrariness, is valid, because of the invariance property of diffuse prior. Interested readers can refer to Appendix B of \cite{doan_2010} for details.}. If on the other hand, the initial state of $\hat{\xi}_{1|0}^i$ is either known or stationary, It has a proper distribution with unconditional mean and covariances\footnote{If $X_t$ is involved in the state transition process then a process is not stationary unless its transition is not affected by $X_T$.}. 
 
 From equation (\ref{eq:init}), we have:
 \begin{align}
-    \hat{\xi}_{1,0} &= a  \label{eq:init_xi}\\
-    P_{1,0} &= \kappa P_{\infty} + P_{*} \label{eq:init_P}
+    \hat{\xi}_{1|0} &= a  \label{eq:init_xi}\\
+    P_{1|0} &= \kappa P_{\infty} + P_{*} \label{eq:init_P}
 \end{align}
-where $P_{\infty}=AA^{'}$ and $P_{*}=\Pi Q_0 \Pi^{'}$. By linearity of the filtering process, we can write $P_{t|t-1}$ as:
+where $P_{\infty}=AA^{'}$ and $P_{*}=\Pi Q_* \Pi^{'}$. By linearity of the filtering process, we can write $P_{t|t-1}$ as:
 \begin{align}
     P_{t|t-1} = \kappa P_{\infty,t} + P_{*,t} + \mathcal{O}(\kappa^{-1}) \label{eq:P_diffuse}
 \end{align}
@@ -345,19 +343,16 @@ Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_
 Up to this point, we have assumed that system matrices of a HMM is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
 
 \subsection{Numerical Maximization} \label{subsec:NM}
-This section follows closely \cite{francke2010likelihood} with supplemental content from \cite{durbin_koopman_2001}. First, we can re-write our HMM in matrix system as:
-\begin{align*}
-    Y &= c + h\eta + \varepsilon \\
-    Y & = (y_1^{'},...,y_{T}^{'}) & (c,h) = z\left[I, T_1^{'},...,\left(\prod_{t=T-1}^{1}\right)^{'}\right]^{'}(a, \eta)
-\end{align*}
-where $z=diag(Z_1,...,Z_T)$. \cite{harville1974bayesian} and \cite{francke2010likelihood} show that marginal likelihood integrates out initial diffuse prior $\eta$ and is the preferred choice of MLE. Without going into the detail\footnote{Interested readers may refer to Appendix \ref{ap:NL}.}, the marginal likelihood $logL_M(Y_T)$ is:
+This section follows closely (\cite{durbin_koopman_2001}) with marginal likelihood corrections from (\cite{francke2010likelihood}) and (\cite{harville1974bayesian}). Here I provide the expression for marginal likelihood\footnote{Interested readers may refer to Appendix \ref{ap:NL}.} $l_m(Y_T)$ as:
 \begin{align}
-    logL_M(Y_T|\theta) =& Const - \frac{1}{2}\sum_{t=1}^{t_q}\Psi_t - \frac{1}{2}\sum_{t=t_q+1}^{T}(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t) \nonumber \\
-    &+ \frac{1}{2}log\left| \sum_{t=1}^{T}\langle(H_t\prod_{i=1}^{t-1}F_iA)^{'} \rangle\right| \label{eq:NM_likelihood} \\
+    l_m(Y_T) =& Const - \frac{1}{2}\sum_{t=1}^{t_q}\Psi_t - \frac{1}{2}\sum_{t=t_q+1}^{T}(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t) + \frac{1}{2}log\left| \sum_{t=1}^{T}(Z_t^{'}Z_t) \right| \label{eq:NM_likelihood} \\
     \Psi_t =& \begin{cases}
         log|\Upsilon_{\infty,t}| & \Upsilon_{\infty,t} > 0 \\
         log|\Upsilon_{*,t}| + d_t^{'}\Upsilon_{*,t}^{-1}d_t & \Upsilon_{\infty,t}=0
-    \end{cases} \nonumber
+    \end{cases} \nonumber \\
+    Z_t &= H_t\phi_t \nonumber \\
+    \phi_{t+1} &= F_t\phi_t \nonumber \\
+    \phi_1 &= A \nonumber
 \end{align}
 
 The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces matrices related to $Y_T$ with their counterpart expressions in the univariate case. The formular is omitted here.
@@ -365,7 +360,7 @@ The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces
 Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt}.
 
 \subsection{EM Algorithm} \label{subsec:EM}
-One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. As an alternative, EM algorithm proposed by \cite{shumway_stoffer_1982} is much faster to converge at the beginning. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
+One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) is much faster to converge at the beginning. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
 
 The log likelihood function for a HMM system is:
 \begin{align*}
@@ -374,68 +369,75 @@ The log likelihood function for a HMM system is:
 
 Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing: 
 \begin{align*}
-    G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T 
+    G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \end{align*}
 Denote $G(\theta,\theta_1)$ as: 
 \[
-    G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T
+    G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
 EM algorithm proceeds as follows:
 \begin{boenumerate}
     \item Start with initial parameter value $\theta_0$
-    \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to get $\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})$
+    \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
     \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$    
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal.
 \end{boenumerate}
 
-\subsection{$G(Y_T,X_T,\theta)$ with Missing Measurements} \label{subsec:G}
-If we know $(Y_T,\Xi_T)$, by Markov Property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
-\begin{align}
-    log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] 
-    + \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)] \nonumber \\
-    &= log[\mathbb{P}(\xi_1|\theta)] + \sum_{t=2}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] \nonumber \\ 
-    &+ \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)]\label{eq:log}
-\end{align}
-For $t>1$, the second term in equation (\ref{eq:log}) is:
-\begin{align}
-    log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] &= const-\frac{1}{2}log(|Q_t|) 
-    -\frac{1}{2}\delta_t^{'}Q_t^{-1}\delta_t \nonumber \\
-    &= const-\frac{1}{2}log(|Q_t|) 
-    -\frac{1}{2}Tr[\delta_t^{'}Q_t^{-1}\delta_t] \nonumber \\
-    &= const-\frac{1}{2}log(|Q_t|) 
-    -\frac{1}{2}Tr[Q_t^{-1}\delta_t\delta_t^{'}] \label{eq:log1} \\
-    \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1} \nonumber
-\end{align}
-The second equality in equation (\ref{eq:log1}) holds because $Tr(a)=a$ for scalar $a$. The third equality holds because $Tr(AB)=Tr(BA)$. 
+Next, I provide the formula for $G(\theta,\theta_i)$. From Appendix \ref{ap:log}, we can express $G(\theta,\theta_i)$ as:
 
-We may calculate:
-\begin{align}
-    G_1^{t}(\theta,\theta_{i-1}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T \nonumber \\
-    &= const -\frac{1}{2}log(|Q_t|)-\frac{1}{2}Tr[E(Q_t^{-1}\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})] \nonumber \\
-    &= const - \frac{1}{2}log(|Q_t|) - \frac{1}{2}Tr[Q_t^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log1_trace}
-\end{align}
-Note that when $t=1$, we have $\xi_1\sim\mathcal{N}(\hat{\xi}_{1,0}, P_{1,0})$. We may calculate:
-\begin{align}
-    G_1^1(\theta,\theta_{i-1}) &= const - \frac{1}{2}log(|P_{1,0}|) \nonumber \\
-    &- \frac{1}{2}Tr\{P_{1,0}^{-1}E[\delta_1\delta_1^{'}|Y_T, X_T, \theta_{i-1}]\} \nonumber \\
-    \delta_1 &\equiv \xi_1 - \hat{\xi}_{1,0} \nonumber
-\end{align}
-Detailed derivation of $E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i-1})$ is given in Appendix \ref{ap:log}. If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} to find the pseudo inverse of $Q_t$, or \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo determinant of $Q_t$.
 
-Calculating conditional expectation of the second term in equation (\ref{eq:log}) is similar. Let's consider:
-\[
-    G_2^t(\theta,\theta_{i-1}) \equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t, \theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i-1})d\Xi_T 
-\]
-With the assumption of Gaussian white noises, we have:
-\begin{align}
-    G_2^t(\theta,\theta_{i-1}) &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log2_trace} \\
-    \chi_t &\equiv y_t - H_t\xi_t - D_tx_t \nonumber
-\end{align}
-See Appendix \ref{ap:log2} for detailed derivation of $G_2^t(\theta,\theta_{i-1})$. Now $G(\theta,\theta_{i-1})$ is:
-\begin{align*}
-    G(\theta,\theta_{i-1}) &= \sum_{t=1}^{T}G_1^t(\theta,\theta_{i-1}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i-1})
-\end{align*}
-We can use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_i$ that maximizes $G(\theta,\theta_{i-1})$.
+
+
+
+
+
+
+
+
+
+
+% Likelihood
+% 3) follow socre to rewrite EM part
+% 4) provide formula in proof
+% 5) provide formula for univariate case
+% 6) clean up proof section
+
+% codebase
+% design
+% modular
+% plug in optimizer
+
+% example
+% two example:
+% 1) unit root 
+% 2) complete time series model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \section{\texttt{linkalman}} \label{sec:codebase}
 
@@ -967,40 +969,6 @@ To compute $N_{t-1}$, note that we do not have expressions for $K_t^{(2)}$, but 
 
 Now consider the case where $\Upsilon_{\infty,t}=0$. Write $r_t$ as:
 
-
-% Likelihood
-% 1) provide proof of log(y) 
-% 2) finish numerical opt
-% 3) follow socre to rewrite EM part
-% 4) provide formula in proof
-% 5) provide formula for univariate case
-% 6) clean up proof section
-
-% codebase
-% design
-% modular
-% plug in optimizer
-
-% example
-% two example:
-% 1) unit root 
-% 2) complete time series model
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 \begin{align*}
     r_{t-1} =& H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \\
     =& H_t^{'}(\Upsilon_{*,t}^{-1}+\kappa^{-1}\Upsilon_t^{(1)})d_t \\
@@ -1048,64 +1016,148 @@ By similar argument, we can simplify the recursive formula for $N_{t-1}$ as:
 Note that since recursion for $N_{t-1}^{(2)}$ involves $N_{t-1}^{(1)}$ as well, we need to make sure dropping terms in $N_{t-1}^{(1)}$ does not affect recursion for $N_{t-1}^{(2)}$. 
 
 \section{Parameter Estimation}
-\subsection{Derivation of Likelihood Evaluation} \label{ap:NL}
+\subsection{Derivation of Marginal Likelihood} \label{ap:NL}
+First I derive the regular log likelihood $l(Y_T)\equiv logL(Y_T|X_T;\theta)$: 
+\begin{align*}
+    l(Y_T) &= log\mathbb{P}(y_1;x_1\theta) + \sum_{t=2}^Tlog\mathbb{P}(y_t|Y_{t-1},X_T;\theta)
+\end{align*}
 
+Since $y_t|Y_{t-1},X_T;\theta$ is normally distributed with conditional mean and variance as:
+\begin{align*}
+    E(y_t|Y_{t-1},X_T;\theta) &= H_t\hat{\xi}_{t|t-1} + D_tX_t \\
+    Var(y_t|Y_{t-1},X_T;\theta) &= \Upsilon_t
+\end{align*}
 
+Now we can write $l(Y_T)$ as:
+\begin{align*}
+    l(Y_T) &= Const - \frac{1}{2}\sum_{t=1}^T(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t)
+\end{align*}
+where $|\cdot|$ denotes pseudo-determinant.
 
+Next we derive diffuse likelihood $l_d(Y_T)\equiv logL(Y_T|X_T;\theta)$ with diffuse priors. First consider $\Upsilon_{\infty,t}>0$ (again we only consider the univariate case). In this case we have:
+\begin{align*}
+    \Upsilon_t^{-1} &= \kappa^{-1}\Upsilon_{\infty,t}^{-1}+\mathcal{O}(\kappa^{-2}) \\
+    log|\Upsilon_t^{-1}| &= log|\kappa^{-1}\Upsilon_{\infty,t}^{-1}+\mathcal{O}(\kappa^{-2})| \\
+    &=-log(\kappa) + log|\Upsilon_{\infty,t}^{-1}+\mathcal{O}(\kappa^{-1})| \\
+    \lim_{\kappa\rightarrow \infty}(-log|\Upsilon_t| + log(\kappa)) &= -log|\Upsilon_{\infty,t}| \\
+    \lim_{\kappa\rightarrow \infty}d_t^{'}\Upsilon_t^{-1}d_t &= 0
+\end{align*}
 
+If $\Upsilon_{\infty,t}=0$, we have:
+\begin{align*}
+    \lim_{\kappa\rightarrow \infty}(-log|\Upsilon_t|) &= -log{\Upsilon_{*,t}} \\
+    \lim_{\kappa\rightarrow \infty}(d_t^{'}\Upsilon_t^{-1}d_t) &= d_t^{'}\Upsilon_{*,t}^{-1}d_t
+\end{align*}
 
-\section{EM Algorithm Premier:} \label{ap:EM_proof}
-Denote $Y$ as observed measurements, $\xi$ as hidden states, and $\theta$ as parameters to be estimated. We want to optimize:
+The overall expression of $l_d(Y_T)$ is:
+\begin{align*}
+    logl_d(Y_T) =& Const - \frac{1}{2}\sum_{t=1}^{t_q}\Psi_t - \frac{1}{2}\sum_{t=t_q+1}^{T}(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t) \nonumber \\
+    \Psi_t =& \begin{cases}
+        log|\Upsilon_{\infty,t}| & \Upsilon_{\infty,t} > 0 \\
+        log|\Upsilon_{*,t}| + d_t^{'}\Upsilon_{*,t}^{-1}d_t & \Upsilon_{\infty,t}=0
+    \end{cases} \nonumber
+\end{align*}
+
+Finally, I will briefly discuss marginal likelihood $l_m(Y_T)$. (\cite{francke2010likelihood}) provides an excellent overview of profile likelihood, diffuse likelihood, and marginal likelihood. The primary advantage of using marginal likelihood is its robustness against $H_t$, $F_t$ and $A$ in diffuse Kalman filters being dependent on $\theta$, in which case diffuse likelihood is not appropriate for parameter estimation. In other words, marginal likelihood properly integrates out initial values $\delta$. For example, marginal likelihood returns sensible estimates when we allow the possibility of unit roots (see (\cite{francke2007marginal}) for more details). In addition, (\cite{francke2010likelihood}) shows:
+\begin{align*}
+    l_m(Y_T) &= l_d(Y_T) + \frac{1}{2}log\left| \sum_{t=1}^{T}(Z_t^{'}Z_t) \right| \\
+    Z_t &= H_t\phi_t \\
+    \phi_{t+1} &= F_t\phi_t \\
+    \phi_1 &= A
+\end{align*}
+
+Here I omit the proof as it is straightforward in (\cite{francke2010likelihood}). Instead I will explain two key intermediate steps in their proof. In section 2.3 of (\cite{francke2010likelihood}), the following claim:
+\begin{align*}
+    &(\Omega A,X)^{'}A(A\Omega A)^{-1}A^{'}=(A,0)^{'} \Leftrightarrow (\Omega A,X)^{'}\Omega^{-1}M_{\Omega} = (A,0)^{'} \\
+    \Rightarrow&A(A\Omega A)^{-1}A^{'}=\Omega^{-1}M_{\Omega}
+\end{align*}
+holds because of the uniqueness of the hat matrix in the case of generalized linear regression. 
+
+For the second claim:
+\begin{align*}
+    |\Omega|\cdot|A^{'}A|\cdot|X^{'}X| &= |(A,X)^{'}\Omega(A,X)| \\
+    &=|A^{'}\Omega A|\cdot|X^{'}\Omega X - X^{'}\Omega A(A^{'}\Omega A)^{-1}A^{'}\Omega X|
+\end{align*}
+
+To establish the first equality, note that:
+\begin{align*}
+    |(A,X)^{'}(A,x)| = |A^{'}A|\cdot|X^{'}X|
+\end{align*}
+because $A^{'}X=0$, and we can use the properties of block diagonal matrix. In addition, $(A,X)$ is a square matrix of the same dimension as $\Omega$, so we can write:
+\begin{align*}
+    |(A,X)^{'}(A,X)|\cdot|\Omega| &= |(A,X)^{'}|\cdot|\Omega|\cdot|(A,X)| \\
+    &=|(A,X)^{'}\Omega(A,X)|
+\end{align*}
+
+To establish the second equality, we can simply apply another trick of block matrices described in (\cite{petersen2008matrix}).
+
+\subsection{EM Algorithm Premier:} \label{ap:EM_proof}
+Denote $Y$ as observed measurements, $\xi$ as hidden states, $g(\theta)$ as some function parameterized by $\theta$, and $\theta$ as parameters to be estimated. We want to optimize:
 \begin{align}
-    L(\theta) & = log[P(Y|\theta)] \nonumber \\
-    & = log\left[\frac{P(Y,\xi|\theta)}{P(\xi|Y,\theta)}\right] \nonumber \\
-    & = log[P(Y,\xi|\theta)] - log[P(\xi|Y,\theta)] \label{eq:general_mle}
+    L(\theta) & = log[P(Y|\theta)] + g(\theta) \nonumber \\
+    & = log\left[\frac{P(Y,\xi|\theta)}{P(\xi|Y,\theta)}\right] +g(\theta) \nonumber \\
+    & = log[P(Y,\xi|\theta)] - log[P(\xi|Y,\theta)] +g(\theta) \label{eq:general_mle}
 \end{align}
 
 Take expectation of equation (\ref{eq:general_mle}) wrt. some distribution of $\xi$ with pdf $f(\xi)$ and get:
 
 \begin{align}
-    L(\theta) = & \int f(\xi)log[P(Y,\xi|\theta)]d\xi \nonumber \\
+    L(\theta) = & \int f(\xi)log[P(Y,\xi|\theta)]d\xi + g(\theta) \nonumber \\
     & - \int f(\xi)log[P(\xi|Y,\theta)]d\xi \nonumber
 \end{align}
-To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) maximized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
+To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) minimized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
 \begin{align}
-    Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi \label{eq:Q}
+    Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi + g(\theta) \label{eq:Q}
 \end{align}
 then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
 
-\section{Derivation of Log-likelihood for $\Xi_T$} \label{ap:log}
-If $t>1$, recall that $\delta_t \equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1}$. Expanding the expectation terms in equation (\ref{eq:log1_trace}), and denoting $\Theta \equiv (Y_T,X_T, \theta_i)$, we have:
-\begin{align*}
-    E(\delta_t\delta_t^{'}|\Theta) &= E[(\xi_t-F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1}) 
-    (\xi_t-F_{t-1}\xi_{t-1}-B_{t-1}x_{t-1})^{'}|\Theta] \\
-    &= E(\xi_t\xi_t^{'}|\Theta) - F_{t-1}E(\xi_{t-1}\xi_{t}^{'}|\Theta) - B_{t-1}x_{t-1}E(\xi_t^{'}|\Theta) \\
-    &- E(\xi_t\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'}
-    +B_{t-1}x_{t-1}E(\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} \\
-    &- E(\xi_t|\Theta)x_{t-1}^{'}B_{t-1}^{'} + F_{t-1}E(\xi_{t-1}|\Theta)x_{t-1}^{'}B_{t-1}^{'}
-    +B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'}
-\end{align*}
-We already derive expression for $E(\xi_t|\Theta)$ in equation (\ref{eq:filter_begin}). In addition, we need to calculate $E(\xi_t\xi_t^{'}|\Theta)$ and $E(\xi_t\xi_{t-1}^{'}|\Theta)$. $E(\xi_t\xi_t^{'}|\Theta)$ is easy to  get:
-\begin{align*}
-    E(\xi_t\xi_t^{'}|\Theta) & = E(\xi_t|\Theta)E(\xi_t^{'}|\Theta) + Var(\xi_t|\Theta) \\
-    &= \hat{\xi}_{t|T}(\hat{\xi}_{t|T})^{'} + P_{t|T}
-\end{align*}
-To find $E(\xi_t\xi_{t-1}^{'}|\Theta)$, consider the following\footnote{This derivation adapts the general strategy in deriving $\hat{\xi}_{t|T}$ in Chapter 13 of (\cite{hamilton_1994}).}:
+\subsection{Derivation of Log-likelihood for $G(\theta,\theta_i)$} \label{ap:log}
+From section \ref{subsec:EM} we know that:
+\[
+    G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
+\]
+Since the second term does not depend on $\theta_i$, here we only discuss the first term. 
+
+By Markov property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
 \begin{align}
-    E(\xi_t\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) &= \xi_tE(\xi_{t-1}^{'}|\xi_t,y_{t-1},X_T,\theta_i) \nonumber \\
-    &= \xi_t(\hat{\xi}_{t-1,t-1})^{'} + \xi_t\xi_t^{'}J_{t-1}^{'} - \xi_{t}(\hat{\xi}_{t|t-1})^{'}J_{t-1}^{'} \label{eq:xi_t|t-1}
+    log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] 
+    + \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)] \nonumber \\
+    &= log[\mathbb{P}(\xi_1|\theta)] + \sum_{t=2}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] \nonumber \\ 
+    &+ \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)]\label{eq:log}
 \end{align}
 
-\section{Derivation of Log-likelihood for $Y_T$} \label{ap:log2}
-Recall that $\chi_t \equiv y_t - H_t\xi_t - D_tx_t$. Expanding the expectation terms in equation (\ref{eq:log2_trace}), and denoting $\Theta \equiv (Y_T,X_T,\theta_i)$, we have:
+I define $G_1^{t}(\theta,\theta_i)$, $G_2^{t}(\theta,\theta_i)$, and $G_0(\theta,\theta_i)$ as:
+\begin{align}
+    G_1^{t}(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i})d\Xi_T \nonumber \\
+    &= const -\frac{1}{2}log(|Q_{t-1}|)-\frac{1}{2}Tr[E(Q_{t-1}^{-1}\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i})] \nonumber \\
+    &= const - \frac{1}{2}log(|Q_{t-1}|) - \frac{1}{2}Tr[Q_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i})] \label{eq:log1_trace} \\
+    G_2^t(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t, \theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i})d\Xi_T \nonumber \\
+    &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log2_trace} \\
+    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T, \theta_{i})] - t_qlog(\kappa)\right\} \nonumber \\
+    &=const - \frac{1}{2}log(|P_*|)-\frac{1}{2}Tr(P_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T, \theta_{i})) \\
+    \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1} \nonumber \\
+    \delta_* &\equiv \xi_1 - a \nonumber \\
+    \chi_t &\equiv y_t - H_t\xi_t - D_tx_t \nonumber
+\end{align}
+
+If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} and \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo inverse and the pseudo determinant of $Q_t$.
+
+Denote $\Theta\equiv (Y_T,X_T,\theta)$, I now derive expressions for $E(\delta_t\delta_t^{'}|\Theta)$, $E(\chi_t\chi_t^{'})|\Theta)$, and $E(\delta_*\delta_*^{'}|\Theta)$. Following (\cite{koopman1992exact}), we have:
+\begin{align}
+    E(\delta_t\delta_t^{'}|\Theta) =& E(\xi_t\xi_t^{'}|\Theta) - \langle F_{t-1}E(\xi_{t-1}\xi_t^{'}|\Theta)\rangle 
+        - \langle B_{t-1}x_{t-1}[E(\xi_t|\Theta) - F_{t-1}E(\xi_{t-1}|\Theta)]^{'}\rangle \nonumber \\
+        &+F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'} \label{eq:delta_t} \\
+    E(\chi_t\chi_t^{'}|\Theta) =& (y_t-D_tx_t)(y_t-D_tx_t)^{'}-\langle H_t\hat{\xi}_{t|T}(y_t-D_tx_t)^{'}\rangle + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'} \label{eq:chi_t} \\ 
+    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{t|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
+    E(\xi_t\xi_t^{'}|\Theta) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
+    E(\xi_{t-1}\xi_t^{'}|\Theta) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
+\end{align}
+
+Now $G(\theta,\theta_{i})$ is:
 \begin{align*}
-    E(\chi_t\chi_t^{'}|\Theta) &= E[(y_t - H_t\xi_t - D_tx_t)(y_t - H_t\xi_t - D_tx_t)^{'}|\Theta] \\
-    &= (y_t-D_tx_t)(y_t-D_tx_t)^{'} - H_tE(\xi_t|\Theta)(y_t-D_tx_t)^{'} \\
-    &-(y_t-D_tx_t)E(\xi_t^{'}|\Theta)H_t^{'} + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'}
+    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i})
 \end{align*}
-Now look at equation (\ref{eq:log2_trace}) again. Let $M_t$ be:
-\begin{align*}
-    M_t \equiv Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] 
-\end{align*}
-If $y_t$ has no missing measurements, it is straightforward to calculate $M_t$. If $y_t$ has missing measurements, but $R_t^{-1}$ is diagonal, we can follow (\cite{shumway_stoffer_1982}) and modify $R_t$, $H_t$, $D_t$ and $\chi_t$, which is done in section (\ref{sec:filter}). In fact, we are calculating the marginal distribution of the observed components. 
+
+It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
+
 \end{document}
