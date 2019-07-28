@@ -379,28 +379,11 @@ EM algorithm proceeds as follows:
 \begin{boenumerate}
     \item Start with initial parameter value $\theta_0$
     \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
-    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$    
+    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specifed in Appendix \ref{ap:log}.  
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal.
 \end{boenumerate}
 
-Next, I provide the formula for $G(\theta,\theta_i)$. From Appendix \ref{ap:log}, we can express $G(\theta,\theta_i)$ as:
-
-
-
-
-
-
-
-
-
-
-
-
-% Likelihood
-% 3) follow socre to rewrite EM part
-% 4) provide formula in proof
-% 5) provide formula for univariate case
-% 6) clean up proof section
+\section{\texttt{linkalman}} \label{sec:codebase}
 
 % codebase
 % design
@@ -438,8 +421,6 @@ Next, I provide the formula for $G(\theta,\theta_i)$. From Appendix \ref{ap:log}
 
 
 
-
-\section{\texttt{linkalman}} \label{sec:codebase}
 
 \section{Application} \label{sec:apply}
 In this section, I use the Kalman Filter to solve a complex time series problem from (\cite{brodersen_etal_2015}) (with some modification). Consider the following time series: 
