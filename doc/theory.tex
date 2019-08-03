@@ -272,16 +272,16 @@ To perform backwards smoothing, we can simply start at time $T$ with $r_T=0$ and
 \subsection{Rounding Errors and Nearest PSD}
 Note that for Kalman Smoother, we don't have Joseph Form formulation, and therefore we may still get non-PSD covariance matrix and cause the smoother to fail. By construction, I guarantee symmetry of covariance matrices. Therefore, we may check PSD using Cholesky Decomposition, which is efficient under symmetry conditions.
 
-If a covariance matrix $A$ is not PSD, we can use the nearest PSD matrix with the techniques developed by (\cite{higham_1988}). Omitting technical details, it amounts to replacing $A$ with $\bar{A}$, where $\bar{A}$ is be calculated as:
+If a covariance matrix $C$ is not PSD, we can use the nearest PSD matrix with the techniques developed by (\cite{higham_1988}). Omitting technical details, it amounts to replacing $C$ with $\bar{C}$, where $\bar{A}$ is be calculated as:
 \begin{align*}
-    A &= USV^{'} \\
+    C &= USV^{'} \\
     \Sigma &= VSV^{'} \\
-    \bar{A} &= \frac{\Sigma + \Sigma^{'} + A + A^{'}}{4}
+    \bar{C} &= \frac{\Sigma + \Sigma^{'} + C + C^{'}}{4}
 \end{align*}
-where the first equality is the SVD decomposition of $A$.
+where the first equality is the SVD decomposition of $C$. By construction, $N_{t-1}$ is PSD, then we only need to correct $P_{t|T}$ if necessary. 
 
 \subsection{Diffuse Smoother}
-When initial conditions are unknown, we can use diffuse smoothers. Similar to diffuse filters, we expand $P_{t|t-1}$, $r_{t-1}$, and $N_{t-1}$. Appendix \ref{ap:init_smoother} provide detailed derivation of recursive formula, so here I will just give the result. First of all, I give the expression for $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ as:
+When initial conditions are unknown, we can use diffuse smoothers. Similar to diffuse filters, we expand $P_{t|T}$, $r_{t-1}$, and $N_{t-1}$. Appendix \ref{ap:init_smoother} provide detailed derivation of recursive formula, so here I will just give the result. First of all, I give the expression for $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ as:
 \begin{align}
     \hat{\xi}_{t|T} =& \hat{\xi}_{t|t-1} + P_{*,t}r_{t-1}^{(0)}+P_{\infty,t}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-1}) \label{eq:diff_xi} \\
     P_{t|T} =& P_{*,t} - \langle P_{\infty,t}N_{t-1}^{(1)}P_{*,t}\rangle - P_{*,t}N_{t-1}^{(0)}P_{*,t} 
@@ -292,7 +292,7 @@ When initial conditions are unknown, we can use diffuse smoothers. Similar to di
 
 Now we need to compute $r_{t-1}$, and $N_{t-1}$. If $\Upsilon_{\infty,t}\neq 0$, we use:
 \begin{boenumerate}
-    \item Begin with $r_{t}^{(0)}=r_{t_q}$, $r_t^{(1)}=0$, $N_t^{(0)}=N_{t_q}$, and $N_t^{(1)}=N_{t}^{(2)}=0$ at $t=t_q$
+    \item Begin with $r_{t_q}^{(0)}=r_{t_q}$, $r_{t_q}^{(1)}=0$, $N_{t_q}^{(0)}=N_{t_q}$, and $N_{t_q}^{(1)}=N_{t_q}^{(2)}=0$
     \item Use equation (\ref{eq:r_inf_start}) through (\ref{eq:r_inf_end}) to compute expansions of $r_{t-1}$
     \item Use equation (\ref{eq:N_inf_start}) through (\ref{eq:N_inf_end}) to compute expansions of $N_{t-1}$
 \end{boenumerate}
@@ -306,40 +306,59 @@ If $\Upsilon_{\infty,t}=0$, we instead use\footnote{Note that we do not have to 
 We can then calculate $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ through equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). 
 
 \subsection{Sequential Smoother}
-As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive and subject to failure due to rounding errors. \cite{durbin_koopman_2000} propose sequential smoothing to greatly improved the efficiency and robustness of Kalman Smoothers. The univariate approach in Kalman filter essentially treats observations flowing in one at a time, so we can readily adapt our smoother.
+As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive and subject to failure due to rounding errors. (\cite{durbin_koopman_2000}) proposes sequential smoothing to greatly improved the efficiency and robustness of Kalman Smoothers. The univariate approach in Kalman filter essentially treats observations flowing in one at a time, so we can readily adapt our smoother.
 
-Define $y_{t:(i)}$ as the $i$-th non-missing measurement of $y_t$. To derive the univariate formula for diffuse smoothers, we can treat smoothing between two observations within the same period as if the transition matrix is $F_{t-1}$ between $t-1:(n_t)$ and $t:(1)$, and is an identity matrix if otherwise. In addition, for notational purpose, we can add $r_{t:(0)}$ and $N_{t:(0)}$. It is easy to see $r_{t:(0)}=r_t$, and $N_{t:(0)}=N_t$. For the case $(i)<(n_t)$, if $\Upsilon_{\infty,t:(i+1)}\neq0$, the recursive formula for $r_{t-1}$ and $N_{t-1}$ are:
+Define $y_{t:(i)}$ as the $i$-th non-missing measurement of $y_t$. To derive the univariate formula for diffuse smoothers, we can treat smoothing between two observations within the same period as if the transition matrix is $F_{t-1}$ between $t-1:(n_t)$ and $t:(1)$, and is an identity matrix if otherwise. In addition, for notational purpose, we can add $r_{t:(0)}$ and $N_{t:(0)}$. It is easy to see $r_{t:(0)}=r_t$, and $N_{t:(0)}=N_t$. For the case $(i)\leq(n_t)$, if $\Upsilon_{\infty,t:(i)}\neq0$, the recursive formula for $r_{t-1}$ and $N_{t-1}$ are:
 \begin{align}
-    r_{t:(i)}^{(0)} =& L_{t:(i+1)}^{(0)'}r_{t:(i+1)}^{(0)} \label{eq:diff_uni_start} \\ 
-    r_{t:(i)}^{(1)} =& H_{t:(i+1)}^{'}\left(\frac{d_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}}-K_{t:(i+1)}^{(1)'}r_{t:(i+1)}^{(0)}\right)+L_{t:(i+1)}^{(0)'}r_{t:(i+1)}^{(1)} \\
-    N_{t:(i)}^{(0)} =& L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(0)} \\
-    N_{t:(i)}^{(1)} =& \frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}} + \langle L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(0)}\rangle + L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(1)}L_{t:(i+1)}^{(0)} \\
-    N_{t:(i)}^{(2)} =& -\frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{\Upsilon_{\infty,t:(i+1)}^{-1}\Upsilon_{*,t:(i+1)}\Upsilon_{\infty,t:(i+1)}^{-1}} + \langle L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(1)}L_{t:(i+1)}\rangle \nonumber \\
-    &+L_{t:(i+1)}^{(0)'}N_{t:(i+1)}^{(2)}L_{t:(i+1)}^{(0)} + L_{t:(i+1)}^{(1)'}N_{t:(i+1)}^{(0)}L_{t:(i+1)}^{(1)} \\
-    L_{t:(i+1)}^{(0)} &= 1-K_{t:(i+1)}^{(0)}H_{t:(i+1)}= 1-\frac{P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}H_{t:(i+1)}}{H_{t:(i+1)}P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}} \\
-    L_{t:(i+1)}^{(1)} &= K_{t:(i+1)}^{(1)}H_{t:(i+1)}=-\frac{(P_{*,t:(i+1)}H_{t:(i+1)}^{'}-K_{t:(i+1)}^{(0)}\Upsilon_{*,t:(i+1)})H_{t:(t+1)}}{H_{t:(i+1)}P_{\infty,t:(i+1)}H_{t:(i+1)}^{'}}
+    r_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}r_{t:(i)}^{(0)} \label{eq:diff_uni_start} \\ 
+    r_{t:(i-1)}^{(1)} =& H_{t:(i)}^{'}\left(\frac{d_{t:(i)}}{\Upsilon_{\infty,t:(i)}}-K_{t:(i)}^{(1)'}r_{t:(i)}^{(0)}\right)+L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \\
+    N_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)} \\
+    N_{t:(i-1)}^{(1)} =& \frac{H_{t:(i)}^{'}H_{t:(i)}}{\Upsilon_{\infty,t:(i)}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)}\rangle + L_{t:(i)}^{(0)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(0)} \\
+    N_{t:(i-1)}^{(2)} =& -\frac{H_{t:(i)}^{'}H_{t:(i)}\Upsilon_{*,t:(i)}}{\Upsilon_{\infty,t:(i)}^{2}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(1)}L_{t:(i)}\rangle \nonumber \\
+    &+L_{t:(i)}^{(0)'}N_{t:(i)}^{(2)}L_{t:(i)}^{(0)} + L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(1)} \\
+    L_{t:(i)}^{(0)} &= 1-K_{t:(i)}^{(0)}H_{t:(i)}= 1-\frac{P_{\infty,t:(i)}H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}} \\
+    L_{t:(i)}^{(1)} &= K_{t:(i)}^{(1)}H_{t:(i)}=-\frac{(P_{*,t:(i)}H_{t:(i)}^{'}-K_{t:(i)}^{(0)}\Upsilon_{*,t:(i)})H_{t:(t)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}}
 \end{align}
 
-Similarly, if $\Upsilon_{\infty,t:(i+1)}=0$, the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ are:
+Similarly, if $\Upsilon_{\infty,t:(i)}=0$, the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ are:
 \begin{align}
-    r_{t:(i)}^{(0)} &= \frac{H_{t:(i+1)}^{'}d_{t:(i+1)}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}} + (I-K_{t:(i+1)}^{(*)}H_{t:(i+1)})^{'}r_{t:(i+1)}^{(0)} \\
-    r_{t:(i)}^{(1)} &= r_{t:(i+1)}^{(1)} \\ 
-    N_{t:(i)}^{(0)} &= \frac{H_{t:(i+1)}^{'}H_{t:(i+1)}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}}+(I-K_{t:(i+1)}^{(*)}H_{t:(i+1)})^{'}N_{t:(i+1)}^{(0)}(1-K_{t:(i+1)}^{(*)}H_{t:(i+1)}) \\
-    N_{t:(i)}^{(1)} &= N_{t:(i+1)}^{(1)}(1-K_{t:(i+1)}^{(*)}H_{t:(i+1)}) \\
-    N_{t:(i)}^{(2)} &= N_{t:(i+1)}^{(2)} \\
-    K_{t:(i+1)}^{(*)} &= \frac{P_{*,t:(i+1)}H_{t:(i+1)}^{'}}{H_{t:(i+1)}P_{*,t:(i+1)}H_{t:(i+1)}^{'}+R_{t:(i+1)}}
+    r_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}d_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}} + (I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}r_{t:(i)}^{(0)} \\
+    r_{t:(i-1)}^{(1)} &= r_{t:(i)}^{(1)} \\ 
+    N_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}}+(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(0)}(1-K_{t:(i)}^{(*)}H_{t:(i)}) \\
+    N_{t:(i-1)}^{(1)} &= (1-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(1)}(1-K_{t:(i)}^{(*)}H_{t:(i)}) \\
+    N_{t:(i-1)}^{(2)} &= N_{t:(i)}^{(2)} \\
+    K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}}
 \end{align}
 
-For the case $(i)=(n_t)$, then the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ become:
+For the case $(i)=(0)$, then the recursive formula for $r_{t-1:(n_{t-1})}$ and $N_{t-1:(n_{t-1})}$ become:
 \begin{align}
-    r_{t:(n_{t})}^{(0)} &= F_{t}^{'}r_{t+1:(0)}^{(0)} \\
-    r_{t:(n_t)}^{(1)} &= F_{t}^{'}r_{t+1:(0)}^{(1)} \\
-    N_{t:(n_t)}^{(0)} &= F_{t}^{'}N_{t+1:(0)}^{(0)}F_{t} \\
-    N_{t:(n_t)}^{(1)} &= F_{t}^{'}N_{t+1:(0)}^{(1)}F_{t} \\
-    N_{t:(n_t)}^{(2)} &= F_{t}^{'}N_{t+1:(0)}^{(2)}F_{t} \label{eq:diff_uni_end}
+    r_{t-1:(n_{t-1})}^{(0)} &= F_{t-1}^{'}r_{t:(0)}^{(0)} \\
+    r_{t-1:(n_{t-1})}^{(1)} &= F_{t-1}^{'}r_{t:(0)}^{(1)} \\
+    N_{t-1:(n_{t-1})}^{(0)} &= F_{t-1}^{'}N_{t:(0)}^{(0)}F_{t-1} \\
+    N_{t-1:(n_{t-1})}^{(1)} &= F_{t-1}^{'}N_{t:(0)}^{(1)}F_{t-1} \\
+    N_{t-1:(n_{t-1})}^{(2)} &= F_{t-1}^{'}N_{t:(0)}^{(2)}F_{t-1} \label{eq:diff_uni_end}
 \end{align}
 
-Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). 
+Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). In particular, computing $P_{t,t+1|T}$ with fully missing measurements over some periods is tricky. Assume we have no measurements between time $t$ and $j$. The expression for $P_{t:(n_t),j:(1)|T}$ is: 
+\begin{align*}
+    P_{t:(n_t),j:(1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}\prod_{i=t}^{j-1}F_i^{'}(1-N_{j:(0)}P_{j:(1)})  
+\end{align*}
+
+Define $J_{t:(i)}$ as
+\begin{align*}
+    J_{t:(i)} &\equiv \begin{cases}
+        1-N_{t:(i-1)}P_{t:(i)}\ & \  i\leq n_t \\
+        F_{t}^{'}J_{t+1:(1)}\ & \ i=n_{t}+1 
+    \end{cases}
+\end{align*}
+
+Then we have a more convenient recursive formula for $P_{t,t+1|T}$ as:
+\begin{align}
+    P_{t:(i),(i+1)|T} &= P_{t:(i)}(1-K_{t:(i)}H_{t:(i)})^{'}J_{t:(i+1)} \label{eq:cov_recur_begin} \\
+    P_{t:(n_t),(n_t+1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}J_{t:(n_t+1)} \label{eq:cov_recur_end}
+\end{align}
+
+If we are working with diffuse smoothers, we can use the diffuse version of equations (\ref{eq:cov_recur_begin}) and (\ref{eq:cov_recur_end}) to compute covariance matrices. 
 
 \section{Parameter Estimation} \label{sec:param}
 Up to this point, we have assumed that system matrices of a HMM is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
@@ -357,7 +376,7 @@ This section follows closely (\cite{durbin_koopman_2001}) with marginal likeliho
     \phi_1 &= A \nonumber
 \end{align}
 
-The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces matrices related to $Y_T$ with their counterpart expressions in the univariate case. The formular is omitted here.
+The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces matrices related to $Y_T$ with their counterpart expressions in the univariate case. The formula is omitted here.
 
 Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt}.
 
@@ -373,7 +392,7 @@ Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing:
 \begin{align*}
     G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \end{align*}
-Denote $G(\theta,\theta_1)$ as: 
+Denote $G(\theta,\theta_i)$ as: 
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
@@ -381,13 +400,14 @@ EM algorithm proceeds as follows:
 \begin{boenumerate}
     \item Start with initial parameter value $\theta_0$
     \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
-    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specifed in Appendix \ref{ap:log}.  
-    \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal.
+    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in Appendix \ref{ap:log} 
+    \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal
 \end{boenumerate}
+
+In practice, I use EM algorithm to cold start the optimization, then use numerical optimization to refine the result.
 
 \section{\texttt{linkalman}} \label{sec:codebase}
 
-% check smoother formula with complete misisng period
 % codebase
 % design
 % modular
@@ -766,9 +786,9 @@ First of all, to simplify notations, I define:
 \end{align*}
 where $f(t,j)$ is a mapping indexed by $(t,j)$. To find the representation of $P_{t,j|T}$, note that:
 \begin{align*}
-    P_{t,j|T} &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})] - E[\hat{\xi}_{t|T}(\xi_j-\hat{\xi}_{j|T})] \\
-     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})] - E[\hat{\xi}_{t|T}E(\xi_j-\hat{\xi}_{j|T})] \\
-     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})]
+    P_{t,j|T} &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})^{'}] - E[\hat{\xi}_{t|T}(\xi_j-\hat{\xi}_{j|T})^{'}] \\
+     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})^{'}] - \hat{\xi}_{t|T}E(\xi_j-\hat{\xi}_{j|T})^{'} \\
+     &= E[\xi_t(\xi_j-\hat{\xi}_{j|T})^{'}]
 \end{align*}
 
 Recall that $\xi_t-\hat{\xi}_{t|T} = \xi_t - \hat{\xi}_{t|t-1} - P_{t|t-1}r_{t-1}$, then:
@@ -814,7 +834,7 @@ Following the practice in deriving diffuse Kalman filters, we can write $r_{t-1}
     N_{t-1} &= N_{t-1}^{(0)} + \kappa^{-1}N_{t-1}^{(1)} + \kappa^{-2}N_{t-1}^{(2)} + \mathcal{O}(\kappa^{-3})
 \end{align*}
 
-To compute $\hat{\xi}_{t|T}$, note that $Var(\xi_t|Y_{t_q},X_T;\theta)<\infty$ by definition of $t_q$. If we conditioned on $Y_t$, we have $Var(\xi_t|Y_T,X_T;\theta)<\infty$, which means $\hat{\xi}_{t|T}<\infty$. We have:
+To compute $\hat{\xi}_{t|T}$ for $t<t_q$, note that $Var(\xi_t|Y_{t_q},X_T;\theta)<\infty$ by definition of $t_q$. If we conditioned on $Y_t$, we have $Var(\xi_t|Y_T,X_T;\theta)<\infty$, which means $\hat{\xi}_{t|T}<\infty$. We have:
 \begin{align*}
     \hat{\xi}_{t|T} &= \hat{\xi}_{t|t-1} + P_{t|t-1}r_{t-1} \\
     &= \hat{\xi}_{t|t-1} + \kappa P_{\infty,t}r_{t-1}^{(0)}+P_{*,t}r_{t-1}^{(0)}+P_{\infty,t}r_{t-1}^{(1)}+\mathcal{O}(\kappa^{-1}) \\
@@ -863,8 +883,15 @@ by the fact that $P_{t|T}P_{t+1|T}-P_{t,t+1|T}P_{t,t+1|T}^{'}$ is PSD and that $
     &- P_{\infty,t}L_t^{(0)'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1})
 \end{align*}
 
+If $\Upsilon_{\infty,t}=0$, $P_{t,t+1|T}$ becomes:
+\begin{align*}
+    P_{t,t+1|T} =& P_{*,t}L_t^{(0)'}(I-N_t^{(1)}P_{\infty,t+1}-N_t^{(0)}P_{*,t+1}) \\
+    &- P_{\infty,t}F_t^{'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1})
+\end{align*}
+
+
 \subsubsection{Recursive Formula for $r_{t-1}$ and $N_{t-1}$} \label{ap:r_N}
-Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$. The derivation follows closely \cite{durbin_koopman_2003} with some additional details. 
+Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$. The derivation follows closely (\cite{durbin_koopman_2003}) with some additional details. 
 
 First of all, consider $r_{t-1}$:
 \begin{align*}
@@ -952,7 +979,6 @@ To compute $N_{t-1}$, note that we do not have expressions for $K_t^{(2)}$, but 
 \end{align}
 
 Now consider the case where $\Upsilon_{\infty,t}=0$. Write $r_t$ as:
-
 \begin{align*}
     r_{t-1} =& H_t^{'}\Upsilon_t^{-1}d_t + L_t^{'}r_t \\
     =& H_t^{'}(\Upsilon_{*,t}^{-1}+\kappa^{-1}\Upsilon_t^{(1)})d_t \\
@@ -993,11 +1019,11 @@ After some algebra, we have:
 By similar argument, we can simplify the recursive formula for $N_{t-1}$ as: 
 \begin{align}
     N_{t-1}^{(0)} &= H_t^{'}\Upsilon_{*,t}^{-1}H_t+(I-K_t^{(*)}H_t)^{'}F_t^{'}N_t^{(0)}F_t(I-K_t^{(*)}H_t) \label{eq:N_0_start} \\
-    N_{t-1}^{(1)} &= F_t^{'}N_t^{(1)}F_t(I-K_t^{(*)}H_t) \\
+    N_{t-1}^{(1)} &= (I-K_t^{(*)}H_t)^{'}F_t^{'}N_t^{(1)}F_t(I-K_t^{(*)}H_t) \\
     N_{t-1}^{(2)} &= F_t^{'}N_t^{(2)}F_t \label{eq:N_0_end}
 \end{align}
 
-Note that since recursion for $N_{t-1}^{(2)}$ involves $N_{t-1}^{(1)}$ as well, we need to make sure dropping terms in $N_{t-1}^{(1)}$ does not affect recursion for $N_{t-1}^{(2)}$. 
+Here I use a less simplified expressions for $N_{t-1}^{(1)}$ than provided in (\cite{durbin_koopman_2003}) to maintain numerical PSD of $N_{t-1}^{(1)}$. It is important to keep in mind that recursion for $N_{t-1}^{(2)}$ involves $N_{t-1}^{(1)}$ as well, we need to make sure dropping terms in $N_{t-1}^{(1)}$ does not affect recursion for $N_{t-1}^{(2)}$. 
 
 \section{Parameter Estimation}
 \subsection{Derivation of Marginal Likelihood} \label{ap:NL}
@@ -1065,7 +1091,7 @@ For the second claim:
 
 To establish the first equality, note that:
 \begin{align*}
-    |(A,X)^{'}(A,x)| = |A^{'}A|\cdot|X^{'}X|
+    |(A,X)^{'}(A,X)| = |A^{'}A|\cdot|X^{'}X|
 \end{align*}
 because $A^{'}X=0$, and we can use the properties of block diagonal matrix. In addition, $(A,X)$ is a square matrix of the same dimension as $\Omega$, so we can write:
 \begin{align*}
@@ -1084,11 +1110,11 @@ Denote $Y$ as observed measurements, $\xi$ as hidden states, $g(\theta)$ as some
 \end{align}
 
 Take expectation of equation (\ref{eq:general_mle}) wrt. some distribution of $\xi$ with pdf $f(\xi)$ and get:
-
 \begin{align}
     L(\theta) = & \int f(\xi)log[P(Y,\xi|\theta)]d\xi + g(\theta) \nonumber \\
     & - \int f(\xi)log[P(\xi|Y,\theta)]d\xi \nonumber
 \end{align}
+
 To optimize $L(\theta)$ we can iterate through the E steps and M steps to achieve a local maximum. By Jensen's inequality, we have the second term in equation (\ref{eq:general_mle}) minimized when $f(\xi)=P(\xi|Y,\theta)$ (E-step). If we define:
 \begin{align}
     Q(\theta) = \int log[P(Y,\xi|\theta)]f(\xi|Y,\theta)d\xi + g(\theta) \label{eq:Q}
@@ -1100,25 +1126,26 @@ From section \ref{subsec:EM} we know that:
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
+
 Since the second term does not depend on $\theta_i$, here we only discuss the first term. 
 
 By Markov property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
 \begin{align}
-    log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] 
-    + \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)] \nonumber \\
-    &= log[\mathbb{P}(\xi_1|\theta)] + \sum_{t=2}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1},\theta)] \nonumber \\ 
-    &+ \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t,\theta)]\label{eq:log}
+    log[\mathbb{P}(Y_T,\Xi_T|X_T;\theta)] &= \sum_{t=1}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1};\theta)] 
+    + \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t;\theta)] \nonumber \\
+    &= log[\mathbb{P}(\xi_1;\theta)] + \sum_{t=2}^{T}log[\mathbb{P}(\xi_t|\xi_{t-1},x_{t-1};\theta)] \nonumber \\ 
+    &+ \sum_{t=1}^{T}log[\mathbb{P}(y_t|\xi_t,x_t;\theta)]\label{eq:log}
 \end{align}
 
 I define $G_1^{t}(\theta,\theta_i)$, $G_2^{t}(\theta,\theta_i)$, and $G_0(\theta,\theta_i)$ as:
 \begin{align}
     G_1^{t}(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i})d\Xi_T \nonumber \\
-    &= const -\frac{1}{2}log(|Q_{t-1}|)-\frac{1}{2}Tr[E(Q_{t-1}^{-1}\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i})] \nonumber \\
-    &= const - \frac{1}{2}log(|Q_{t-1}|) - \frac{1}{2}Tr[Q_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T,\theta_{i})] \label{eq:log1_trace} \\
-    G_2^t(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t, \theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i})d\Xi_T \nonumber \\
-    &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T,\theta_{i-1})] \label{eq:log2_trace} \\
-    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T, \theta_{i})] - t_qlog(\kappa)\right\} \nonumber \\
-    &=const - \frac{1}{2}log(|P_*|)-\frac{1}{2}Tr(P_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T, \theta_{i})) \\
+    &= const -\frac{1}{2}log(|Q_{t-1}|)-\frac{1}{2}Tr[E(Q_{t-1}^{-1}\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \nonumber \\
+    &= const - \frac{1}{2}log(|Q_{t-1}|) - \frac{1}{2}Tr[Q_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log1_trace} \\
+    G_2^t(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t; \theta)]\mathbb{P}(\Xi_T|Y_T,X_T;\theta_{i})d\Xi_T \nonumber \\
+    &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log2_trace} \\
+    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})] - qlog(\kappa)\right\} \nonumber \\
+    &=const - \frac{1}{2}log(|P_*|)-\frac{1}{2}Tr(P_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})) \\
     \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1} \nonumber \\
     \delta_* &\equiv \xi_1 - a \nonumber \\
     \chi_t &\equiv y_t - H_t\xi_t - D_tx_t \nonumber
@@ -1126,7 +1153,7 @@ I define $G_1^{t}(\theta,\theta_i)$, $G_2^{t}(\theta,\theta_i)$, and $G_0(\theta
 
 If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} and \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo inverse and the pseudo determinant of $Q_t$.
 
-Denote $\Theta\equiv (Y_T,X_T,\theta)$, I now derive expressions for $E(\delta_t\delta_t^{'}|\Theta)$, $E(\chi_t\chi_t^{'})|\Theta)$, and $E(\delta_*\delta_*^{'}|\Theta)$. Following (\cite{koopman1992exact}), we have:
+Denote $\Theta\equiv (Y_T,X_T;\theta)$, I now derive expressions for $E(\delta_t\delta_t^{'}|\Theta)$, $E(\chi_t\chi_t^{'})|\Theta)$, and $E(\delta_*\delta_*^{'}|\Theta)$. Following (\cite{koopman1992exact}), we have:
 \begin{align}
     E(\delta_t\delta_t^{'}|\Theta) =& E(\xi_t\xi_t^{'}|\Theta) - \langle F_{t-1}E(\xi_{t-1}\xi_t^{'}|\Theta)\rangle 
         - \langle B_{t-1}x_{t-1}[E(\xi_t|\Theta) - F_{t-1}E(\xi_{t-1}|\Theta)]^{'}\rangle \nonumber \\
@@ -1143,5 +1170,7 @@ Now $G(\theta,\theta_{i})$ is:
 \end{align*}
 
 It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
+
+For the univariate case with fully missing measurements for some periods, $G_1^t(\theta,\theta_i)$ is updated differently. Note that $Q_{t:(i)}$ are essentially $0$ for $i\leq n_t$, so we only calculate $G_1^{t:(1)}$ with [$t:(1)$] and [$t-1:(n_{t-1}+1)$] in place of $t$ and $t-1$. In addition, we should not skip any $t$ even if there are no measurements, otherwise we need to redefine $Q_t-1$ and $\delta_t$ accordingly. 
 
 \end{document}
