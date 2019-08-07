@@ -144,7 +144,7 @@ Here I focus on the univariate measurement case, because it is less complex and 
 When $\hat{q}_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. This formulation guarantees degeneration to regular Kalman filters.
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
-So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) section 6.4 and \cite{durbin_koopman_2000} for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. In addition, univariate treatment of Kalman filters allows clean formulation with diffuse priors. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
+So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) Section 6.4 and \cite{durbin_koopman_2000} for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. In addition, univariate treatment of Kalman filters allows clean formulation with diffuse priors. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
 
 Denote $y_{t:(i)}$ as the $i$-th observed measurement at time $t$, then $y_{t:(1)}$ is the first non-missing univariate measurement at time $t$. Let $(n_t)$ as the index for the last non-missing univatriate measurement at time $t$. Define $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ as the state estimates after updating univariate measurement $(i)$ at time $t$:
 \begin{align*}
@@ -252,7 +252,7 @@ Using $\{r_t\}_{1,...,T}$ and $\{N_t\}_{1,...,T}$, we have the iterative formula
     P_{t|T} &= P_{t|t-1}- P_{t|t-1}N_{t-1}P_{t|t-1} \label{eq:smooth_P2}
 \end{align}
 
-As we will see in section \ref{subsec:EM} and Appendix \ref{ap:log}, we also need to calculate covariance matrices of smoothed estimators. Define $P_{t,s|n}$ as:
+As we will see in Section \ref{subsec:EM} and Appendix \ref{ap:log}, we also need to calculate covariance matrices of smoothed estimators. Define $P_{t,s|n}$ as:
 \begin{align*}
     P_{t,s|n}\equiv Cov(\xi_t,\xi_{s}|Y_n,X_T;\theta)
 \end{align*}
@@ -413,26 +413,6 @@ In practice, I use EM algorithm to cold start the optimization, then use numeric
 % modular
 % plug in optimizer
 
-% example
-% two example:
-% 1) unit root 
-% 2) complete time series model
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -446,46 +426,80 @@ In practice, I use EM algorithm to cold start the optimization, then use numeric
 
 
 \section{Application} \label{sec:apply}
-In this section, I use the Kalman Filter to solve a complex time series problem from (\cite{brodersen_etal_2015}) (with some modification). Consider the following time series: 
+In this section, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
 \begin{align}
-    g_t &= \mu_t + \gamma_t + D_1x_t + w_{g,t} \label{eq:ts_setup} \\
-    e_t &= \pi(\mu_t + \gamma_t) + D_2x_t + w_{e_t}
+    \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}
 \end{align}
-In equation (\ref{eq:ts_setup}), $g_t$ is the daily S\&P index, and $e_t$ is gold price index at time $t$, both of wich can be viewed as measurements of economic status at time $t$. We consider $g_t$ as the unbised measurement of $(\mu_t+\gamma_t)$, and $e_t$ is a biased measurement. $x_t$ includes $1$ as well as whether it is a holidy at time $t$. $\mu_t$ is the trend component, and $gamma_t$ is the seasonal component. $\mu_t$ has the following specification:
-\begin{align}
-    &\mu_{t+1} = \mu_{t} + \delta_t + \eta_{\mu,t+1} \\
-    &\delta_{t+1} = \Delta_{\delta} + \rho_{\delta}(\delta_t - \Delta_{\delta}) + \eta_{\delta,t+1} 
-\end{align}
-where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$. $\delta_t$ is interpreted as the slop of the trend and is assumed to be an AR(1) variation around a long-term slope of $\Delta_{\delta}$. $\gamma_t$ has the following specification:
-\begin{align}
-    \sum_{j=0}^6\gamma_{t-j} &= \eta_{\gamma,t}
-\end{align}
-where $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$. We further assume that $\eta_{\mu,t},\eta_{\delta,t},\eta_{\gamma,t}$ are mutually independent. 
+where $\varepsilon_t\sim\mathcal{N}(0,\sigma_{\varepsilon}^2)$. The state variable $\alpha_t$ is the latent state variable of interest. For example, $\alpha_t$ may be the economic vitality. I assume that $\alpha_t$ can be additively decomposed into five components: the local linear trend component ($\mu_t$), the seasonal component ($\gamma_t$), and the cyclical component ($\psi_t$). In what follows, I define each of the three components:
 
-To fit the LDS model Kalman Filter, we rewrite it as:
+First, consider $\mu_t$:
+\begin{align}
+    \mu_{t+1} &= \mu_t+Bx_{t,1}+\delta_t+\eta_{\mu,t} \label{eq:trend_start} \\
+    x_{t,1} &= \mathbbm{1}_{t=t^{*}} \\
+    \delta_{t+1} &= \Delta_{\delta} + \rho_{\delta}(\delta_t-\Delta_{\delta}) + \eta_{\delta,t} \label{eq:trend_end} 
+\end{align}
+where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$. Equation (\ref{eq:trend_start}) through (\ref{eq:trend_end}) define a generalized local linear trend model with stationary slope\footnote{See (\cite{brodersen_etal_2015}) for details.} and permanent intervention effect (e.g. technology breakthrough at time $t^*)$. Here, the slope of the time trend has AR(1) variation around long-term slop of $\Delta_{\delta}$ with $|\rho_{\delta}|<1$. 
+
+Next, consider $\gamma_t$:
+\begin{align}
+    \gamma_{t+1}&= -\sum_{j=0}^{5}\gamma_{t-j} + \eta_{\gamma,t} \label{eq:season}
+\end{align}
+where $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$. Equation (\ref{eq:season}) models weekly effects, where the sum of the weekly effects is a white noise\footnote{The sum should be a stationary process, otherwise we don't identification.}.
+
+Finally, $\psi_t$ is defined as\footnote{For details, refer to (\cite{harvey_1985}) and (\cite{harvey2007trends}).}:
+\begin{align}
+    \begin{pmatrix}
+        \psi_{t+1} \\
+        \psi_{t+1}^{*}
+    \end{pmatrix}
+    =\rho\begin{pmatrix}
+        \cos(\lambda) & \sin(\lambda) \\
+        -\sin(\lambda) & \cos(\lambda)
+    \end{pmatrix}
+    \begin{pmatrix}
+        \psi_{t} \\
+        \psi_{t}^{*}
+    \end{pmatrix}
+    +\begin{pmatrix}
+        \eta_{\psi,t} \\
+        \eta_{\psi,t}^{*}
+    \end{pmatrix} \label{eq:cycle}
+\end{align}
+where $\eta_{\psi,t}\sim\mathcal{N}(0,\sigma_{\psi}^2)$, $\eta_{\psi,t}^{*}\sim\mathcal{N}(0,\sigma_{\psi,*}^2)$, and $\psi_{t}^{*}$ is an auxiliary variable. In addition, following the argument by (\cite{harvey_1985}), I impose $\sigma_{\psi}^2=\sigma_{\psi,*}^2$.
+
+Now I specify measurement equations: 
+\begin{align}
+    y_{t,1} &= \alpha_t+D_1x_{t,2}+w_{t,1} \ , \ t\in\{7,14,21,...\} \\
+    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,12,15...\} \label{eq:y2}
+\end{align}
+where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. on weekdays) and complete missing measurements (e.g. on Saturdays). 
+
+To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS framework, I make the following definitions:
 \begin{align*}
-    \xi_t = \begin{pmatrix}
-        \mu_t \\
-        \delta_t \\
+    \xi_{t+1} = \begin{pmatrix}
+        \mu_{t+1} \\
+        \delta_{t+1} \\
+        \gamma_{t+1} \\
         \gamma_t \\
         \gamma_{t-1} \\
         \gamma_{t-2} \\
         \gamma_{t-3} \\
         \gamma_{t-4} \\
-        \gamma_{t-5} \\
-        \gamma_{t-6}
+        \psi_{t+1} \\
+        \psi_{t+1}^{*}
     \end{pmatrix}, 
     &\ 
     F_t = F = \begin{pmatrix}
-        1 & 1  & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & \rho_{\delta}  & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 \\
-        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0
+        1 & 1  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & \rho_{\delta}  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 & 0 \\
+        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \rho \cos(\lambda) & \rho \sin(\lambda) \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & -\rho \sin(\lambda) & \rho \cos(\lambda)
     \end{pmatrix} \\
     v_t = \begin{pmatrix}
         \eta_{\mu,t} \\
@@ -496,57 +510,66 @@ To fit the LDS model Kalman Filter, we rewrite it as:
         0 \\
         0 \\
         0 \\
-        0 \\
-    \end{pmatrix},
-    &\ 
+        \eta_{\psi,t} \\
+        \eta_{\psi,t}^*
+    \end{pmatrix} 
+    , & v_t\sim\mathcal{N}(0,Q),
+    \ 
     B_t = B = \begin{pmatrix}
-        0 & 0 \\
-        (1-\rho_{\delta})\Delta_{\delta} & 0 \\
-        0 & 0 \\
-        0 & 0 \\
-        0 & 0 \\
-        0 & 0 \\
-        0 & 0 \\
-        0 & 0 \\
-        0 & 0 
+        0 & B & 0 \\
+        (1-\rho_{\delta})\Delta_{\delta} & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0
     \end{pmatrix},
     \ 
     x_t = \begin{pmatrix}
         1 \\
-        \mathbbm{1}_{holiday}
+        x_{t,1} \\
+        x_{t,2}
     \end{pmatrix} \\
     y_t = \begin{pmatrix}
-        g_t \\
-        e_t 
+        y_{t,1} \\
+        y_{t,2} 
     \end{pmatrix},
     &\ 
     D_t = D = \begin{pmatrix}
-        0 & h_1 \\
-        a & h_2
+        0 & 0 & D_1 \\
+        d & 0 & D_2
     \end{pmatrix},
     \ 
     w_t = \begin{pmatrix}
-        w_{1,t} \\
-        w_{2,t}
+        w_{t,1} \\
+        w_{t,2}
     \end{pmatrix} 
     , \ w_t\sim\mathcal{N}(0,R) \\
     & H_t = H = \begin{pmatrix}
-        1 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        \pi & \pi & 0 & 0 & 0 & 0 & 0 & 0 & 0
+        1 & 0 &1 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+        \pi & 0 & \pi & 0 & 0 & 0 & 0 & 0 & \pi & 0  
+    \end{pmatrix}
+    \\
+    & Q_t = Q = \begin{pmatrix}
+        \sigma_{\mu}^2 & 0 & 0 & \cdots & \cdots & \cdots & \cdots & 0 \\
+        0 & \sigma_{\delta}^2 & 0 & & & & & \vdots \\
+        0 & 0 & \sigma_{\gamma}^2 & & & & & \vdots \\
+        \vdots & & & 0 & & & & \vdots \\
+        \vdots & & & & \ddots & & & \vdots \\
+        \vdots & & & & & 0 & & \vdots \\
+        \vdots & & & & & & \sigma_{\psi}^2 & 0 \\
+        0 & \cdots & \cdots & \cdots & \cdots & \cdots & 0 & \sigma_{\psi}^2
+    \end{pmatrix}
+    ,\ 
+    R_t = R= \begin{pmatrix}
+        \sigma_{w,1} & \sigma_{w,1,2} \\
+        \sigma_{w,1,2} & \sigma_{w,2}
     \end{pmatrix}
 \end{align*}
-The system paramter is $\theta\equiv(\hat{\xi}_{1,0}, P_{1,0}, \rho_{\delta}, \Delta_{\delta}, Q, R, a, h_1, h_2, \pi)$, where $Q$ takes the form:
-\begin{align*}
-    Q \equiv \begin{pmatrix}
-        \sigma_{\mu}^2 & 0 & 0 & \cdots & \cdots & 0 \\
-        0 & \sigma_{\delta}^2 & 0 & & & \vdots \\
-        0 & 0 & \sigma_{\gamma}^2 & & & \vdots \\
-        \vdots & & & 0 & & \vdots \\
-        \vdots & & & & \ddots & \vdots \\
-        0 & \cdots & \cdots & \cdots & \cdots & 0
-    \end{pmatrix}
-\end{align*}
-We may use the standard EM algorithm to solve $\theta$.
+The system parameters are $\theta\equiv(\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2})$. We may use techniques described in Section \ref{sec:param} to solve $\theta$.
 
 \pagebreak
 \printbibliography
@@ -1076,7 +1099,7 @@ Finally, I will briefly discuss marginal likelihood $l_m(Y_T)$. (\cite{francke20
     \phi_1 &= A
 \end{align*}
 
-Here I omit the proof as it is straightforward in (\cite{francke2010likelihood}). Instead I will explain two key intermediate steps in their proof. In section 2.3 of (\cite{francke2010likelihood}), the following claim:
+Here I omit the proof as it is straightforward in (\cite{francke2010likelihood}). Instead I will explain two key intermediate steps in their proof. In Section 2.3 of (\cite{francke2010likelihood}), the following claim:
 \begin{align*}
     &(\Omega A,X)^{'}A(A\Omega A)^{-1}A^{'}=(A,0)^{'} \Leftrightarrow (\Omega A,X)^{'}\Omega^{-1}M_{\Omega} = (A,0)^{'} \\
     \Rightarrow&A(A\Omega A)^{-1}A^{'}=\Omega^{-1}M_{\Omega}
@@ -1122,7 +1145,7 @@ To optimize $L(\theta)$ we can iterate through the E steps and M steps to achiev
 then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
 
 \subsection{Derivation of Log-likelihood for $G(\theta,\theta_i)$} \label{ap:log}
-From section \ref{subsec:EM} we know that:
+From Section \ref{subsec:EM} we know that:
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
