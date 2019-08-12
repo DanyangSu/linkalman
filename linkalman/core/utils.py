@@ -2,16 +2,25 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 from scipy import linalg
+from scipy.linalg import solve_discrete_lyapunov as lyap
 from typing import List, Any, Callable, Dict, Tuple
 from pandas.api.types import is_numeric_dtype
 from numpy.random import multivariate_normal
 from copy import deepcopy
+import warnings
 
-__all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 
-        'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap']
+__all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col',
+        'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 
+        'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val']
 
 
-def mask_nan(is_nan: np.ndarray, mat: np.ndarray, dim: str='both') -> np.ndarray:
+max_val = 1e10  # detect infinity
+inf_val = 1e100  # value used to indicate infinity
+min_val = 1e-8  # detect 0
+
+
+def mask_nan(is_nan: np.ndarray, mat: np.ndarray, 
+        dim: str='both', diag: float=0) -> np.ndarray:
     """
     Takes the list of NaN indices and mask the ros and columns 
     of a matrix with 0 if index has NaN value.
@@ -28,6 +37,8 @@ def mask_nan(is_nan: np.ndarray, mat: np.ndarray, dim: str='both') -> np.ndarray
     ----------
     mask_nan : indicates if the row and column should be masked
     mat : matrix to be transformed
+    dim : whether zero out column or row or both
+    diag : replace diagonal NaN with other values
 
     Returns:
     ----------
@@ -44,6 +55,13 @@ def mask_nan(is_nan: np.ndarray, mat: np.ndarray, dim: str='both') -> np.ndarray
     # Perform column operation if dim=='col' or 'both' and not a vector
     if dim != 'row' and mat_masked.shape[1] > 1:
         mat_masked[:, is_nan] = 0
+
+    # Replace diagonal values
+    if diag != 0:
+        for i in range(len(is_nan)):
+            if is_nan[i]:
+                mat_masked[i][i] = diag
+
     return mat_masked
 
 
@@ -152,17 +170,21 @@ def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
     return epsilon
 
 
-def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None) -> \
+def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None,
+        xi_1_0: np.ndarray=None, P_1_0:np.ndarray=None) -> \
         Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Generate simulated data from a given HMM system. Xt and T
-    cannot be both set to None.
+    cannot be both set to None. If P_1_0 and xi_1_0  are 
+    not provided, calculate ergodic values from system matrices
 
     Parameters: 
     ----------
     Mt : system matrices
     Xt : input Xt. Optional and can be set to None
-    T : length of the time series.
+    T : length of the time series
+    xi_1_0 : initial mean array
+    P_1_0 : initial covariance matrix
 
     Returns:
     ----------
@@ -170,10 +192,9 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None) -> \
     y_col : column names of y_t
     xi_col : column names of xi_t
     """
-    xi_dim = Mt['xi_1_0'].shape[0]
+    xi_dim = Mt['Ft'][0].shape[0]
     y_dim = Mt['Ht'][0].shape[0]
     x_dim = Mt['Dt'][0].shape[1]
-    Y_t = []
     
     # Set Xt to Constant_M(np.zeros((1, 1))) if set as None
     if Xt is None:
@@ -182,12 +203,18 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None) -> \
         X_t = Constant_M(np.zeros((x_dim, 1)), T)
     else:
         T = Xt.shape[0]
-        X_t = Xt
+        X_t = df_to_list(Xt)
 
-    # Initialize Xi_t
-    Xi_t = [Mt['xi_1_0'] + noise(xi_dim, Mt['P_1_0'])]
+    # Create xi_1_0 and P_1_0
+    if xi_1_0 is None:
+        xi_1_0 = np.zeros([Mt['Ft'][0].shape[1], 1])
+    if P_1_0 is None:
+        P_1_0 = get_ergodic(Mt['Ft'][0], Mt['Qt'][0], Mt['Bt'][0])
+    P_1_0[np.isnan(P_1_0)] = 1  # give an arbitrary value to diffuse priors
+    Xi_t = [xi_1_0 + noise(xi_dim, P_1_0)]
 
     # Iterate through time steps
+    Y_t = []
     for t in range(T):
         # Generate Y_t
         y_t = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
@@ -217,6 +244,7 @@ def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
     Parameters:
     ----------
     theta : parameters used in generating lower triangle matrix
+        Diagonal values are always non-negative
     dim : dimension of the matrix. 
 
     Returns:
@@ -229,11 +257,116 @@ def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
     L = np.zeros([dim, dim])
     idx = np.tril_indices(dim, k=0)
     L[idx] = theta
+    
+    #enforce non-negative diagonal values
+    for i in range(dim):
+        L[i][i] = np.exp(L[i][i])
     PSD = L.dot(L.T)
     return PSD
 
 
-def ft(theta: List[float], f: Callable, T: int) -> Dict:
+def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
+    """
+    Calculate initial state covariance matrix, and identify 
+    diffuse state. It effectively solves a Lyapuov equation
+
+    Parameters:
+    ----------
+    F : state transition matrix
+    Q : initial error covariance matrix
+    B : regression matrix, if not 0, indicating diffuse priors
+
+    Returns:
+    ----------
+    P_0 : the initial state covariance matrix, np.inf for diffuse state
+    """
+    Q_ = deepcopy(Q)
+    dim = Q.shape[0]
+    
+    # Check F and Q
+    if F.shape[0] != F.shape[1]:
+        raise TypeError('F must be a square matrix')
+    if Q.shape[0] != Q.shape[1]:
+        raise TypeError('Q must be a square matrix')
+    if F.shape[0] != Q.shape[0]:
+        raise TypeError('Q and F must be of same size')
+
+    is_diffuse = [False for i in range(dim)]
+    if B is not None:
+
+        # Check B
+        if B.shape[0] != F.shape[0]:
+            raise TypeError('B has wrong sizes')
+        
+        for i in range(dim):
+
+            # If state rely on x_t, it is a diffuse state
+            if np.count_nonzero(B[i]) > 0:
+                is_diffuse[i] = True
+        
+        # Modify Q_ to reflect diffuse states
+        Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
+        
+    # Calculate raw P_0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        P_0 = lyap(F, Q_, 'bilinear')
+
+    # Clean up P_0
+    is_diffuse = [False for i in range(dim)]
+    for i in range(dim):
+        if abs(P_0[i][i]) > max_val:
+            is_diffuse[i] = True
+    P_0 = mask_nan(is_diffuse, P_0, diag=0)
+    
+    # Enforce PSD
+    P_0_PSD = get_nearest_PSD(P_0)
+
+    # Add nan to diffuse diagonal values
+    P_0_PSD += np.diag(np.array([np.nan if i else 0 for i in is_diffuse]))
+    return P_0_PSD
+
+
+def get_nearest_PSD(mat: np.ndarray) -> np.ndarray:
+    """
+    Get the nearest PSD matrix of an input matrix
+
+    Parameters:
+    ----------
+    mat : input matrix to be processed
+
+    Returns:
+    ----------
+    PSD_mat : the nearest PSD matrix
+    """
+    _, S, VT = linalg.svd(mat)
+    Sigma = VT.T.dot(np.diag(S)).dot(VT)
+    PSD_mat = (Sigma + Sigma.T + mat + mat.T) / 4
+    return PSD_mat
+
+
+def clean_matrix(mat: np.ndarray) -> np.ndarray:
+    """
+    Enforce 0 and inf on matrix values.
+    Convert type to flot if int
+
+    Parameters:
+    ----------
+    mat : input matrix to be cleaned
+
+    Returns:
+    ----------
+    cleaned_mat : processed matrix
+    """
+    cleaned_mat = deepcopy(mat).astype(float, copy=True)
+    cleaned_mat[np.abs(cleaned_mat) < min_val] = 0
+    cleaned_mat[np.abs(cleaned_mat) > max_val] = inf_val
+
+    return cleaned_mat
+
+
+def ft(theta: List[float], f: Callable, T: int,
+        xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None) -> Dict:
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
     Output of f(theta) must contain all the required keys.
@@ -242,28 +375,41 @@ def ft(theta: List[float], f: Callable, T: int) -> Dict:
     ----------
     theta : input of f(theta). Underlying paramters to be optimized
     f : obtained from get_f. Mapping theta to M
-    T : length of Mt. "Duplicate" M for T times.
+    T : length of Mt. "Duplicate" M for T times
+    xi_1_0: initial state mean
+    P_1_0: initial state cov
 
     Returns:
     ----------
-    Mt : system matrices to feed into the EM algorithm. Should contain
+    Mt : system matrices for a BSTS. Should contain
         all the required keywords. 
     """ 
     M = f(theta)
 
+    # If a value is close to 0 or inf, set them to 0 or inf
+    # If an array is 1D, convert it to 2D
+    for key in M.keys():
+        if M[key].ndim < 2:
+            M[key] = M[key].reshape(1, -1)
+        M[key] = clean_matrix(M[key])
+    
     # Check validity of M
-    required_keys = set(['F', 'H', 'Q', 'R', 'xi_1_0', 'P_1_0'])
+    required_keys = set(['F', 'H', 'Q', 'R'])
     M_keys = set(M.keys())
     if len(required_keys - M_keys) > 0:
-        raise ValueError('f does not have required outputs: {}'.format(required_keys - M_keys))
+        raise ValueError('f does not have required outputs: {}'.
+            format(required_keys - M_keys))
+
+    # Check dimensions of M
+    for key in M_keys:
+        if len(M[key].shape) < 2:
+            raise TypeError('System matrices must be 2D')
     
     # Generate ft for required keys
     Ft = Constant_M(M['F'], T)
     Ht = Constant_M(M['H'], T)
     Qt = Constant_M(M['Q'], T)
     Rt = Constant_M(M['R'], T)
-    xi_1_0 = M['xi_1_0']
-    P_1_0 = M['P_1_0']
 
     # Set Bt if Bt is not Given
     if 'B' not in M_keys:
@@ -277,19 +423,19 @@ def ft(theta: List[float], f: Callable, T: int) -> Dict:
     Bt = Constant_M(M['B'], T)
     Dt = Constant_M(M['D'], T)
 
-    # Raise exception if xi_1_0 or P_1_0 is not numpy arrays
-    if not isinstance(xi_1_0, np.ndarray):
-        raise TypeError('xi_1_0 must be a numpy array')
-    if not isinstance(P_1_0, np.ndarray):
-        raise TypeError('P_1_0 must be a numpy array')
+    # Initialization
+    if xi_1_0 is None:
+        xi_1_0 = np.zeros([M['F'].shape[0],1])
+    if P_1_0 is None: 
+        P_1_0 = get_ergodic(M['F'], M['Q'], M['B']) 
 
     Mt = {'Ft': Ft, 
             'Bt': Bt, 
             'Ht': Ht, 
             'Dt': Dt, 
             'Qt': Qt, 
-            'Rt': Rt, 
-            'xi_1_0': xi_1_0, 
+            'Rt': Rt,
+            'xi_1_0': xi_1_0,
             'P_1_0': P_1_0}
     return Mt
 
@@ -298,6 +444,7 @@ class M_wrap(Sequence):
     """
     Wraper of array lists. Improve efficiency by skipping 
     repeated calculation when m_list contains same arrays. 
+        raise TypeError('Q must be a square matrix')
     """
 
     def __init__(self, m_list: List[np.ndarray]) -> None:
@@ -450,6 +597,7 @@ class Constant_M(Sequence):
     Mt[2] = np.array([[5, 2], [2, 5]])
     print(Mt[2])  # np.array([[5, 2], [2, 5]])
     print(Mt[1])  # np.array([[5, 3], [3, 4]])
+        raise TypeError('Q must be a square matrix')
     """
 
     def __init__(self, M: np.ndarray, length: int) -> None:

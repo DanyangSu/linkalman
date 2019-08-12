@@ -31,7 +31,7 @@
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a HMM, Section (\ref{sec:codebase}) explains the package design of \texttt{linkalman}, and Section (\ref{sec:apply}) presents applications of Kalman filtering. 
+This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a HMM, Section (\ref{sec:apply}) presents an example of Bayesian Structural Time Series (BSTS) models, and Section (\ref{sec:codebase}) discusses the package design of \texttt{linkalman}.
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -406,25 +406,6 @@ EM algorithm proceeds as follows:
 
 In practice, I use EM algorithm to cold start the optimization, then use numerical optimization to refine the result.
 
-\section{\texttt{linkalman}} \label{sec:codebase}
-
-% codebase
-% design
-% modular
-% plug in optimizer
-
-
-
-
-
-
-
-
-
-
-
-
-
 \section{Application} \label{sec:apply}
 In this section, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
 \begin{align}
@@ -569,7 +550,27 @@ To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS fr
         \sigma_{w,1,2} & \sigma_{w,2}
     \end{pmatrix}
 \end{align*}
-The system parameters are $\theta\equiv(\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2})$. We may use techniques described in Section \ref{sec:param} to solve $\theta$.
+The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
+
+\section{\texttt{linkalman}} \label{sec:codebase}
+
+% codebase
+% design
+% modular
+% plug in optimizer
+% switch section application before codebase
+
+
+
+
+
+
+
+
+
+
+
+
 
 \pagebreak
 \printbibliography

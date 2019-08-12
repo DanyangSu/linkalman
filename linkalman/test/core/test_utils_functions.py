@@ -102,76 +102,30 @@ def test_ft():
     Test regular behavior
     """
     def f(theta):
-        array = np.array([theta[0], theta[1]])
+        array = np.array([[theta[0]]])
         F = B = H = D = Q = R = xi_1_0 = P_1_0 = array
         return {'F': F,
                 'B': B,
                 'H': H,
                 'D': D,
                 'Q': Q,
-                'R': R,
-                'xi_1_0': xi_1_0,
-                'P_1_0': P_1_0}
+                'R': R}
 
-    theta = [2, 3]
+    theta = [0.1]
     T = 2
     Mt = ft(theta, f, T)
-    assert(np.array_equal(Mt['Bt'][1], np.array([theta[0], theta[1]])))
+    assert(np.array_equal(Mt['Bt'][1], np.array([[theta[0]]])))
    
 
 def test_ft_missing_keys():
     """
     Test if raise exception if f(theta) is missing some keys
     """
-    f = lambda theta: {'F': np.array([theta[0], theta[1]])}
+    f = lambda theta: {'F': np.array([[theta[0], theta[1]]])}
     theta = [2, 3]
     T = 2
 
     with pytest.raises(ValueError):
-        Mt = ft(theta, f, T)
-
-
-def test_ft_wrong_type_xi():
-    """
-    Test if raise exception when xi is not arrays
-    """
-    def f(theta):
-        array = np.array([theta[0], theta[1]])
-        F = B = H = D = Q = R = xi_1_0 = P_1_0 = array
-        return {'F': F,
-                'B': B,
-                'H': H,
-                'D': D,
-                'Q': Q,
-                'R': R,
-                'xi_1_0': 1,
-                'P_1_0': P_1_0}
-
-    theta = [2, 3]
-    T = 2
-    with pytest.raises(TypeError):
-        Mt = ft(theta, f, T)
-
-
-def test_ft_wrong_type_P():
-    """
-    Test if raise exception when xi is not arrays
-    """
-    def f(theta):
-        array = np.array([theta[0], theta[1]])
-        F = B = H = D = Q = R = xi_1_0 = P_1_0 = array
-        return {'F': F,
-                'B': B,
-                'H': H,
-                'D': D,
-                'Q': Q,
-                'R': R,
-                'xi_1_0': xi_1_0,
-                'P_1_0': 'strings'}
-
-    theta = [2, 3]
-    T = 2
-    with pytest.raises(TypeError):
         Mt = ft(theta, f, T)
 
 
@@ -180,16 +134,14 @@ def test_ft_auto_complete():
     Test if autocomplete if missing B or D
     """
     def f(theta):
-        array = np.array([theta[0], theta[1]])
-        F = B = H = D = Q = R = xi_1_0 = P_1_0 = array
+        array = np.array([[theta[0]]])
+        F = B = H = D = Q = R = array
         return {'F': F,
                 'H': H,
                 'Q': Q,
-                'R': R,
-                'xi_1_0': xi_1_0,
-                'P_1_0': P_1_0}
+                'R': R}
 
-    theta = [2, 3]
+    theta = [2]
     T = 2
     Mt = ft(theta, f, T)
     np.testing.assert_equal(Mt['Dt'][0], np.zeros((1, 1)))
@@ -200,11 +152,11 @@ def test_gen_PSD():
     """
     Test normal behavior 
     """
-    theta = [1,2,3,4,5,6]
+    theta = [0,2,0,4,5,0]
     dim = 3
     expected_results = np.array([[1, 2, 4],
-                                [2, 13, 23],
-                                [4, 23, 77]])
+                                [2, 5, 13],
+                                [4, 13, 42]])
     results = gen_PSD(theta, dim)
     assert(np.array_equal(expected_results, results))
 
@@ -366,9 +318,35 @@ def test_simulated_data_type_error():
     """
     Test if raise exception when both Xt and T are None
     """
-    Mt = {'xi_1_0': np.array([[1]]),
-            'Ht': [np.array([[1]])],
-            'Dt': [np.array([[1]])]}
+    Mt = {'Ft': [np.array([[1.0]])],
+            'Ht': [np.array([[1.0]])],
+            'Qt': [np.array([[1.0]])],
+            'Bt': [np.array([[1.0]])],
+            'Dt': [np.array([[1.0]])]}
     with pytest.raises(ValueError):
         df = simulated_data(Mt)
 
+
+# Test clean_matrix
+def test_clean_matrix():
+    """
+    Test whether it detect small and large values
+    """
+    M = np.array([1e-10, np.inf])
+    M_clean = clean_matrix(M)
+    result = M_clean[0] * M_clean[1]
+    expected_result = 0
+    assert(result == expected_result)
+
+
+# Test get_ergodic
+def test_get_ergodic_unit_roots():
+    """
+    Test whether return diffuse prior if unit roots
+    """
+    F = np.array([[1, 1, 0], [0, 1, 0], [0, 0, 0.8]])
+    Q = 0.36 * np.eye(3)
+    result = get_ergodic(F, Q)
+    expected_result = np.array([[np.nan, 0, 0],
+        [0, np.nan, 0], [0, 0, 1]])
+    np.testing.assert_array_almost_equal(expected_result, result)
