@@ -339,26 +339,14 @@ For the case $(i)=(0)$, then the recursive formula for $r_{t-1:(n_{t-1})}$ and $
     N_{t-1:(n_{t-1})}^{(2)} &= F_{t-1}^{'}N_{t:(0)}^{(2)}F_{t-1} \label{eq:diff_uni_end}
 \end{align}
 
-Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). In particular, computing $P_{t,t+1|T}$ with fully missing measurements over some periods is tricky. Assume we have no measurements between time $t$ and $j$. The expression for $P_{t:(n_t),j:(1)|T}$ is: 
+Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). In particular, in the case of univariate smoother, $\hat{\xi}_{t:(i)}=\hat{\xi}_{t:(1)}$ and $P_{t:(i)}=P_{t:(1)}$, because there is no change in $t$\footnote{It is easy to show the equivalence by expanding the expression of $\hat{\xi}_{t|T}^{(i+1)}$ and comparing it against $\hat{\xi}_{t|T}^{(i)}$.}. In addition, EM algorithm requires computing $P_{t,t+1|T}$ even if $t$ or $t+1$ has fully missing measurements. Unlike Kalman filters, we only need to store one set of state values for each $t$. The formula for updating smoothing estimates are:
 \begin{align*}
-    P_{t:(n_t),j:(1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}\prod_{i=t}^{j-1}F_i^{'}(1-N_{j:(0)}P_{j:(1)})  
+    \hat{\xi}_{t:(1)|T} &= \hat{\xi}_{t:(1)} + P_{t:(1)}r_{t:(0)} \\
+    P_{t:(1)|T} &= P_{t:(1)} - P_{t:(1)}N_{t:(0)}P_{t:(1)} \\
+    P_{t:(n_t+1),t+1:(1)|T} &= P_{t:(n_t+1)}F_t^{'}(I - N_{t+1:(0)}P_{t+1:(1)})
 \end{align*}
 
-Define $J_{t:(i)}$ as
-\begin{align*}
-    J_{t:(i)} &\equiv \begin{cases}
-        1-N_{t:(i-1)}P_{t:(i)}\ & \  i\leq n_t \\
-        F_{t}^{'}J_{t+1:(1)}\ & \ i=n_{t}+1 
-    \end{cases}
-\end{align*}
-
-Then we have a more convenient recursive formula for $P_{t,t+1|T}$ as:
-\begin{align}
-    P_{t:(i),(i+1)|T} &= P_{t:(i)}(1-K_{t:(i)}H_{t:(i)})^{'}J_{t:(i+1)} \label{eq:cov_recur_begin} \\
-    P_{t:(n_t),(n_t+1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}J_{t:(n_t+1)} \label{eq:cov_recur_end}
-\end{align}
-
-If we are working with diffuse smoothers, we can use the diffuse version of equations (\ref{eq:cov_recur_begin}) and (\ref{eq:cov_recur_end}) to compute covariance matrices. 
+We can use similar index pattern for computing diffuse state estimates.
 
 \section{Parameter Estimation} \label{sec:param}
 Up to this point, we have assumed that system matrices of a HMM is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
