@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 from copy import deepcopy as copy
 from scipy import linalg
-from .utils import inv
+from .utils import inv, get_nearest_PSD, min_val
 from . import Filter
 
 __all__ = ['Smoother']
@@ -40,9 +40,16 @@ class Smoother(object):
         self.xi_t_T = []
         self.P_t_T = []
         self.xi2_t_T = []
-        self.xi_t_xi_1t_T = []
+        self.Pcov_1t_t = []
         self.delta2 = []
         self.chi2 = []
+        self.r_t = [0]
+        self.N_t = [0]
+        self.r0_t = []
+        self.r1_t = []
+        self.N0_t = []
+        self.N1_t = []
+        self.N2_t = []
         
 
     def __call__(self, kf: Filter) -> None:
@@ -58,11 +65,10 @@ class Smoother(object):
 
         # Start backward smoothing
         for t in reversed(range(self.T)):
-            xi_t_T, P_t_T, xi2_t_T, xi_t1_xi_t_T = self._smooth(t)
-            self.xi_t_T.append(xi_t_T)
-            self.P_t_T.append(P_t_T)
-            self.xi2_t_T.append(xi2_t_T)
-            self.xi_t_xi_1t_T.append(xi_t1_xi_t_T)
+            if t >= self.t_q:
+                self._sequential_smooth_diffuse(t)
+            else:
+                self._sequential_smooth(t)
 
         # match index for xi_t_xi_1t_T
         self.xi_t_xi_1t_T.append(None)
@@ -74,13 +80,8 @@ class Smoother(object):
         self.xi2_t_T = list(reversed(self.xi2_t_T))
         self.xi_t_xi_1t_T = list(reversed(self.xi_t_xi_1t_T))
             
-        # Calculate delta2 can chi2 in the E-step of the EM algorithm
-        for t in range(self.T):
-            self.delta2.append(self._E_delta2(t))
-            self.chi2.append(self._E_chi2(t))
 
-
-    def _smooth(self, t: int) -> Tuple[np.ndarray]:
+    def _sequential_smooth(self, t: int) -> None:
         """
         Update Kalman Smoother at time t. Refer to doc/theory.pdf 
         for details on the notation of each variables.
@@ -88,34 +89,134 @@ class Smoother(object):
         Parameters:
         ----------
         t : time index
-
-        Returns:
-        ----------
-        xi_t_T : E(xi_t|Info(T))
-        P_t_T : Cov(xi_t|Info(T))
-        xi2_t_T : E(xi_t * xi_t.T|Info(T))
-        xi_t1_xi_t_T : E(xi_{t+1} * xi_t.T|Info(T))
         """
-        # If t < T, use backward smoothing formula
-        if t < self.T - 1:
-            Jt = self.P_t_t[t].dot(self.Ft[t].T).dot(
-                    inv(self.P_t_1t[t+1]))
-            xi_t_T = self.xi_t_t[t] + Jt.dot(self.xi_t_T[-1] - \
-                    self.xi_t_1t[t+1])
-            P_t_T = self.P_t_t[t] + Jt.dot(self.P_t_T[-1] - \
-                    self.P_t_1t[t+1]).dot(Jt.T)
-            xi2_t_T = xi_t_T.dot(xi_t_T.T) + P_t_T
-            xi_t1_xi_t_T = self.xi_t_T[-1].dot(self.xi_t_t[t].T) + \
-                    (self.xi2_t_T[-1] - self.xi_t_T[-1].dot(
-                        self.xi_t_1t[t+1].T)).dot(Jt.T)
+        H_t = self.Ht_tilda[t]
+        d_t = self.d_t[t]
+        Upsilon = self.Upsilon_t[t]
+        L_t = self.L_t[t]
+        is_missing = self.Yt_missing[t]
 
-        # If t = T, use results from Kalman Filter 
-        else:
-            xi_t_T = self.xi_t_t[-1]
-            P_t_T = self.P_t_t[-1]
-            xi2_t_T = xi_t_T.dot(xi_t_T.T) + P_t_T
-            xi_t1_xi_t_T = None
-        return xi_t_T, P_t_T, xi2_t_T, xi_t1_xi_t_T
+        # Backwards iteration on r and N
+        counter = self.y_length - is_missing.sum() 
+        r_t_1i = deepcopy(self.r_t[-1])
+        N_t_1i = deepcopy(self.N_t[-1])
+        for i in reversed(range(yt_length)):
+            if is_missing[i]: 
+                continue
+            else:
+                H_i = H_t[i].reshape(1, -1)
+                r_t_1i = (H_i.T).dot(d_t[counter]) / Upsilon[counter] + \
+                    (L_t[counter].T).dot(r_t_1i)
+                N_t_1i = (H_i.T).dot(H_i) / Upsilon[counter] + \
+                    (L_t[counter].T).dot(N_t_1i).dot(L_t[counter])
+            counter -= 1
+
+        # Update smoothed xi, P and Pcov
+        xi_t_1 = self.xi_t[t][0]
+        P_t_1 = self.P_t[t][0]
+        xi_t_T = self.xi_t[t][0] + self.P_t[t][0].dot(r_t_1i)
+        P_t_T = get_nearest_PSD(P_t_1 - P_t_1.dot(N_t_1i).dot(P_t_1))
+        self.xi_t_T.append(xi_t_T)
+        self.P_t_T.append(P_t_T)
+
+        # Update r and N from t to t-1, and Pcov_1t_t
+        if t > self.t_q:
+            self.r_t.append((self.Ft[t-1].T).dot(r_t_1i))
+            self.N_t.append((self.Ft[t-1].T).dot(N_t_1i).dot(self.Ft[t-1]))
+            Pcov = self.P_t[t-1][-1].dot(self.Ft[t-1].T).dot(
+                    self.I - N_t_1i.dot(self.P_t[t][0]))
+            self.Pcov_1t_t.append(Pcov)
+
+        # Update r and N for diffuse smoother
+        elif t == self.t_q:
+            self.r0_t.append(r_t_1i)
+            self.r1_t.append(0)
+            self.N0_t.append(N_t_1i)
+            self.N1_t.append(0)
+            self.N2_t.append(0)
+
+
+    def _sequential_smooth_diffuse(self, t: int) -> None:
+        """
+        Update diffuse Kalman Smoother at time t. Refer to doc/theory.pdf 
+        for details on the notation of each variables.
+
+        Parameters:
+        ----------
+        t : time index
+        """
+        H_t = self.Ht_tilda[t]
+        d_t = self.d_t[t]
+        Upsilon_inf = self.Upsilon_inf_t[t]
+        Upsilon_star = self.Upsilon_star_t[t]
+        L0_t = self.L0_t[t]
+        L1_t = self.L1_t[t]
+        L_star_t = self.L_star_t[t]
+        is_missing = self.Yt_missing[t]
+
+        # Backwards iteration on r and N
+        counter = self.y_length - is_missing.sum() 
+        r0_t_1i = deepcopy(self.r0_t[-1])
+        r1_t_1i = deepcopy(self.r1_t[-1])
+        N0_t_1i = deepcopy(self.N0_t[-1])
+        N1_t_1i = deepcopy(self.N1_t[-1])
+        N2_t_1i = deepcopy(self.N2_t[-1])
+        for i in reversed(range(yt_length)):
+            if is_missing[i]: 
+                continue
+            else:
+                H_i = H_t[i].reshape(1, -1)
+
+                # If Upsilon_inf > 0
+                if Upsilon_inf[i] > min_val:
+                    
+                    # Must update r1 first, bc it uses r0_t_1i
+                    r1_t_1i = (H_i.T).dot(d_t[i]) / Upsilon_inf[i] - \
+                        (L1_t[i].T).dot(r0_t_1i) + (L0_t[i].T).dot(r1_t_1i)
+                    r0_t_1i = (L0_t[i].T).dot(r0_t_1i)
+
+                    # Order of updating: N2->N1->N0
+                    L1N1L0 = (L1_t[i].T).dot(N1_t_1i).dot(L0_t[i])
+                    L1N0L0 = (L1_t[i].T).dot(N0_t_1i).dot(L0_t[i])
+                    N2_t_1i = -(H_t[i].T).dot(H_t[i]).dot(Upsilon_star[i])/(
+                        np.power(Upsilon_inf[i], 2)) + L1N0L0 + L1N0L0.T + \
+                        (L0_t[i].T).dot(N2_t_1i).dot(L0_t[i]) + \
+                        (L1_t[i].T).dot(N1_t_1i).dot(L1_t[i])
+                    N1_t_1i = (H_t[i].T).dot(H_t[i]) / Upsilon_inf[i] + \
+                        L1N0L0 + L1N0L0.T + (L0_t[i].T).dot(N1_t_1i).dot(L0_t[i])
+                    N0_t_1i = (L0_t[i].T).dot(N0_t_1i).dot(L0_t[i])
+
+                # If Upsilon_inf == 0
+                else:
+                    r0_t_1i = (H_t[i].T).dot(d_t[i]) / Upsilon_star_t[i] + \
+                        (L_star_t[i].T).dot(r0_t_1i)
+                    N0_t_1i = (H_t[i].T).dot(H_t[i]) / Upsilon_star_t[i] + \
+                        (L_star_t[i].T).dot(N1_0_1i).dot(L_star_t[i])
+                    N1_t_1i = (L_star_t[i].T).dot(N1_t_1i).dot(L_star_t[i])
+
+                counter -= 1
+
+        # Update smoothed xi and P
+        xi_t_1 = self.xi_t[t][0]
+        P_inf_t1 = self.P_inf_t[t][0]
+        P_star_t1 = self.P_star_t[t][0]
+        xi_t_T = self.xi_t[t][0] + self.P_star_t[t][0].dot(r0_t_1i) + \
+            self.P_inf_t[t][0].dot(r1_t_1i)
+        P_inf_N1_P_star = P_inf_t1.dot(N1_t_1i).dot(P_star_t1)
+        P_star_N0_P_star = P_star_t1.dot(N0_t_1i).dot(P_star_t1)
+        P_inf_N2_P_inf = P_inf_t1.dot(N2_t_1i).dot(P_inf_t1)
+        P_t_T = get_nearest_PSD(P_star_t1 - P_inf_N1_P_star - \
+            P_inf_n1_P_star.T - P_star_N0_P_star - P_inf_N2_P_inf)
+        self.xi_t_T.append(xi_t_T)
+        self.P_t_T.append(P_t_T)
+
+        # Update r and N from t to t-1
+        if t > 0:
+            self.r0_t.append((self.Ft[t-1].T).dot(r0_t_1i))
+            self.r1_t.append((self.Ft[t-1].T).dot(r1_t_1i))
+            self.N0_t.append((self.Ft[t-1].T).dot(N0_t_1i).dot(self.Ft[t-1]))
+            self.N1_t.append((self.Ft[t-1].T).dot(N1_t_1i).dot(self.Ft[t-1]))
+            self.N2_t.append((self.Ft[t-1].T).dot(N2_t_1i).dot(self.Ft[t-1]))
 
 
     def _E_delta2(self, t: int) -> np.ndarray:

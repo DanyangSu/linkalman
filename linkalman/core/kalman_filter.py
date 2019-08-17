@@ -39,6 +39,10 @@ class Filter(object):
         ----------
         Mt : list of system matrices.
         """
+        self.Ht_raw = deepcopy(M_wrap(Mt['Ht']))
+        self.Dt_raw = deepcopy(M_wrap(Mt['Dt']))
+        self.Rt_raw = deepcopy(M_wrap(Mt['Rt']))
+
         self.Ft = M_wrap(Mt['Ft'])
         self.Bt = M_wrap(Mt['Bt'])
         self.Ht = M_wrap(Mt['Ht'])
@@ -50,12 +54,13 @@ class Filter(object):
         self.Yt = None
         self.Xt = None
         self.T = len(self.Ft)
+        self.I = np.eye(self.xi_length)
 
         # Create output matrices
         self.xi_1_0 = deepcopy(Mt['xi_1_0'])
         self.P_1_0 = deepcopy(Mt['P_1_0'])
-        self.P_t = []
         self.xi_t = []
+        self.Ht_tilda = []
         self.Yt_missing = []
         self.Upsilon_inf_t = []
         self.Upsilon_star_t = []
@@ -63,8 +68,6 @@ class Filter(object):
         self.L0_t = []
         self.L1_t = []
         self.L_star_t = []
-        self.L_t = [] 
-        self.Upsilon_t = []
         self.P_inf_t = []
         self.P_star_t = []
 
@@ -120,18 +123,13 @@ class Filter(object):
             P_clean[np.isnan(P_clean)] = 0
             self.P_inf_t.append([self.A.dot(self.A.T)])
             self.P_star_t.append([self.Pi.dot(P_clean).dot(self.Pi.T)])
-            self.P_t.append([])
             self.L0_t.append([])
             self.L1_t.append([])
             self.L_star_t.append([])
             self.Upsilon_inf_t.append([])
             self.Upsilon_star_t.append([])
-            self.Upsilon_t.append([])
-            self.L_t.append([])
         else:
             self.P_star_t.append([self.P_1_0])
-            self.L_t.append([])
-            self.Upsilon_t.append([])
 
         # Filter
         for t in range(self.T):
@@ -145,13 +143,13 @@ class Filter(object):
                 self._sequential_update(t)
 
         # Drop P_{T+1|T} and xi_{T+1|T}
-        self.P_t.pop(-1)
+        self.P_star_t.pop(-1)
         self.xi_t.pop(-1)
 
 
     def _sequential_update_diffuse(self, t: int) -> None:
         """
-        Sequential update diffuse kalman filters at time t. If Q_t 
+        Sequentially update diffuse kalman filters at time t. If Q_t 
         is not diagonal, we first transform it to a diagonal
         matrix using LDL transformation. Also update q_t. 
         All outputs are lists of numpy arrays. 
@@ -162,6 +160,7 @@ class Filter(object):
         """
         # LDL 
         Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
+        self.Ht_tilda.append(H_t)
         self.Yt_missing.append(is_missing)
         self.t_q += 1
 
@@ -185,7 +184,7 @@ class Filter(object):
                     K_0 = P_inf.dot(H_i.T) / Upsilon_inf
                     K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
                     xi_t_i1 = xi_i + K_0.dot(d_t_i)
-                    L0_t_i = np.eye(self.xi_length) - K_0.dot(H_i)
+                    L0_t_i = self.I - K_0.dot(H_i)
                     L1_t_i = - K_1.dot(H_i)
                     L_star_t_i = None
                     KRK = K_0.dot(sigma2).dot(K_0.T)
@@ -199,7 +198,7 @@ class Filter(object):
                 else:
                     K_star = P_star.dot(H_i.T) / Upsilon_star
                     xi_t_i1 = xi_i + K_star.dot(d_t_i)
-                    L_star_t_i = np.eye(self.xi_length) - K_star.dot(H_i)
+                    L_star_t_i = self.I - K_star.dot(H_i)
                     KRK = K_star.dot(sigma2).dot(K_star.T)
                     P_inf_i1 = deepcopy(P_inf)
                     P_star_i1 = self._joseph_form(L_star_t_i, P_star, KRK)
@@ -218,30 +217,22 @@ class Filter(object):
 
         # Calculate xi_t1_t, P_inf_t1_t, and P_star_t1_t, 
         # and add placeholders for others
-        xi_t1_0 = self.Ft[t].dot(self.xi_t[t][-1]) + \
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
             self.Bt[t].dot(self.Xt[t])
-        P_inf_t1_0 = self.Ft[t].dot(
+        P_inf_t1_1 = self.Ft[t].dot(
             self.P_inf_t[t][-1]).dot(self.Ft[t].T)
-        P_star_t1_0 = self.Ft[t].dot(
+        P_star_t1_1 = self.Ft[t].dot(
             self.P_star_t[t][-1]).dot(self.Ft[t].T) + self.Qt[t]
 
-        self.xi_t.append([xi_t1_0])
-        self.P_inf_t.append([P_inf_t1_0])
-        self.P_star_t.append([P_star_t1_0])
+        self.xi_t.append([xi_t1_1])
+        self.P_inf_t.append([P_inf_t1_1])
+        self.P_star_t.append([P_star_t1_1])
         self.Upsilon_inf_t.append([])
         self.Upsilon_star_t.append([])
-        self.Upsilon_t.append([])
         self.L0_t.append([])
         self.L1_t.append([])
         self.L_star_t.append([])
-        self.L_t.append([])
         self.d_t.append([])
-
-        # If diffuse finish, update P_t
-        if self.q > 0:
-            self.P_t.append([])  
-        else:
-            self.P_t.append([P_star_t1_0])
 
 
     def _joseph_form(self, L: np.ndarray, P: np.ndarray, 
@@ -280,6 +271,7 @@ class Filter(object):
         """
         # LDL 
         Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
+        self.Ht_tilda.append(H_t)
         self.Yt_missing.append(is_missing)
 
         # Skip missing measurements
@@ -288,7 +280,7 @@ class Filter(object):
                 continue
             else:
                 xi_i = self.xi_t[t][-1]
-                P_i = self.P_t[t][-1]
+                P_i = self.P_star_t[t][-1]
                 H_i = H_t[i].reshape(1, -1)
                 D_i = D_t[i].reshape(1, -1)
                 sigma2 = R_t[i][i]
@@ -296,25 +288,25 @@ class Filter(object):
                 d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
                 K = P_i.dot(H_i.T) / Upsilon
                 xi_t_i1 = xi_i + K.dot(d_t_i)
-                L_t_i = np.eye(self.xi_length) - K.dot(H_i)
+                L_t_i = self.I - K.dot(H_i)
                 KRK = K.dot(sigma2).dot(K.T)
                 P_i1 = self._joseph_form(L_t_i, P_i, KRK)
 
             self.xi_t[t].append(xi_t_i1)
-            self.P_t[t].append(P_i1)
-            self.L_t[t].append(L_t_i)
-            self.Upsilon_t[t].append(Upsilon)
+            self.P_star_t[t].append(P_i1)
+            self.L_star_t[t].append(L_t_i)
+            self.Upsilon_star_t[t].append(Upsilon)
             self.d_t[t].append(d_t_i)
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
-        xi_t1_0 = self.Ft[t].dot(self.xi_t[t][-1]) + \
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
             self.Bt[t].dot(self.Xt[t])
-        P_t1_0 = self.Ft[t].dot(self.P_t[t][-1]).dot(
+        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][-1]).dot(
             self.Ft[t].T) + self.Qt[t]
-        self.xi_t.append([xi_t1_0])
-        self.P_t.append([P_t1_0])
-        self.L_t.append([])
-        self.Upsilon_t.append([])
+        self.xi_t.append([xi_t1_1])
+        self.P_star_t.append([P_t1_1])
+        self.L_star_t.append([])
+        self.Upsilon_star_t.append([])
         self.d_t.append([])
 
 
@@ -368,16 +360,16 @@ class Filter(object):
         Yt_filtered_cov = []
         for t in range(self.T):
             # Get filtered y_t
-            yt_f = self.Ht[t].dot(self.xi_t[t][0]) + \
-                    self.Dt[t].dot(self.Xt[t])
+            yt_f = self.Ht_raw[t].dot(self.xi_t[t][0]) + \
+                    self.Dt_raw[t].dot(self.Xt[t])
             Yt_filtered.append(yt_f)
 
             # Get standard error of filtered y_t
-            if not self.P_t[t][0]:
+            if t < self.t_q:
                 yt_error = None
             else:
-                yt_error = self.Ht[t].dot(
-                    self.P_t[t][0]).dot(self.Ht[t].T)+ self.Rt[t]
+                yt_error = self.Ht_raw[t].dot(
+                    self.P_star_t[t][0]).dot(self.Ht_raw[t].T) + self.Rt_raw[t]
             
             Yt_filtered_cov.append(yt_error)
         return Yt_filtered, Yt_filtered_cov

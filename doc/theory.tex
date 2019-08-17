@@ -311,10 +311,11 @@ As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive
 Define $y_{t:(i)}$ as the $i$-th non-missing measurement of $y_t$. To derive the univariate formula for diffuse smoothers, we can treat smoothing between two observations within the same period as if the transition matrix is $F_{t-1}$ between $t-1:(n_t)$ and $t:(1)$, and is an identity matrix if otherwise. In addition, for notational purpose, we can add $r_{t:(0)}$ and $N_{t:(0)}$. It is easy to see $r_{t:(0)}=r_t$, and $N_{t:(0)}=N_t$. For the case $(i)\leq(n_t)$, if $\Upsilon_{\infty,t:(i)}\neq0$, the recursive formula for $r_{t-1}$ and $N_{t-1}$ are:
 \begin{align}
     r_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}r_{t:(i)}^{(0)} \label{eq:diff_uni_start} \\ 
-    r_{t:(i-1)}^{(1)} =& H_{t:(i)}^{'}\left(\frac{d_{t:(i)}}{\Upsilon_{\infty,t:(i)}}-K_{t:(i)}^{(1)'}r_{t:(i)}^{(0)}\right)+L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \\
+    r_{t:(i-1)}^{(1)} =& H_{t:(i)}^{'}\left(\frac{d_{t:(i)}}{\Upsilon_{\infty,t:(i)}}-K_{t:(i)}^{(1)'}r_{t:(i)}^{(0)}\right)+L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \nonumber \\
+    =& \frac{H_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{\infty,t:(i)}} + L_{t:(i)}^{(1)'}r_{t:(i)}^{(0)} + L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \\
     N_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)} \\
     N_{t:(i-1)}^{(1)} =& \frac{H_{t:(i)}^{'}H_{t:(i)}}{\Upsilon_{\infty,t:(i)}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)}\rangle + L_{t:(i)}^{(0)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(0)} \\
-    N_{t:(i-1)}^{(2)} =& -\frac{H_{t:(i)}^{'}H_{t:(i)}\Upsilon_{*,t:(i)}}{\Upsilon_{\infty,t:(i)}^{2}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(1)}L_{t:(i)}\rangle \nonumber \\
+    N_{t:(i-1)}^{(2)} =& -\frac{H_{t:(i)}^{'}H_{t:(i)}\Upsilon_{*,t:(i)}}{\Upsilon_{\infty,t:(i)}^{2}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(0)}\rangle \nonumber \\
     &+L_{t:(i)}^{(0)'}N_{t:(i)}^{(2)}L_{t:(i)}^{(0)} + L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(1)} \\
     L_{t:(i)}^{(0)} =& 1-K_{t:(i)}^{(0)}H_{t:(i)}= 1-\frac{P_{\infty,t:(i)}H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}} \\
     L_{t:(i)}^{(1)} =& - K_{t:(i)}^{(1)}H_{t:(i)}=-\frac{(P_{*,t:(i)}H_{t:(i)}^{'}-K_{t:(i)}^{(0)}\Upsilon_{*,t:(i)})H_{t:(t)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}}
@@ -1171,7 +1172,7 @@ Denote $\Theta\equiv (Y_T,X_T;\theta)$, I now derive expressions for $E(\delta_t
         - \langle B_{t-1}x_{t-1}[E(\xi_t|\Theta) - F_{t-1}E(\xi_{t-1}|\Theta)]^{'}\rangle \nonumber \\
         &+F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'} \label{eq:delta_t} \\
     E(\chi_t\chi_t^{'}|\Theta) =& (y_t-D_tx_t)(y_t-D_tx_t)^{'}-\langle H_t\hat{\xi}_{t|T}(y_t-D_tx_t)^{'}\rangle + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'} \label{eq:chi_t} \\ 
-    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{t|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
+    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{1|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
     E(\xi_t\xi_t^{'}|\Theta) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
     E(\xi_{t-1}\xi_t^{'}|\Theta) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
 \end{align}

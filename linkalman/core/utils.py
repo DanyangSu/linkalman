@@ -129,6 +129,20 @@ def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
     """
     if not isinstance(col, list):
         raise TypeError('col must be a list of strings')
+    concat_list = []
+    num_col = len(col)
+    
+    for i in L:
+        # Check convertibility
+        if i.ndim > 1:
+            if i.shape[0] > 1 and i.shape[1] > 1:
+                raise ValueError('Input must be one dimensional.')
+            else:
+                i = i.flatten()
+
+        if num_col != i.shape[0]:
+            raise ValueError('Input arrays have wrong size.')
+
     df_val = np.concatenate([i.T for i in L])
     df = pd.DataFrame(data=df_val, columns=col)
     return df
