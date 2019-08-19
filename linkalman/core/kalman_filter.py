@@ -180,7 +180,8 @@ class Filter(object):
                 d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
                 
                 # If Upsilon_inf > 0
-                if Upsilon_inf > min_val:
+                abs_Hi = np.abs(H_i)
+                if Upsilon_inf > min_val * np.power(abs_Hi[abs_Hi > min_val].min(), 2):
                     K_0 = P_inf.dot(H_i.T) / Upsilon_inf
                     K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
                     xi_t_i1 = xi_i + K_0.dot(d_t_i)

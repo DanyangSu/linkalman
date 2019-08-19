@@ -106,17 +106,14 @@ y_col_filter = create_col(y_col, suffix='_filtered')
 Yt_filtered, _ = kf.get_filtered_y()
 df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
 
-df_Yt_filtered.to_csv('/Users/dsu/filter.csv')
-df.to_csv('/Users/dsu/raw.csv')
+# Fit smoothed data
+ks = Smoother()
+ks(kf)
+y_col_smoother = create_col(y_col, suffix='_smoothed')
+Yt_smoothed, _ = ks.get_smoothed_y()
+df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
 
-# # Fit smoothed data
-# ks = Smoother()
-# ks(kf)
-# y_col_smoother = create_col(y_col, suffix='_smoothed')
-# Yt_smoothed, _ = ks.get_smoothed_y()
-# df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
-
-# # Produce final output
-# df_output = pd.concat([df, df_Yt_filtered, df_Yt_smoothed], axis=1) 
+# Produce final output
+df_output = pd.concat([df, df_Yt_filtered, df_Yt_smoothed], axis=1) 
 
 
