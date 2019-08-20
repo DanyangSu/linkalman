@@ -80,7 +80,7 @@ def get_f(theta):
 
 
 # Gemerate fake data
-T = 100
+T = 1000
 theta = np.random.rand(16)
 f = lambda x: get_f(x)
 Mt = ft(theta, f, T)
@@ -115,5 +115,4 @@ df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
 
 # Produce final output
 df_output = pd.concat([df, df_Yt_filtered, df_Yt_smoothed], axis=1) 
-
 

@@ -76,13 +76,14 @@ class Filter(object):
         self.t_q = 0
 
 
-    def get_selection_mat(self, P_1_0: np.ndarray) -> Tuple[int, np.ndarray, np.ndarray]:
+    def get_selection_mat(self, P_1_0: np.ndarray) \
+            -> Tuple[int, np.ndarray, np.ndarray]:
         """
         Get information for diffuse initialization
 
         Parameters:
         ----------
-        P_1_0 : initial state covariance. Digonal value is np.nan if diffuse state
+        P_1_0 : initial state covariance. Diagonal value np.nan if diffuse
 
         Returns:
         ----------
@@ -97,7 +98,8 @@ class Filter(object):
         return number_diffuse, A, Pi
 
 
-    def __call__(self, Yt: List[np.ndarray], Xt: List[np.ndarray]=None) -> None:
+    def __call__(self, Yt: List[np.ndarray], 
+            Xt: List[np.ndarray]=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
 
@@ -164,7 +166,8 @@ class Filter(object):
         self.Yt_missing.append(is_missing)
         self.t_q += 1
 
-        # Start sequential updating xi_{t:(i)}, P_inf_t_{t:(i)}, and P_star_t_{t:(i)}
+        # Start sequential updating xi_{t:(i)}, 
+        # P_inf_t_{t:(i)}, and P_star_t_{t:(i)}
         for i in range(self.y_length):
             if is_missing[i]:
                 continue
@@ -173,6 +176,7 @@ class Filter(object):
                 P_star = self.P_star_t[t][-1]
                 xi_i = self.xi_t[t][-1]
                 H_i = H_t[i].reshape(1, -1)
+                abs_Hi = np.abs(H_i)
                 D_i = D_t[i].reshape(1, -1)
                 sigma2 = R_t[i][i]
                 Upsilon_inf = H_i.dot(P_inf).dot(H_i.T)
@@ -180,8 +184,8 @@ class Filter(object):
                 d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
                 
                 # If Upsilon_inf > 0
-                abs_Hi = np.abs(H_i)
-                if Upsilon_inf > min_val * np.power(abs_Hi[abs_Hi > min_val].min(), 2):
+                if Upsilon_inf > min_val * np.power(
+                        abs_Hi[abs_Hi > min_val].min(), 2):
                     K_0 = P_inf.dot(H_i.T) / Upsilon_inf
                     K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
                     xi_t_i1 = xi_i + K_0.dot(d_t_i)
@@ -219,11 +223,11 @@ class Filter(object):
         # Calculate xi_t1_t, P_inf_t1_t, and P_star_t1_t, 
         # and add placeholders for others
         xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
-            self.Bt[t].dot(self.Xt[t])
+                self.Bt[t].dot(self.Xt[t])
         P_inf_t1_1 = self.Ft[t].dot(
-            self.P_inf_t[t][-1]).dot(self.Ft[t].T)
+                self.P_inf_t[t][-1]).dot(self.Ft[t].T)
         P_star_t1_1 = self.Ft[t].dot(
-            self.P_star_t[t][-1]).dot(self.Ft[t].T) + self.Qt[t]
+                self.P_star_t[t][-1]).dot(self.Ft[t].T) + self.Qt[t]
 
         self.xi_t.append([xi_t1_1])
         self.P_inf_t.append([P_inf_t1_1])
@@ -301,9 +305,9 @@ class Filter(object):
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
         xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
-            self.Bt[t].dot(self.Xt[t])
+                self.Bt[t].dot(self.Xt[t])
         P_t1_1 = self.Ft[t].dot(self.P_star_t[t][-1]).dot(
-            self.Ft[t].T) + self.Qt[t]
+                self.Ft[t].T) + self.Qt[t]
         self.xi_t.append([xi_t1_1])
         self.P_star_t.append([P_t1_1])
         self.L_star_t.append([])
@@ -369,8 +373,8 @@ class Filter(object):
             if t < self.t_q:
                 yt_error = None
             else:
-                yt_error = self.Ht_raw[t].dot(
-                    self.P_star_t[t][0]).dot(self.Ht_raw[t].T) + self.Rt_raw[t]
+                yt_error = self.Ht_raw[t].dot(self.P_star_t[t][0]).dot(
+                        self.Ht_raw[t].T) + self.Rt_raw[t]
             
             Yt_filtered_cov.append(yt_error)
         return Yt_filtered, Yt_filtered_cov
@@ -456,7 +460,7 @@ class Filter(object):
         """
         if Xt is None:
             self.Xt = Constant_M(np.zeros(
-                (self.Bt[0].shape[1], 1)), self.T)
+                    (self.Bt[0].shape[1], 1)), self.T)
         else:
             self.Xt = deepcopy(Xt)
         
