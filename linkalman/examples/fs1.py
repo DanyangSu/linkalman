@@ -39,6 +39,7 @@ def get_f(theta):
     F = np.zeros([10, 10])
     F[0][0:2] = 1
     F[2][2:8] = -1
+    F[1][1] = rho_delta
     for i in range(3,8):
         F[i][i-1] = 1
 
@@ -87,14 +88,13 @@ Mt = ft(theta, f, T)
 # Generate data
 x1 = np.ones(T)
 x2 = np.zeros(T)
-x2[300] = 1
+x2[T//2] = 1
 x3 = np.random.rand(T)
 Xt = pd.DataFrame({'x1': x1, 'x2': x2, 'x3': x3}) 
 df, y_col, xi_col = simulated_data(Mt, Xt, T=T)
 
 # Create some missingness in the data
-df.loc[(df.index % 5 == 0) & 
-        (df.index % 7 == 0), y_col[0]] = np.nan
+df.loc[(df.index % 6 == 0) | (df.index % 7 == 0), y_col[0]] = np.nan
 df.loc[df.index % 7 != 0, y_col[1]] = np.nan
 Y_t = df_to_list(df[y_col])
 X_t = df_to_list(df[Xt.columns])
@@ -115,5 +115,4 @@ df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
 
 # Produce final output
 df_output = pd.concat([df, df_Yt_filtered, df_Yt_smoothed], axis=1) 
-
 

@@ -9,9 +9,9 @@ from numpy.random import multivariate_normal
 from copy import deepcopy
 import warnings
 
-__all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col',
-        'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 
-        'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val']
+__all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_diag',
+        'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
+        'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet']
 
 
 max_val = 1e10  # detect infinity
@@ -65,6 +65,26 @@ def mask_nan(is_nan: np.ndarray, mat: np.ndarray,
     return mat_masked
 
 
+def get_diag(arrays: List[np.ndarray]) -> List[np.ndarray]:
+    """
+    Convert a list of square arrays into a lit of 1D arrays with 
+    diagonal values only
+
+    Parameters:
+    ----------
+    arrays : list of square arrays
+
+    Returns:
+    ----------
+    diag_arrays : list of N x 1 arrays with diagonal values only
+    """
+    diag_arrays = []
+    for i in arrays:
+        diag_arrays.append(np.diag(i).reshape(-1, 1))
+    
+    return diag_arrays
+    
+
 def inv(h_array: np.ndarray) -> np.ndarray:
     """
     Calculate pinvh of PSD array. Note pinvh performs poorly
@@ -86,32 +106,37 @@ def inv(h_array: np.ndarray) -> np.ndarray:
     return h_inv
 
 
-def df_to_list(df: pd.DataFrame) -> List[np.ndarray]:
+def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
     """
     Convert pandas dataframe to list of arrays.
     
     Parameters:
     ----------
     df : must be numeric
+    col_list : list of columns to be converted
 
     Returns:
     ----------
     L : len(L) == df.shape[0], L[0].shape[0] == df.shape[1]
     """
-    # Raise exception if df is not a dataframe
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError('df must be a dataframe')
+    # If col_list is None, return None
+    if col_list is None:
+        return None
+    else:
+        # Raise exception if df is not a dataframe
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError('df must be a dataframe')
 
-    # Check datatypes, must be numeric
-    for col in df.columns:
-        if not is_numeric_dtype(df[col]):
-            raise TypeError('Input dataframe must be numeric')
+        # Check datatypes, must be numeric
+        for col in col_list:
+            if not is_numeric_dtype(df[col]):
+                raise TypeError('Input dataframe must be numeric')
 
-    # Convert df to list row-wise
-    L = []
-    for i in range(df.shape[0]):
-        L.append(np.array([df.loc[i,:]]).T)
-    return L
+        # Convert df to list row-wise
+        L = []
+        for i in range(df.shape[0]):
+            L.append(np.array([df[col_list].loc[i,:]]).T)
+        return L
 
 
 def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
@@ -129,6 +154,20 @@ def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
     """
     if not isinstance(col, list):
         raise TypeError('col must be a list of strings')
+    concat_list = []
+    num_col = len(col)
+    
+    for i in L:
+        # Check convertibility
+        if i.ndim > 1:
+            if i.shape[0] > 1 and i.shape[1] > 1:
+                raise ValueError('Input must be one dimensional.')
+            else:
+                i = i.flatten()
+
+        if num_col != i.shape[0]:
+            raise ValueError('Input arrays have wrong size.')
+
     df_val = np.concatenate([i.T for i in L])
     df = pd.DataFrame(data=df_val, columns=col)
     return df
@@ -170,17 +209,18 @@ def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
     return epsilon
 
 
-def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None,
-        xi_1_0: np.ndarray=None, P_1_0:np.ndarray=None) -> \
+def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None, 
+        T: int=None, xi_1_0: np.ndarray=None, P_1_0:np.ndarray=None) -> \
         Tuple[pd.DataFrame, List[str], List[str]]:
     """
-    Generate simulated data from a given HMM system. Xt and T
+    Generate simulated data from a given BSTS system. Xt and T
     cannot be both set to None. If P_1_0 and xi_1_0  are 
     not provided, calculate ergodic values from system matrices
 
     Parameters: 
     ----------
-    Mt : system matrices
+    Ft : ft(theta,T) that returns [Mt]_{1,...,T}
+    theta : argument of ft
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
     xi_1_0 : initial mean array
@@ -192,9 +232,11 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None,
     y_col : column names of y_t
     xi_col : column names of xi_t
     """
-    xi_dim = Mt['Ft'][0].shape[0]
-    y_dim = Mt['Ht'][0].shape[0]
-    x_dim = Mt['Dt'][0].shape[1]
+    # Get dimensional information
+    M_ = Ft(theta, 1)
+    xi_dim = M_['Ft'][0].shape[0]
+    y_dim = M_['Ht'][0].shape[0]
+    x_dim = M_['Dt'][0].shape[1]
     
     # Set Xt to Constant_M(np.zeros((1, 1))) if set as None
     if Xt is None:
@@ -203,7 +245,8 @@ def simulated_data(Mt: Dict, Xt: pd.DataFrame=None, T: int=None,
         X_t = Constant_M(np.zeros((x_dim, 1)), T)
     else:
         T = Xt.shape[0]
-        X_t = df_to_list(Xt)
+        X_t = df_to_list(Xt, list(Xt.columns))
+    Mt = Ft(theta, T)
 
     # Create xi_1_0 and P_1_0
     if xi_1_0 is None:
@@ -265,7 +308,8 @@ def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
     return PSD
 
 
-def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
+def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
+        force_diffuse: List[bool]=None) -> np.ndarray:
     """
     Calculate initial state covariance matrix, and identify 
     diffuse state. It effectively solves a Lyapuov equation
@@ -275,6 +319,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
     F : state transition matrix
     Q : initial error covariance matrix
     B : regression matrix, if not 0, indicating diffuse priors
+    force_diffuse : List of booleans of user-determined diffuse state
 
     Returns:
     ----------
@@ -283,6 +328,14 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
     Q_ = deepcopy(Q)
     dim = Q.shape[0]
     
+    # Is is_diffuse is not supplied, create the list
+    if force_diffuse is None:
+        is_diffuse = [False for i in range(dim)]
+    else: 
+        is_diffuse = deepcopy(force_diffuse)
+        if len(is_diffuse) != dim:
+            raise ValueError('is_diffuse has wrong size')
+
     # Check F and Q
     if F.shape[0] != F.shape[1]:
         raise TypeError('F must be a square matrix')
@@ -290,22 +343,9 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
         raise TypeError('Q must be a square matrix')
     if F.shape[0] != Q.shape[0]:
         raise TypeError('Q and F must be of same size')
-
-    is_diffuse = [False for i in range(dim)]
-    if B is not None:
-
-        # Check B
-        if B.shape[0] != F.shape[0]:
-            raise TypeError('B has wrong sizes')
-        
-        for i in range(dim):
-
-            # If state rely on x_t, it is a diffuse state
-            if np.count_nonzero(B[i]) > 0:
-                is_diffuse[i] = True
-        
-        # Modify Q_ to reflect diffuse states
-        Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
+    
+    # Modify Q_ to reflect diffuse states
+    Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
         
     # Calculate raw P_0
     with warnings.catch_warnings():
@@ -313,7 +353,6 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None) -> np.ndarray:
         P_0 = lyap(F, Q_, 'bilinear')
 
     # Clean up P_0
-    is_diffuse = [False for i in range(dim)]
     for i in range(dim):
         if abs(P_0[i][i]) > max_val:
             is_diffuse[i] = True
@@ -366,7 +405,8 @@ def clean_matrix(mat: np.ndarray) -> np.ndarray:
 
 
 def ft(theta: List[float], f: Callable, T: int,
-        xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None) -> Dict:
+        xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
+        force_diffuse: List[bool]=None) -> Dict:
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
     Output of f(theta) must contain all the required keys.
@@ -378,6 +418,7 @@ def ft(theta: List[float], f: Callable, T: int,
     T : length of Mt. "Duplicate" M for T times
     xi_1_0: initial state mean
     P_1_0: initial state cov
+    force_diffuse : use-defined diffuse state
 
     Returns:
     ----------
@@ -427,7 +468,8 @@ def ft(theta: List[float], f: Callable, T: int,
     if xi_1_0 is None:
         xi_1_0 = np.zeros([M['F'].shape[0],1])
     if P_1_0 is None: 
-        P_1_0 = get_ergodic(M['F'], M['Q'], M['B']) 
+        P_1_0 = get_ergodic(M['F'], M['Q'], M['B'], 
+                force_diffuse=force_diffuse) 
 
     Mt = {'Ft': Ft, 
             'Bt': Bt, 
@@ -439,6 +481,50 @@ def ft(theta: List[float], f: Callable, T: int,
             'P_1_0': P_1_0}
     return Mt
 
+
+def pdet(array: np.ndarray) -> float:
+    """
+    Calculate pseudo-determinant. If zero matrix, determinant is 1
+    Because we are using log, determinant of 1 is good.
+
+    Parameters:
+    ----------
+    array : input array
+    
+    Returns:
+    ----------
+    array_pdet : pseudo-determinant
+    """
+    eig, _ = np.linalg.eigh(array)
+
+    # If all eigenvalues are close to 0, np.product(np.array([])) returns 1
+    array_pdet = np.product(eig[np.abs(eig) > min_val])
+    return array_pdet
+
+
+def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray], 
+        A: np.ndarray) -> np.ndarray:
+    """
+    Calculate Correction term for the marginal likelihood
+
+    Parameters:
+    ----------
+    Ht : list of measurement specification matrices
+    Ft : list of state transition matrices
+    A : selection matrix for P_inf_1_0
+
+    Returns:
+    MLL_correct : correction term for the marginal likelihood
+    """
+    psi = deepcopy(A)
+    MLL_correct = np.zeros(Ft[0].shape)
+    for t in range(len(Ht)):
+        Zt = Ht[t].dot(psi)
+        MLL_correct += (Zt.T).dot(Zt)
+        psi = Ft[t].dot(psi)
+
+    return MLL_correct
+    
 
 class M_wrap(Sequence):
     """
@@ -522,7 +608,7 @@ class M_wrap(Sequence):
             return False
     
 
-    def pinvh(self, index):
+    def pinvh(self, index: int) -> np.ndarray:
         """
         Return pseudo-inverse of self.m_list[index]
 
@@ -538,7 +624,7 @@ class M_wrap(Sequence):
         return self.m_pinvh
     
 
-    def ldl(self, index):
+    def ldl(self, index: int) -> List[np.ndarray]:
         """
         Calculate L and D from LDL decomposition, and inverse of L
 
@@ -557,10 +643,9 @@ class M_wrap(Sequence):
         return self.L, self.D, self.L_I
 
 
-    def pdet(self, index):
+    def pdet(self, index: int) -> float:
         """
-        Calculate pseudo-determinant. If zero matrix, determinant is 1
-        Because we are using log, determinant of 1 is good.
+        Calculate pseudo-determinant.
 
         Parameters:
         ----------
@@ -571,10 +656,7 @@ class M_wrap(Sequence):
         self.m_pdet : pseudo-determinant
         """
         if (not self._equal_M(index)) or self.m_pdet is None:
-            eig, _ = np.linalg.eigh(self.m)
-
-            # If all eigenvalues are close to 0, np.product(np.array([])) returns 1
-            self.m_pdet = np.product(eig[np.abs(eig)>1e-12])
+            self.m_pdet = pdet(self.m)
         return self.m_pdet
 
 

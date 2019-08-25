@@ -20,18 +20,18 @@
 \section{Introduction:}
 \texttt{linkalman} is a python package that solves linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has a combination of several advantages:
 \begin{boenumerate}
-    \item Account for incomplete measurements 
+    \item Account for partially and fully incomplete measurements 
     \item Flexible and convenient model structure
     \item Robust and efficient implementation
     \item Proper implementation with unknown priors
-    \item Built-in numerical and EM algorithm solvers
-    \item Open-source
-    \item Modular design
+    \item Built-in numerical and EM algorithms
+    \item Open-source with a comprehensive user manual 
+    \item Modular design with intuitive model specification
     \item Pure python implementation 
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Hidden Markov Model (HMM). Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a HMM, Section (\ref{sec:apply}) presents an example of Bayesian Structural Time Series (BSTS) models, and Section (\ref{sec:codebase}) discusses the package design of \texttt{linkalman}.
+This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a BSTS model, Section (\ref{sec:apply}) presents a representative example, and Section (\ref{sec:codebase}) discusses the package design of \texttt{linkalman}.
 
 \section{Model Setup:} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -43,7 +43,7 @@ Equation (\ref{eq:state_evolve}) governs a Markov state transition process. $\xi
 
 Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)$ is the measurement vector at time $t$. $w_t$ $(n\times 1)$ is the exogenous measurement noise. In addition to assuming $w_t\sim \mathcal{N}(0, R_t)$ is white noise, I also assume that  $w_t \perp v_s \ \forall\  t,s\in\{0,1,...,T\}$. $H_t$ $(n\times m)$ and $D_t$ $(n\times k)$ dictate interaction among $\xi_t$, $y_t$ and $x_t$. 
 
-Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize an HMM, with system matrices $\{F_t, B_t, H_t, D_t, Q_t, R_t\}$ parameterized by $\theta$. System matrices may vary over time. For example cyclical pattern can be modeled by using Trigonometric Cycles (\cite{harvey_1985}). 
+Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a BSTS model, with system matrices $\{F_t, B_t, H_t, D_t, Q_t, R_t\}$ parameterized by $\theta$. System matrices may vary over time. For example cyclical pattern can be modeled by using Trigonometric Cycles (\cite{harvey_1985}). 
 
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$.
 
@@ -136,7 +136,7 @@ Diffused initial state is to represent the fact the we have no prior knowledge o
 
 A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and interested readers may refer to Appendix \ref{ap:transition} for a simple proof\footnote{For a complete treatment, refer to (\cite{koopman_1997}) for details.}. 
 
-Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_t\equiv rank(P_{\infty,t})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>0)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>0)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, the new benchmark rank is $q_t-1$. Define $\hat{q}_t$ as the benchmark rank for $P_{\infty,t}$ and $\hat{q}_1=q$. After each period, we set: 
+Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_t\equiv rank(P_{\infty,t})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>\varepsilon)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>\varepsilon)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, the new benchmark rank is $q_t-1$. Define $\hat{q}_t$ as the benchmark rank for $P_{\infty,t}$ and $\hat{q}_1=q$. After each period, we set: 
 \[
     \hat{q}_{t+1}=min[\hat{q}_t-1,q_{t+1}]
 \]
@@ -160,13 +160,13 @@ In addition, at the beginning of time $t$ before any Kalman updating, we have:
     &= F_{t-1}P_{t-1:(n_{t-1}+1)|t-1:(n_{t-1})}F_{t-1} + Q_{t-1} \label{eq:diff_P_seq0}
 \end{align}
 
-For sequential filtering to work, we need $R_t$ to be diagonal. In the case where $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original HMM into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, in practice, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
+For sequential filtering to work, we need $R_t$ to be diagonal. In the case where $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original BSTS model into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, in practice, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
 \begin{align}
     \tilde{y}_t = \tilde{H}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t \label{eq:ldl}
 \end{align}
 where $\tilde{(\cdot)}_t = l_t^{-1}(\cdot)_t$. In the following sections, I will omit the $(\sim)$ sign, and assume $R_t$ is always diagonal.
 
-For an HMM with diagonal $R_t$, equation (\ref{eq:measure}) then becomes:
+For a BSTS model with diagonal $R_t$, equation (\ref{eq:measure}) then becomes:
 \begin{align*}
     y_t &= 
     \begin{pmatrix}
@@ -310,25 +310,38 @@ As with the case of Kalman filtering, calculating $\Upsilon_t^{-1}$ is expensive
 
 Define $y_{t:(i)}$ as the $i$-th non-missing measurement of $y_t$. To derive the univariate formula for diffuse smoothers, we can treat smoothing between two observations within the same period as if the transition matrix is $F_{t-1}$ between $t-1:(n_t)$ and $t:(1)$, and is an identity matrix if otherwise. In addition, for notational purpose, we can add $r_{t:(0)}$ and $N_{t:(0)}$. It is easy to see $r_{t:(0)}=r_t$, and $N_{t:(0)}=N_t$. For the case $(i)\leq(n_t)$, if $\Upsilon_{\infty,t:(i)}\neq0$, the recursive formula for $r_{t-1}$ and $N_{t-1}$ are:
 \begin{align}
-    r_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}r_{t:(i)}^{(0)} \label{eq:diff_uni_start} \\ 
-    r_{t:(i-1)}^{(1)} =& H_{t:(i)}^{'}\left(\frac{d_{t:(i)}}{\Upsilon_{\infty,t:(i)}}-K_{t:(i)}^{(1)'}r_{t:(i)}^{(0)}\right)+L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \\
+    r_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}r_{t:(i)}^{(0)} \label{eq:diff_uni_start} \\
+    r_{t:(i-1)}^{(1)} =& H_{t:(i)}^{'}\left(\frac{d_{t:(i)}}{\Upsilon_{\infty,t:(i)}}-K_{t:(i)}^{(1)'}r_{t:(i)}^{(0)}\right)+L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \nonumber \\
+    =& \frac{H_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{\infty,t:(i)}} + L_{t:(i)}^{(1)'}r_{t:(i)}^{(0)} + L_{t:(i)}^{(0)'}r_{t:(i)}^{(1)} \\
     N_{t:(i-1)}^{(0)} =& L_{t:(i)}^{(0)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)} \\
     N_{t:(i-1)}^{(1)} =& \frac{H_{t:(i)}^{'}H_{t:(i)}}{\Upsilon_{\infty,t:(i)}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(0)}\rangle + L_{t:(i)}^{(0)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(0)} \\
-    N_{t:(i-1)}^{(2)} =& -\frac{H_{t:(i)}^{'}H_{t:(i)}\Upsilon_{*,t:(i)}}{\Upsilon_{\infty,t:(i)}^{2}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(1)}L_{t:(i)}\rangle \nonumber \\
+    N_{t:(i-1)}^{(2)} =& -\frac{H_{t:(i)}^{'}H_{t:(i)}\Upsilon_{*,t:(i)}}{\Upsilon_{\infty,t:(i)}^{2}} + \langle L_{t:(i)}^{(1)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(0)}\rangle \nonumber \\
     &+L_{t:(i)}^{(0)'}N_{t:(i)}^{(2)}L_{t:(i)}^{(0)} + L_{t:(i)}^{(1)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(1)} \\
-    L_{t:(i)}^{(0)} &= 1-K_{t:(i)}^{(0)}H_{t:(i)}= 1-\frac{P_{\infty,t:(i)}H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}} \\
-    L_{t:(i)}^{(1)} &= K_{t:(i)}^{(1)}H_{t:(i)}=-\frac{(P_{*,t:(i)}H_{t:(i)}^{'}-K_{t:(i)}^{(0)}\Upsilon_{*,t:(i)})H_{t:(t)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}}
+    L_{t:(i)}^{(0)} =& I-K_{t:(i)}^{(0)}H_{t:(i)}= I-\frac{P_{\infty,t:(i)}H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}} \\
+    L_{t:(i)}^{(1)} =& - K_{t:(i)}^{(1)}H_{t:(i)}=-\frac{(P_{*,t:(i)}H_{t:(i)}^{'}-K_{t:(i)}^{(0)}\Upsilon_{*,t:(i)})H_{t:(t)}}{H_{t:(i)}P_{\infty,t:(i)}H_{t:(i)}^{'}}
 \end{align}
 
-Similarly, if $\Upsilon_{\infty,t:(i)}=0$, the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ are:
+Similarly, if $\Upsilon_{\infty,t:(i)}=0$ and $t<t_q$, the recursive formula for $r_{t:(i)}$ and $N_{t:(i)}$ are:
 \begin{align}
-    r_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}d_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}} + (I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}r_{t:(i)}^{(0)} \\
+    r_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}d_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}} + (I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}r_{t:(i)}^{(0)} \nonumber \\
+    &= \frac{H_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{*,t:(i)}} + L_{t:(i)}^{(*)'}r_{t:(i)}^{(0)} \\
     r_{t:(i-1)}^{(1)} &= r_{t:(i)}^{(1)} \\ 
-    N_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}}+(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(0)}(1-K_{t:(i)}^{(*)}H_{t:(i)}) \\
-    N_{t:(i-1)}^{(1)} &= (1-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(1)}(1-K_{t:(i)}^{(*)}H_{t:(i)}) \\
+    N_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}H_{t:(i)}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}}+(I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(0)}(I-K_{t:(i)}^{(*)}H_{t:(i)}) \nonumber \\
+    &= \frac{H_{t:(i)}^{'}H_{t:(i)}}{\Upsilon_{*,t:(i)}} + L_{t:(i)}^{(*)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(*)} \\
+    N_{t:(i-1)}^{(1)} &= (I-K_{t:(i)}^{(*)}H_{t:(i)})^{'}N_{t:(i)}^{(1)}(I-K_{t:(i)}^{(*)}H_{t:(i)}) \nonumber \\
+    &= L_{t:(i)}^{(*)'}N_{t:(i)}^{(1)}L_{t:(i)}^{(*)} \\
     N_{t:(i-1)}^{(2)} &= N_{t:(i)}^{(2)} \\
-    K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}}
+    K_{t:(i)}^{(*)} &= \frac{P_{*,t:(i)}H_{t:(i)}^{'}}{H_{t:(i)}P_{*,t:(i)}H_{t:(i)}^{'}+R_{t:(i)}} \\
+    L_{t:(i)}^{(*)} &= I - K_{t:(i)}^{(*)}H_{t:(i)}
 \end{align}
+
+For the regular Kalman smoother where $t\geq t_q$, the formula are: 
+\begin{align}
+    r_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{*,t:(i)}} + L_{t:(i)}^{(*)'}r_{t:(i)}^{(0)} \\
+    N_{t:(i-1)}^{(0)} &= \frac{H_{t:(i)}^{'}H_{t:(i)}}{\Upsilon_{*,t:(i)}} + L_{t:(i)}^{(*)'}N_{t:(i)}^{(0)}L_{t:(i)}^{(*)} 
+\end{align}
+
+Essentially, we only update $r_{t:(i-1)}^{(0)}$ and $N_{t:(i-1)}^{(0)}$. 
 
 For the case $(i)=(0)$, then the recursive formula for $r_{t-1:(n_{t-1})}$ and $N_{t-1:(n_{t-1})}$ become:
 \begin{align}
@@ -339,51 +352,46 @@ For the case $(i)=(0)$, then the recursive formula for $r_{t-1:(n_{t-1})}$ and $
     N_{t-1:(n_{t-1})}^{(2)} &= F_{t-1}^{'}N_{t:(0)}^{(2)}F_{t-1} \label{eq:diff_uni_end}
 \end{align}
 
-Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). In particular, computing $P_{t,t+1|T}$ with fully missing measurements over some periods is tricky. Assume we have no measurements between time $t$ and $j$. The expression for $P_{t:(n_t),j:(1)|T}$ is: 
-\begin{align*}
-    P_{t:(n_t),j:(1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}\prod_{i=t}^{j-1}F_i^{'}(1-N_{j:(0)}P_{j:(1)})  
-\end{align*}
-
-Define $J_{t:(i)}$ as
-\begin{align*}
-    J_{t:(i)} &\equiv \begin{cases}
-        1-N_{t:(i-1)}P_{t:(i)}\ & \  i\leq n_t \\
-        F_{t}^{'}J_{t+1:(1)}\ & \ i=n_{t}+1 
-    \end{cases}
-\end{align*}
-
-Then we have a more convenient recursive formula for $P_{t,t+1|T}$ as:
+Now we can find the univariate versions of $\hat{\xi}_{t|T}$, $P_{t|T}$, and $P_{t,t+1|T}$ by applying equation (\ref{eq:diff_uni_start}) through (\ref{eq:diff_uni_end}) to equation (\ref{eq:diff_xi}) through (\ref{eq:diff_Pcov}). In particular, in the case of univariate smoother, $\hat{\xi}_{t:(i)}=\hat{\xi}_{t:(1)}$ and $P_{t:(i)}=P_{t:(1)}$, because there is no change in $t$\footnote{It is easy to show the equivalence by expanding the expression of $\hat{\xi}_{t|T}^{(i+1)}$ and comparing it against $\hat{\xi}_{t|T}^{(i)}$.}. In addition, EM algorithm requires computing $P_{t,t+1|T}$ even if $t$ or $t+1$ has fully missing measurements. Unlike Kalman filters, we only need to store one set of state values for each $t$. Define $P_{t,t+1|T} \equiv P_{t:(n_t+1),t+1:(1)|T}$. If $t<t_q$, we have:
 \begin{align}
-    P_{t:(i),(i+1)|T} &= P_{t:(i)}(1-K_{t:(i)}H_{t:(i)})^{'}J_{t:(i+1)} \label{eq:cov_recur_begin} \\
-    P_{t:(n_t),(n_t+1)|T} &= P_{t:(n_t)}(1-K_{t:(n_t)}H_{t:(n_t)})^{'}J_{t:(n_t+1)} \label{eq:cov_recur_end}
+    \hat{\xi}_{t:(1)|T} =& \hat{\xi}_{t:(1)} + P_{*,t:(1)}r_{t:(0)}^{(0)} + P_{\infty,t:(1)}r_{t:(0)}^{(1)} \label{eq:diff_smooth_start} \\
+    P_{t:(1)|T} =& P_{*,t:(1)} - \langle P_{\infty,t:(1)}N_{t:(0)}^{(1)}P_{*,t:(1)} \rangle - P_{*,t:(1)}N_{t:(0)}^{(0)}P_{*,t:(1)} \nonumber \\
+        &- P_{\infty,t:(1)}N_{t:(0)}^{(2)}P_{\infty,t:(1)} \\
+    P_{t,t+1|T} =& P_{*,t:(n_t+1)}F_t^{'}(I-N_{t+1:(0)}^{(1)}P_{\infty,t+1:(1)} - N_{t+1:(0)}^{(0)}P_{*,t+1:(1)}) \nonumber \\
+    &- P_{\infty,t:(n_t+1)}F_t^{'}(N_{t+1:(0)}^{(2)}P_{\infty,t+1:(1)}+N_{t+1:(0)}^{(1)}P_{*,t+1:(1)})
 \end{align}
 
-If we are working with diffuse smoothers, we can use the diffuse version of equations (\ref{eq:cov_recur_begin}) and (\ref{eq:cov_recur_end}) to compute covariance matrices. 
+If $t \geq t_q$, we have:
+\begin{align}
+    \hat{\xi}_{t:(1)|T} &= \hat{\xi}_{t:(1)} + P_{t:(1)}r_{t:(0)} \\
+    P_{t:(1)|T} &= P_{t:(1)} - P_{t:(1)}N_{t:(0)}P_{t:(1)} \\
+    P_{t,t+1|T} &= P_{t:(n_t+1)}F_t^{'}(I - N_{t+1:(0)}P_{t+1:(1)}) \label{eq:diff_smooth_end}
+\end{align}
+
+Recall that the state estimates are the same between $t:(i)$ and $t:(i+1)$ for any given time, so we may choose any measurement index $(i)$. Equation (\ref{eq:diff_smooth_start}) and (\ref{eq:diff_smooth_end}) are preferred here because their indexing are consistent with those in Kalman filters and smoothers, and are capable of handling fully missing measurements.
 
 \section{Parameter Estimation} \label{sec:param}
-Up to this point, we have assumed that system matrices of a HMM is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
+Up to this point, we have assumed that system matrices of a BSTS model is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
 
 \subsection{Numerical Maximization} \label{subsec:NM}
-This section follows closely (\cite{durbin_koopman_2001}) with marginal likelihood corrections from (\cite{francke2010likelihood}) and (\cite{harville1974bayesian}). Here I provide the expression for marginal likelihood\footnote{Interested readers may refer to Appendix \ref{ap:NL}.} $l_m(Y_T)$ as:
+This section follows closely (\cite{durbin_koopman_2001}) with marginal likelihood corrections from (\cite{francke2010likelihood}) and (\cite{harville1974bayesian}). First we parameterize system matrices. To ensure PSD of $Q_t$ and $R_t$ while allowing unconstrained parameterization, I use Cholesky decomposition described in (\cite{pinheiro1996unconstrained}). Next, I provide the expression for marginal likelihood\footnote{Interested readers may refer to Appendix \ref{ap:NL}.} $l_m(Y_T)$ as:
 \begin{align}
-    l_m(Y_T) =& Const - \frac{1}{2}\sum_{t=1}^{t_q}\Psi_t - \frac{1}{2}\sum_{t=t_q+1}^{T}(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t) + \frac{1}{2}log\left| \sum_{t=1}^{T}(Z_t^{'}Z_t) \right| \label{eq:NM_likelihood} \\
-    \Psi_t =& \begin{cases}
-        log|\Upsilon_{\infty,t}| & \Upsilon_{\infty,t} > 0 \\
-        log|\Upsilon_{*,t}| + d_t^{'}\Upsilon_{*,t}^{-1}d_t & \Upsilon_{\infty,t}=0
+    l_m(Y_T) =& Const - \frac{1}{2}\sum_{t=1}^{t_q-1}\sum_{i=1}^{n_t}\Psi_{t:(i)} - \frac{1}{2}\sum_{t=t_q}^{T}\sum_{i=1}^{n_t}\left(log|\Upsilon_{t:(i)}| + \frac{d_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{t:(i)}}\right) + \frac{1}{2}log\left| \sum_{t=1}^{T}(Z_t^{'}Z_t) \right| \label{eq:NM_likelihood} \\
+    \Psi_{t:(i)} =& \begin{cases}
+        log|\Upsilon_{\infty,t:(i)}| & \Upsilon_{\infty,t:(i)} > 0 \\
+        log|\Upsilon_{*,t:(i)}| + \frac{d_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{*,t:(i)}} & \Upsilon_{\infty,t:(i)}=0
     \end{cases} \nonumber \\
     Z_t &= H_t\phi_t \nonumber \\
     \phi_{t+1} &= F_t\phi_t \nonumber \\
     \phi_1 &= A \nonumber
 \end{align}
 
-The sequential counterparts of equation (\ref{eq:NM_likelihood}) simply replaces matrices related to $Y_T$ with their counterpart expressions in the univariate case. The formula is omitted here.
-
-Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt}.
+Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In the univariate case, $H_t$ is $\tilde{H}_t$, and if the $i$-th measurement is missing, the $i$-th row of $H_t$ is $0$.  In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt} to solve it numerically.
 
 \subsection{EM Algorithm} \label{subsec:EM}
-One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) is much faster to converge at the beginning. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
+One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. In addition, we need to run the Kalman filter for every parameter evaluation. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) has a better early-stage performance. The EM algorithm converges to a local optimum iteratively, and in particular, within each iteration, the Kalman smoother is evaluated only once. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
 
-The log likelihood function for a HMM system is:
+The log likelihood function for a BSTS model is:
 \begin{align*}
     L(Y_T|X_T; \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
 \end{align*}
@@ -451,9 +459,9 @@ where $\eta_{\psi,t}\sim\mathcal{N}(0,\sigma_{\psi}^2)$, $\eta_{\psi,t}^{*}\sim\
 Now I specify measurement equations: 
 \begin{align}
     y_{t,1} &= \alpha_t+D_1x_{t,2}+w_{t,1} \ , \ t\in\{7,14,21,...\} \\
-    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,12,15...\} \label{eq:y2}
+    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,13,15...\} \label{eq:y2}
 \end{align}
-where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. on weekdays) and complete missing measurements (e.g. on Saturdays). 
+where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. every sixth and seventh days). Note that I do not use conventional weekdays availability for $y_{t,2}$ because otherwise we have a fully diffuse time series (e.g. We will never get the weekly effect due to missing measurements for Saturdays).
 
 To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS framework, I make the following definitions:
 \begin{align*}
@@ -552,13 +560,8 @@ To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS fr
 \end{align*}
 The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
 
-\section{\texttt{linkalman}} \label{sec:codebase}
+\section{\texttt{linkalman} Design} \label{sec:codebase}
 
-% codebase
-% design
-% modular
-% plug in optimizer
-% switch section application before codebase
 
 
 
@@ -653,18 +656,19 @@ Similarly, we can rewrite $\hat{\xi}_{t|t}$ as:
 \begin{align}
     \hat{\xi}_{t|t} =& \hat{\xi}_{t|t-1} + K_t^{(0)}d_t + \mathcal{O}(\kappa^{-1}) \label{eq:diff_xi1} 
 \end{align}
+
 For $P_{t|t}$, we have:
 \begin{align*}
     P_{t|t} =& [I-K_tH_t]P_{t|t-1}[I-K_tH_t]^{'}+K_tR_tK_t^{'} \\
     =& [I-(K_t^{(0)}+\kappa^{-1}K_t^{(1)})H_t](\kappa P_{\infty,t}+P_{*,t})[I-(K_t^{(0)}+\kappa^{-1}K_t^{(1)})H_t]^{'} \\ 
-    &+ K_t^{(0)}R_tK_t^{(0)} + \mathcal{O}(\kappa^{-1}) \\
+    &+ K_t^{(0)}R_tK_t^{(0)'} + \mathcal{O}(\kappa^{-1}) \\
     =& \kappa(I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} + (I-K_t^{(0)}H_t)P_{*,t}(I-K_t^{(0)}H_t)^{'} \\
     &-K_t^{(1)}H_tP_{\infty,t}(I-K_t^{(0)}H_t)^{'} - (I-K_t^{(0)}H_t)P_{\infty,t}H_t^{'}K_t^{(1)'} \\
-    &+ K_t^{(0)}R_tK_t^{(0)} + \mathcal{O}(\kappa^{-1}) \\
+    &+ K_t^{(0)}R_tK_t^{(0)'} + \mathcal{O}(\kappa^{-1}) \\
     =& \kappa(I-K_t^{(0)}H_t)P_{\infty,t}(I-K_t^{(0)}H_t)^{'} + (I-K_t^{(0)}H_t)P_{*,t}(I-K_t^{(0)}H_t)^{'} \\
     &-K_t^{(1)}H_tP_{\infty,t} + K_t^{(1)}H_tP_{\infty,t}H_t^{'}K_t^{(0)'} \\
     &- P_{\infty,t}H_t^{'}K_t^{(1)'} + K_t^{(0)}H_tP_{\infty,t}H_t^{'}K_t^{(1)'}  \\
-    &+ K_t^{(0)}R_tK_t^{(0)} + \mathcal{O}(\kappa^{-1}) 
+    &+ K_t^{(0)}R_tK_t^{(0)'} + \mathcal{O}(\kappa^{-1}) 
 \end{align*}
 Note that $K_t^{(0)} = P_{\infty,t}H_t^{'}\Upsilon_t^{(1)} = P_{\infty,t}H_t^{'}(H_tP_{\infty,t}H_t^{'})^{-1}$, we have:
 \begin{align*}
@@ -760,10 +764,17 @@ If $j=t+1$, then:
     &= P_{t|t-1}L_t^{'}
 \end{align*}
 
+If we have no measurements for time $t+1$, there is no Kalman updating, and we have:
+\begin{align*}
+    E[\xi_t(\xi_{t+1}-\hat{\xi}_{t+1,t})^{'}]&= P_{t|t-1}F_t^{'}
+\end{align*}
+
 For $j>t+1$, we have:
 \begin{align*}
     E[\xi_t(\xi_{j}-\hat{\xi}_{j,j-1})^{'}|Y_{t-1},X_T;\theta] = P_{t|t-1}\prod_{i=t}^{j-1}L_i^{'}
 \end{align*}
+
+For simplicity, I only use $L_i$ here. If we have no measurements for time $i$, we replace $L_i$ with $F_i$. 
 
 To compute $\hat{\xi}_{t|T}$, note that $Var(\Delta_{t}|Y_{t-1},X_T;\theta)$ is a block diagonal matrix, then we may express $\hat{\xi}_{t|T}$ as:
 \begin{align*}
@@ -913,7 +924,6 @@ If $\Upsilon_{\infty,t}=0$, $P_{t,t+1|T}$ becomes:
     &- P_{\infty,t}F_t^{'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1})
 \end{align*}
 
-
 \subsubsection{Recursive Formula for $r_{t-1}$ and $N_{t-1}$} \label{ap:r_N}
 Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$. The derivation follows closely (\cite{durbin_koopman_2003}) with some additional details. 
 
@@ -1053,7 +1063,7 @@ Here I use a less simplified expressions for $N_{t-1}^{(1)}$ than provided in (\
 \subsection{Derivation of Marginal Likelihood} \label{ap:NL}
 First I derive the regular log likelihood $l(Y_T)\equiv logL(Y_T|X_T;\theta)$: 
 \begin{align*}
-    l(Y_T) &= log\mathbb{P}(y_1;x_1\theta) + \sum_{t=2}^Tlog\mathbb{P}(y_t|Y_{t-1},X_T;\theta)
+    l(Y_T) &= log\mathbb{P}(y_1|x_T;\theta) + \sum_{t=2}^Tlog\mathbb{P}(y_t|Y_{t-1},X_T;\theta)
 \end{align*}
 
 Since $y_t|Y_{t-1},X_T;\theta$ is normally distributed with conditional mean and variance as:
@@ -1066,7 +1076,7 @@ Now we can write $l(Y_T)$ as:
 \begin{align*}
     l(Y_T) &= Const - \frac{1}{2}\sum_{t=1}^T(log|\Upsilon_t| + d_t^{'}\Upsilon_t^{-1}d_t)
 \end{align*}
-where $|\cdot|$ denotes pseudo-determinant.
+where $|\cdot|$ denotes pseudo-determinant. In the univariate case, $|\cdot|$ is reduced to calculating the absolute value.
 
 Next we derive diffuse likelihood $l_d(Y_T)\equiv logL(Y_T|X_T;\theta)$ with diffuse priors. First consider $\Upsilon_{\infty,t}>0$ (again we only consider the univariate case). In this case we have:
 \begin{align*}
@@ -1183,7 +1193,7 @@ Denote $\Theta\equiv (Y_T,X_T;\theta)$, I now derive expressions for $E(\delta_t
         - \langle B_{t-1}x_{t-1}[E(\xi_t|\Theta) - F_{t-1}E(\xi_{t-1}|\Theta)]^{'}\rangle \nonumber \\
         &+F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'} \label{eq:delta_t} \\
     E(\chi_t\chi_t^{'}|\Theta) =& (y_t-D_tx_t)(y_t-D_tx_t)^{'}-\langle H_t\hat{\xi}_{t|T}(y_t-D_tx_t)^{'}\rangle + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'} \label{eq:chi_t} \\ 
-    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{t|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
+    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{1|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
     E(\xi_t\xi_t^{'}|\Theta) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
     E(\xi_{t-1}\xi_t^{'}|\Theta) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
 \end{align}
@@ -1193,7 +1203,7 @@ Now $G(\theta,\theta_{i})$ is:
     G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i})
 \end{align*}
 
-It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve HMM with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
+It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve a BSTS model with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
 
 For the univariate case with fully missing measurements for some periods, $G_1^t(\theta,\theta_i)$ is updated differently. Note that $Q_{t:(i)}$ are essentially $0$ for $i\leq n_t$, so we only calculate $G_1^{t:(1)}$ with [$t:(1)$] and [$t-1:(n_{t-1}+1)$] in place of $t$ and $t-1$. In addition, we should not skip any $t$ even if there are no measurements, otherwise we need to redefine $Q_t-1$ and $\delta_t$ accordingly. 
 
