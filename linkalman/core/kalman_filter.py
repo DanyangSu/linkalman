@@ -2,14 +2,14 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 import scipy
 from copy import deepcopy 
-from .utils import mask_nan, inv, M_wrap, Constant_M, min_val
+from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, min_val, pdet
 
 __all__ = ['Filter']
 
 
 class Filter(object):
     """
-    Given an HMM:
+    Given a BSTS model:
 
     xi_{t+1} = F_t * xi_t + B_t * x_t + v_t     (v_t ~ N(0, Qt))
     y_t = H_t * xi_t + D_t * x_t + w_t     (w_t ~ N(0, Rt))
@@ -26,41 +26,43 @@ class Filter(object):
 
     where Info(t) is the information set at time t. With Gaussian
     asusmptions on v_t and w_t, we are able to characterize the
-    distribution of the HMM. Refer to doc/theory.pdf for details.
+    distribution of the BSTS model. Refer to doc/theory.pdf for details.
     """
 
-    def __init__(self, Mt: List[np.ndarray]) -> None:
+    def __init__(self, ft: Callable) -> None:
         """
         Initialize a Kalman Filter. Filter take system matrices 
-        Mt returns characteristics of the HMM. Note that self.Qt
+        Mt returns characteristics of the BSTS model. Note that self.Qt
         correspond to Q_{t+1}.
 
         Parameters:
         ----------
-        Mt : list of system matrices.
+        ft : function that generate Mt
         """
-        self.Ht_raw = deepcopy(M_wrap(Mt['Ht']))
-        self.Dt_raw = deepcopy(M_wrap(Mt['Dt']))
-        self.Rt_raw = deepcopy(M_wrap(Mt['Rt']))
+        self.ft = ft
 
-        self.Ft = M_wrap(Mt['Ft'])
-        self.Bt = M_wrap(Mt['Bt'])
-        self.Ht = M_wrap(Mt['Ht'])
-        self.Dt = M_wrap(Mt['Dt'])
-        self.Qt = M_wrap(Mt['Qt'])
-        self.Rt = M_wrap(Mt['Rt'])
-        self.xi_length = self.Ft[0].shape[0]
-        self.y_length = self.Ht[0].shape[0]
+        # Create placeholders for other class attributes
+        self.Ht_raw = None
+        self.Dt_raw = None
+        self.Rt_raw = None
+        self.Ft = None
+        self.Bt = None
+        self.Ht = None
+        self.Dt = None
+        self.Qt = None
+        self.Rt = None
+        self.xi_length = None
+        self.y_length = None
         self.Yt = None
         self.Xt = None
-        self.T = len(self.Ft)
-        self.I = np.eye(self.xi_length)
+        self.T = None
+        self.I = None
 
         # Create output matrices
-        self.xi_1_0 = deepcopy(Mt['xi_1_0'])
-        self.P_1_0 = deepcopy(Mt['P_1_0'])
+        self.xi_1_0 = None
+        self.P_1_0 = None
         self.xi_t = []
-        self.Ht_tilda = []
+        self.Ht_tilde = []
         self.Yt_missing = []
         self.Upsilon_inf_t = []
         self.Upsilon_star_t = []
@@ -70,9 +72,7 @@ class Filter(object):
         self.L_star_t = []
         self.P_inf_t = []
         self.P_star_t = []
-
-        # Collect initialization information
-        self.q, self.A, self.Pi = self.get_selection_mat(Mt['P_1_0'])
+        self.Upsilon_inf_gt_0_t = []  # store whether Upsilon_{\inf} > 0
         self.t_q = 0
 
 
@@ -98,21 +98,46 @@ class Filter(object):
         return number_diffuse, A, Pi
 
 
-    def __call__(self, Yt: List[np.ndarray], 
+    def __call__(self, theta: np.ndarray, Yt: List[np.ndarray], 
             Xt: List[np.ndarray]=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
 
         Parameters:
         ----------
+        theta : list of parameters for self.ft
         Yt : measurements, may contain missing values
         Xt : regressors, must be deterministic and has no missing values.
             If set as None, will generate zero vectors
         """
         self.Yt = deepcopy(Yt)
+        self.T = len(self.Yt)
+
+        # Generate Mt and populate system matrices of the BSTS model
+        Mt = self.ft(theta, self.T)
+        self.Ht_raw = deepcopy(M_wrap(Mt['Ht']))
+        self.Dt_raw = deepcopy(M_wrap(Mt['Dt']))
+        self.Rt_raw = deepcopy(M_wrap(Mt['Rt']))
+
+        self.Ft = M_wrap(Mt['Ft'])
+        self.Bt = M_wrap(Mt['Bt'])
+        self.Ht = M_wrap(Mt['Ht'])
+        self.Dt = M_wrap(Mt['Dt'])
+        self.Qt = M_wrap(Mt['Qt'])
+        self.Rt = M_wrap(Mt['Rt'])
+        self.xi_length = self.Ft[0].shape[0]
+        self.y_length = self.Ht[0].shape[0]
+        self.I = np.eye(self.xi_length)
+
+        # Create output matrices
+        self.xi_1_0 = deepcopy(Mt['xi_1_0'])
+        self.P_1_0 = deepcopy(Mt['P_1_0'])
 
         # Generate zeros arrays for Xt if Xt is None
         self.gen_Xt(Xt)
+        
+        # Collect initialization information
+        self.q, self.A, self.Pi = self.get_selection_mat(Mt['P_1_0'])
 
         # Check Mt and Xt, Yt dimension consistence
         self.check_consistence()
@@ -120,6 +145,9 @@ class Filter(object):
         # Initialize xi_1_0 and  P_1_0
         self.xi_t.append([self.xi_1_0])
         self.d_t.append([])
+        self.L_star_t.append([])
+        self.Upsilon_star_t.append([])
+        
         if self.q > 0:
             P_clean = deepcopy(self.P_1_0)
             P_clean[np.isnan(P_clean)] = 0
@@ -127,9 +155,8 @@ class Filter(object):
             self.P_star_t.append([self.Pi.dot(P_clean).dot(self.Pi.T)])
             self.L0_t.append([])
             self.L1_t.append([])
-            self.L_star_t.append([])
             self.Upsilon_inf_t.append([])
-            self.Upsilon_star_t.append([])
+            self.Upsilon_inf_gt_0_t.append([])
         else:
             self.P_star_t.append([self.P_1_0])
 
@@ -162,7 +189,7 @@ class Filter(object):
         """
         # LDL 
         Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
-        self.Ht_tilda.append(H_t)
+        self.Ht_tilde.append(H_t)
         self.Yt_missing.append(is_missing)
         self.t_q += 1
 
@@ -184,8 +211,9 @@ class Filter(object):
                 d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
                 
                 # If Upsilon_inf > 0
-                if Upsilon_inf > min_val * np.power(
-                        abs_Hi[abs_Hi > min_val].min(), 2):
+                gt_0 = Upsilon_inf > min_val * np.power(
+                        abs_Hi[abs_Hi > min_val].min(), 2)
+                if gt_0:
                     K_0 = P_inf.dot(H_i.T) / Upsilon_inf
                     K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
                     xi_t_i1 = xi_i + K_0.dot(d_t_i)
@@ -219,6 +247,7 @@ class Filter(object):
                 self.Upsilon_inf_t[t].append(Upsilon_inf)
                 self.Upsilon_star_t[t].append(Upsilon_star)
                 self.d_t[t].append(d_t_i)
+                self.Upsilon_inf_gt_0_t[t].append(gt_0)
 
         # Calculate xi_t1_t, P_inf_t1_t, and P_star_t1_t, 
         # and add placeholders for others
@@ -238,6 +267,7 @@ class Filter(object):
         self.L1_t.append([])
         self.L_star_t.append([])
         self.d_t.append([])
+        self.Upsilon_inf_gt_0_t.append([])
 
 
     def _joseph_form(self, L: np.ndarray, P: np.ndarray, 
@@ -276,7 +306,7 @@ class Filter(object):
         """
         # LDL 
         Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
-        self.Ht_tilda.append(H_t)
+        self.Ht_tilde.append(H_t)
         self.Yt_missing.append(is_missing)
 
         # Skip missing measurements
@@ -317,11 +347,11 @@ class Filter(object):
 
     def _LDL(self, t: int) -> Tuple[np.ndarray]: 
         """
-        Transform HMM using LDL methods. 
+        Transform the BSTS model using LDL methods. 
 
         Parameters:
         ----------
-        t : time index of HMM system
+        t : time index of the BSTS system
 
         Returns:
         ----------
@@ -378,6 +408,41 @@ class Filter(object):
             
             Yt_filtered_cov.append(yt_error)
         return Yt_filtered, Yt_filtered_cov
+
+
+    def get_LL(self) -> float:
+        """
+        Calculate the marginal likelihood of Yt for a BSTS model.
+
+        Returns:
+        ----------
+        LL : marginal likelihood 
+        """
+        LL = 0
+        for t in range(self.T):
+            Upsilon_star = self.Upsilon_star_t[t]
+            d_t = self.d_t[t]
+
+            # If diffuse, use Psi_t
+            if t < self.t_q:
+                gt_0 = self.Upsilon_inf_gt_0_t[t]
+                Upsilon_inf = self.Upsilon_inf_t[t]
+                for i in range(len(Upsilon_inf)):
+                    if gt_0[i]:
+                        LL += np.log(Upsilon_inf[i])
+                    else:
+                        LL += np.log(Upsilon_star[i]) + (
+                                d_t[i].T).dot(d_t[i]) / Upsilon_star[i]
+
+            # If not diffuse, skip Psi_t
+            else:
+                for i in range(len(Upsilon_star)):
+                    LL += np.log(Upsilon_star[i]) + (
+                            (d_t[i].T).dot(d_t[i]) / Upsilon_star[i])
+        
+        # Add marginal correction term
+        LL -= np.log(pdet(LL_correct(self.Ht_tilde, self.Ft, self.A)))
+        return -np.asscalar(LL)
     
 
     def check_consistence(self):

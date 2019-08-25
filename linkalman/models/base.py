@@ -1,47 +1,78 @@
 import numpy as np
 import pandas as pd
-from typing import List, Any, Callable
+from typing import List, Any, Callable, Dict
 from collections.abc import Sequence
-from ..core import EM
-from ..core import Smoother
-from ..core.utils import df_to_list, list_to_df, simulated_data, ft, Constant_M
+from ..core import Filter, Smoother
+from ..core.utils import df_to_list, list_to_df, simulated_data, \
+        get_diag, ft, Constant_M, create_col
 from copy import deepcopy
 from numpy.random import multivariate_normal
+from inspect import signature
 
-__all__ = ['BaseEM', 'BaseConstantModel']
+__all__ = ['BaseOpt', 'BaseConstantModel']
 
 
-class BaseEM(object):
+class BaseOpt(object):
     """
-    BaseEM is the core of models using EM algorithms. It directly interacts 
-    with the EM engine, and can be inherited by both constant M models and 
-    more complicated nonconstant Mt models.
+    BaseOpt is the core of model solvers. It directly interacts 
+    with the Kalman filters/smoothers, and can be inherited by 
+    both constant M models and more complicated nonconstant Mt models.
     """
     
-    def __init__(self, Ft: Callable) -> None:
+    def __init__(self, method: str='mix') -> None:
         """
-        Initialize Base EM model. 
+        Initialize base model. 
 
         Parameters:
         ----------
-        Ft : function that takes theta and returns Mt
+        method : method to fit. Default "mix" if not specified
         """
-        
-        # Raise exception if Ft no callable
-        if not isinstance(Ft, Callable):
-            raise TypeError('Ft must be a function')
-
-        self.Ft = Ft
+        self.ft = ft
         self.theta_opt = None
         self.x_col = None
         self.y_col = None
+        self.solver = None
+        self.method = method
+        if self.method not in ['mix','EM','LLY']:
+            raise ValueError('method must be "mix", "EM", or "LLY".')
 
 
-    def fit(self, df: pd.DataFrame, theta_init: List[float], 
-            y_col: List[str], x_col: List[str]=None) -> None:
+    def get_f(self, Ft: Callable) -> None:
         """
-        Fit the model using EM algorithm. Produces optimal 
-        theta. 
+        Mapping from theta to M. Ft must be the form: 
+        f: Ft(theta, T) -> [M_1, M_2,...,M_T]. 
+
+        Parameters:
+        ----------
+        Ft : theta -> Mt
+        """
+        # Check Ft
+        sig = signature(Ft)
+        if len(sig.parameters) != 2:
+            raise TypeError('Ft must have two positional arguments')
+
+        self.ft = Ft
+
+
+    def get_solver(self, solver: Any) -> None:
+        """
+        Get solver object for the model. The solver must be 
+        solver(theta, obj, **kwargs) where theta is the paramter,
+        obj is the objective function (e.g. likelihood), and **kwargs
+        are kwargs for the solver object. The solver should return 
+        optimal theta
+
+        Parameters:
+        ----------
+        solver : a solver object
+        """
+        self.solver = solver
+
+
+    def fit(self, df: pd.DataFrame, theta_init: np.ndarray,
+            y_col: List[str], x_col: List[str]=None, **kwarg) -> None:
+        """
+        Fit the model and returns optimal theta. 
 
         Parameters:
         ----------
@@ -50,64 +81,124 @@ class BaseEM(object):
             Mt for first iteration of EM algorithm.
         y_col : list of columns in df that belong to Yt
         x_col : list of columns in df that belong to Xt. May be None
+        kwarg : options for optimizers
         """
-        # Initialize
-        em = EM(self.Ft)
+        # Raise exception if x_col or y_col is not list
+        if x_col is not None:
+            if not isinstance(x_col, list):
+                raise TypeError('x_col must be a list.')
+
+        if not isinstance(y_col, list):
+            raise TypeError('y_col must be a list.')
+
+        if self.ft is None:
+            raise ValueError('Need ft')
+
+        if self.solver is None:
+            raise ValueError('Need solver')
+        
+        # Raise exception if Ft no callable
+        if not isinstance(self.ft, Callable):
+            raise TypeError('ft must be a function')
+
+        # Preprocess data inputs
         self.x_col = x_col
         self.y_col = y_col
 
-        # Convert dataframe to lists
-        Yt = self._df_to_list(df[y_col])
-
         # If x_col is given, convert dataframe to lists
-        if x_col is not None:
-            Xt = self._df_to_list(df[x_col])
+        Xt = df_to_list(df, x_col)
+        Yt = df_to_list(df, y_col)
+
+        # Run solver
+        if self.method == 'LLY': 
+            obj = lambda theta: self.get_LLY(theta, Yt, Xt)
+            self.theta_opt = self.solver(theta_init, obj, **kwarg)
+
+        elif self.method == 'EM':
+            pass
+
         else:
-            Xt = None
-
-        # Run EM solver
-        self.theta_opt = em.fit(theta_init, Yt, Xt)
+            pass
 
 
-    def predict(self, df: pd.DataFrame, Ft: Callable) -> Smoother: 
+    def get_LLY(self, theta: List[float], Yt: List[np.ndarray], 
+            Xt: List[np.ndarray]=None) -> float:
         """
-        Predict time series. df_extended should contain 
-        both training and test data.
+        Wrapper for calculating LLY. Used as the objective 
+        function for optimizers.
+
+        Parameters:
+        ----------
+        theta : paratmers
+        Yt : list of measurements
+        Xt : list of regressors. May be None
+
+        Returns:
+        ----------
+        lly : log likelihood from Kalman filters
+        """
+        kf = Filter(self.ft)
+        kf(theta, Yt, Xt)
+        return kf.get_LL()
+
+
+    def predict(self, df: pd.DataFrame, theta: np.ndarray=None) -> pd.DataFrame: 
+        """
+        Predict time series. df should contain both training and 
+        test data. If Yt is not available for some or all test data,
+        use np.nan as placeholders. Accept user-supplied theta as well
 
         Parameters:
         ----------
         df : df to be predicted. Use np.nan for missing Yt
-        Ft : should be consistent with self.Ft for t <= T
+        theta : override theta_opt using user-supplied theta
 
         Returns:
         ----------
-        ks : Contains filtered/smoothed y_t, xi_t, and P_t
+        df_fs : Contains filtered/smoothed y_t, xi_t, and P_t
         """
         # Generate system matrices for prediction
-        Mt = Ft(self.theta_opt)
-        Xt = self._df_to_list(df_extended[self.x_col])
-        Yt = self._df_to_list(df_extended[self.y_col])
+        Xt = df_to_list(df, self.x_col)
+        Yt = df_to_list(df, self.y_col)
+        
+        # Generate filtered predictions
+        kf = Filter(self.ft)
 
-        # Run E-step and get filtered/smoothed y_t, xi_t, and P_t
-        ks = EM.E_step(Mt, Xt, Yt)
-        return ks
+        # Override theta_opt if theta is not None
+        if theta is not None:
+            kf(theta, Yt, Xt)
+        else:
+            kf(self.theta_opt, Yt, Xt)
+
+        y_col_filter = create_col(self.y_col, suffix='_filtered')
+        y_filter_var = create_col(self.y_col, suffix='_fvar')
+        Yt_filtered, Yt_P = kf.get_filtered_y()
+        Yt_P_diag = get_diag(Yt_P)
+        df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
+        df_Yt_fvar = list_to_df(Yt_P_diag, y_filter_var)
+
+        # Generate smoothed predictions
+        ks = Smoother()
+        ks(kf)
+        y_col_smooth = create_col(self.y_col, suffix='_smoothed')
+        y_smooth_var = create_col(self.y_col, suffix='_svar')
+        Yt_smoothed, Yt_P_smooth = ks.get_smoothed_y()
+        Yt_P_smooth_diag = get_diag(Yt_P_smooth)
+        df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smooth)
+        df_Yt_svar = list_to_df(Yt_P_smooth_diag, y_smooth_var)
+        df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar,
+            df_Yt_smoothed, df_Yt_svar], axis=1)
+
+        return df_fs
         
 
-class BaseConstantModel(object):
+class BaseConstantModel(BaseOpt):
     """
-    Any HMM with constant system matrices may inherit this class.
-    The child class should provide get_f function.
+    Any BSTS model with constant system matrices may inherit this class.
+    The child class should provide get_f function. It inherits from BaseOpt
+    and has a customized get_f
     """
-
-    def __init__(self) -> None:
-        """
-        Initialize self.f 
-        """
-        self.f = lambda theta: self.get_f(theta)
-        self.mod = None  # placeholder for BaseEM object
-
-
-    def get_f(self, theta: List[float]) -> None:
+    def get_f(self, f: Callable) -> None:
         """
         Mapping from theta to M. Provided by children classes.
         Must be the form of get_f(theta). If defined, it should
@@ -115,59 +206,9 @@ class BaseConstantModel(object):
 
         Parameters:
         ----------
-        theta : placeholder for system parameter
+        f : theta -> M
         """
-        raise NotImplementedError
+        # Raise exception if Ft no callable
+        self.ft = lambda theta, T: ft(theta, f, T)
 
 
-    def fit(self, df: pd.DataFrame, theta_init: List[float], 
-            x_col: List[str], y_col: List[str]) -> None:
-        """
-        Invoke BaseEM.fit to fit the data.
-
-        Parameters:
-        ----------
-        df : data to be fitted
-        theta_init : initial theta, generate first Mt
-        x_col : columns in df that belong to Xt
-        y_col : columns in df that belong to Yt
-        """
-        # Raise exception if x_col or y_col is not list
-        if not isinstance(x_col, list):
-            raise TypeError('x_col must be a list.')
-        if not isinstance(y_col, list):
-            raise TypeError('y_col must be a list.')
-
-        # Collect dimensions of Xt and Yt
-        T = df.shape[0]
-
-        # Create F
-        F = lambda theta: self.F_theta(theta, self.f, T)
-
-        # Fit model using ConstantEM
-        ConstEM = BaseEM(F)
-        ConstEM.fit(df, theta_init, x_col, y_col)
-        self.mod = ConstEM
-
-
-    def predict(self, df: pd.DataFrame) -> Smoother:
-        """
-        Predict fitted values from Kalman Filter / Kalman Smoother
-        Ft is extended to fit the size of the input df.
-
-        Parameters:
-        ----------
-        df : input dataframe. Must contain both the training set and
-            the prediction set.
-
-        Returns:
-        ----------
-        ks : Contains fitted y_t, xi_t, and P_t
-        """
-        # Update Ft
-        T = df.shape[0]
-        Ft = lambda theta: self.F_theta(theta, self.f, T)
-
-        # Generate a smoother object that stores fitted values
-        ks = self.mod.predict(df, Ft)
-        return ks

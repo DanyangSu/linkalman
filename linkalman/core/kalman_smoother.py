@@ -11,7 +11,7 @@ __all__ = ['Smoother']
 class Smoother(object):
     """
     Given a filtered object, Smoother returns smoothed state estimation.
-    Given an HMM:
+    Given an BSTS:
 
     xi_{t+1} = F_t * xi_t + B_t * x_t + v_t     (v_t ~ N(0, Qt))
     y_t = H_t * xi_t + D_t * x_t + w_t     (w_t ~ N(0, Rt))
@@ -28,7 +28,7 @@ class Smoother(object):
 
     where Info(t) is the information set at time t, and T = max(t). 
     Using forward filtering then backward smoothing, we are able to 
-    characterize the distribution of the HMM based on the full 
+    characterize the distribution of the BSTS based on the full 
     information set up to T. Refer to doc/theory.pdf for details.
     """
 
@@ -95,7 +95,7 @@ class Smoother(object):
         ----------
         t : time index
         """
-        H_t = self.Ht_tilda[t]
+        H_t = self.Ht_tilde[t]
         d_t = self.d_t[t]
         Upsilon = self.Upsilon_star_t[t]
         L_t = self.L_star_t[t]
@@ -147,7 +147,6 @@ class Smoother(object):
         ----------
         t : time index
         """
-        H_t = self.Ht_tilda[t]
         d_t = self.d_t[t]
         Upsilon_inf = self.Upsilon_inf_t[t]
         Upsilon_star = self.Upsilon_star_t[t]
@@ -155,6 +154,7 @@ class Smoother(object):
         L1_t = self.L1_t[t]
         L_star_t = self.L_star_t[t]
         is_missing = self.Yt_missing[t]
+        gt_0 = self.Upsilon_inf_gt_0_t[t]
 
         # Backwards iteration on r and N
         counter = self.y_length - is_missing.sum() - 1 
@@ -168,12 +168,8 @@ class Smoother(object):
             if is_missing[i]: 
                 continue
             else:
-                H_i = H_t[i].reshape(1, -1)
-                abs_Hi = np.abs(H_i)
-
                 # If Upsilon_inf > 0
-                if Upsilon_inf[counter] > min_val * np.power(
-                        abs_Hi[abs_Hi > min_val].min(), 2):
+                if gt_0[counter]:
                     
                     # Must update r1 first, bc it uses r0_t_1i
                     r1_t_1i = (H_i.T).dot(d_t[counter]) / Upsilon_inf[counter] + \
