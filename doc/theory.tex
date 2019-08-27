@@ -389,14 +389,14 @@ This section follows closely (\cite{durbin_koopman_2001}) with marginal likeliho
 Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In the univariate case, $H_t$ is $\tilde{H}_t$, and if the $i$-th measurement is missing, the $i$-th row of $H_t$ is $0$.  In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt} to solve it numerically.
 
 \subsection{EM Algorithm} \label{subsec:EM}
-One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. In addition, we need to run the Kalman filter for every parameter evaluation. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) has a better early-stage performance. The EM algorithm converges to a local optimum iteratively, and in particular, within each iteration, the Kalman smoother is evaluated only once. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm with diffuse priors\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}}.  
+One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. In addition, we need to run the Kalman filter for every parameter evaluation. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) has a better early-stage performance. The EM algorithm converges to a local optimum iteratively, and in particular, within each iteration, the Kalman smoother is evaluated only once. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}.}.  
 
 The log likelihood function for a BSTS model is:
 \begin{align*}
-    L(Y_T|X_T; \theta) &= log[\mathbb{P}(Y_T|X_T,\theta) \\
+    L(Y_T|X_T; \theta) &= log[\mathbb{P}(Y_T|X_T;\theta)]
 \end{align*}
 
-Following equation (\ref{eq:Q}), we maximize $L(Y_T,X_T,\theta)$ by maximizing: 
+Following equation (\ref{eq:Q}), we maximize marginal $L(Y_T|X_T;\theta)$ by maximizing: 
 \begin{align*}
     G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \end{align*}
@@ -404,15 +404,26 @@ Denote $G(\theta,\theta_i)$ as:
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
+
+Here I provide the univariate formulation for the objective function $G(\theta,\theta_i)$:
+\begin{align}
+    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}\sum_{j=1}^{n_t}G_2^{t:(j)}(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| \label{eq:G_univariate}
+\end{align}
+
+Note that there is no within period variation of $\xi_t:(i)$, so we only calculate $G_1^t(\theta,\theta_i)$ at the beginning of time $t$ using univariate representations, and $G_2^{t:(j)}(\theta,\theta_i)$ is defined as\footnote{In practice, I check whether $R_{t:(j)}>\varepsilon$. If $R_{t:(j)}$ is small, the distribution collapses to the deterministic case.}:
+\begin{align*}
+    G_2^{t:(j)}(\theta,\theta_i) =& const - \frac{1}{2}log(R_{t:(j)})-\frac{1}{2}Tr\left[\frac{E(\chi_{t:(j)}\chi_{t:(j)}^{'}|Y_T,X_T;\theta_{i})}{R_{t:(j)}}\right] \\
+    E(\chi_{t:(j)}\chi_{t:(j)}^{'}|\Theta) =& (y_{t:(j)}-D_{t:(j)}x_t)(y_{t:(j)}-D_{t:(j)}x_t)^{'}-\langle H_{t:(j)}\hat{\xi}_{t|T}(y_{t:(j)}-D_{t:(j)}x_t)^{'}\rangle \\
+    &+ H_{t:(j)}E(\xi_t\xi_t^{'}|\Theta)H_{t:(j)}^{'} 
+\end{align*}
+
 EM algorithm proceeds as follows:
 \begin{boenumerate}
     \item Start with initial parameter value $\theta_0$
     \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
-    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in Appendix \ref{ap:log} 
+    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in equation (\ref{eq:G_univariate}) and Appendix \ref{ap:log} 
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal
 \end{boenumerate}
-
-In practice, I use EM algorithm to cold start the optimization, then use numerical optimization to refine the result.
 
 \section{Application} \label{sec:apply}
 In this section, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
@@ -1178,7 +1189,7 @@ I define $G_1^{t}(\theta,\theta_i)$, $G_2^{t}(\theta,\theta_i)$, and $G_0(\theta
     &= const - \frac{1}{2}log(|Q_{t-1}|) - \frac{1}{2}Tr[Q_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log1_trace} \\
     G_2^t(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t; \theta)]\mathbb{P}(\Xi_T|Y_T,X_T;\theta_{i})d\Xi_T \nonumber \\
     &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log2_trace} \\
-    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})] - qlog(\kappa)\right\} \nonumber \\
+    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})] - \frac{q}{2}log(\kappa)\right\} \nonumber \\
     &=const - \frac{1}{2}log(|P_*|)-\frac{1}{2}Tr(P_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})) \\
     \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1} \nonumber \\
     \delta_* &\equiv \xi_1 - a \nonumber \\
@@ -1200,11 +1211,11 @@ Denote $\Theta\equiv (Y_T,X_T;\theta)$, I now derive expressions for $E(\delta_t
 
 Now $G(\theta,\theta_{i})$ is:
 \begin{align*}
-    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i})
+    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \end{align*}
 
 It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve a BSTS model with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
 
-For the univariate case with fully missing measurements for some periods, $G_1^t(\theta,\theta_i)$ is updated differently. Note that $Q_{t:(i)}$ are essentially $0$ for $i\leq n_t$, so we only calculate $G_1^{t:(1)}$ with [$t:(1)$] and [$t-1:(n_{t-1}+1)$] in place of $t$ and $t-1$. In addition, we should not skip any $t$ even if there are no measurements, otherwise we need to redefine $Q_t-1$ and $\delta_t$ accordingly. 
+For the univariate case with fully missing measurements for some periods, $G_1^t(\theta,\theta_i)$ is updated differently. Note that $Q_{t:(i)}$ are essentially $0$ for $i\leq n_t$, so we only calculate $G_1^{t:(1)}$ with [$t:(1)$] and [$t-1:(n_{t-1}+1)$] in place of $t$ and $t-1$. In addition, we should not skip any $t$ even if there are no measurements, otherwise we need to redefine $Q_{t-1}$ and $\delta_t$ accordingly. 
 
 \end{document}

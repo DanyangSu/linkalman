@@ -10,12 +10,9 @@ import nlopt
 
 def my_f(theta):
     """
-    AR(1) model. Note that it is important to get the correct
-    specification. It's important to note that a constant 
-    factor is needed for estimating more accurate theta, 
-    becaseu it will absorb some biasness.In general, 
-    however, MLE is biased, so the focus should be on prediction
-    fit, not parameter estimation. The formula here for Ar(1) is:
+    AR(1) model. In general, MLE is biased, so the focus should be 
+    more on prediction fit, less on parameter estimation. The 
+    formula here for Ar(1) is:
     y_t = c + Fy_{t-1} + epsilon_{t-1}
     """
 
@@ -49,7 +46,7 @@ def my_f(theta):
 # load that dataset instead.
 
 # Gemerate fake data
-theta = np.array([-0.2, -0.1, 0])
+theta = np.array([-1, -0.1, 1])
 num_params = len(theta)
 T = 1000
 cutoff_t = np.floor(T * 0.7).astype(int)
