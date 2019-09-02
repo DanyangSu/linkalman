@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 from copy import deepcopy
 from scipy import linalg
-from .utils import inv, get_nearest_PSD, min_val
+from .utils import inv, get_nearest_PSD, min_val, permute, revert_permute, partition_index
 from . import Filter
 
 __all__ = ['Smoother']
@@ -49,6 +49,13 @@ class Smoother(object):
         self.N1_t = []
         self.N2_t = []
         
+        # attributes for EM
+        self.linv_perm_y_t = []  # permuted then diagonalized y_t
+        self.n_t_t = []  # number of observed measurements at t
+        self.l_perm_t = []  # l of LDL from permuted R_t
+        self.Lambda0_perm_t = []  # Lambda for missing measurements from permuted R_t
+        self.perm_index_t = []  # index order after permutation
+
 
     def __call__(self, kf: Filter) -> None:
         """
@@ -236,56 +243,129 @@ class Smoother(object):
             self.N2_t.append((self.Ft[t-1].T).dot(N2_t_1i).dot(self.Ft[t-1]))
 
 
-    def _E_delta2(self, t: int) -> np.ndarray:
+    def _E_delta2(self, Mt: List[np.ndarray], t: int) -> np.ndarray:
         """
-        Calculated expected value of delta2. See Appendix E 
-        in doc/theory.pdf for details. 
+        Calculated expected value of delta2. See doc/theory.pdf for details. 
 
         Parameters:
         ----------
+        Mt : system matrix from ft(theta)  # Note: not theta_i
         t : time index
 
         Returns:
         ----------
-        delta2 : expectation term for xi in MLE
+        delta2 : expectation term for xi in G
         """
         # For initial state, use xi_1_0 and P_1_0 instead
         if t == 0:
-            term2 = self.xi_t_1t[t].dot(self.xi_t_T[t].T)
-            delta2 = self.xi2_t_T[t] - term2 - term2.T + \
-                    self.xi_t_1t[t].dot(self.xi_t_1t[t].T)
+            delta = self.xi_t_T[t] - Mt['xi_1_0']
+            delta2 = delta.dot(delta.T) + self.P_t_T[t]
 
         # For other state, use formular derived in doc/theory.pdf Appendix E
         else:
-            Bx = self.Bt[t-1].dot(self.Xt[t-1])
-            term3 = Bx.dot(self.xi_t_T[t].T)
-            term4 = self.xi_t_xi_1t_T[t].dot(self.Ft[t-1].T)
-            term5 = self.Ft[t-1].dot(self.xi2_t_T[t-1]).dot(self.Ft[t-1].T)
-            term6 = Bx.dot(self.xi_t_T[t-1].T).dot(self.Ft[t-1].T)
-            delta2 = self.xi2_t_T[t] - term4.T - term3 - term4 + term5 + \
-                    term6 - term3.T + term6.T + Bx.dot(Bx.T)
+            delta = self.xi_t_T[t] - Mt['Ft'][t-1].dot(self.xi_t_T[t-1]) - \
+                    Mt['Bt'][t-1].dot(self.Xt[t-1])
+            FPcov = Mt['Ft'][t-1].dot(self.Pcov_1t_t[t-1])  # Pcov_1t_t starts at t=1
+            delta2 = delta.dot(delta.T) + self.P_t_T[t] - FPcov - FPcov.T + \
+                    Mt['Ft'][t-1].dot(self.P_t_T[t-1]).dot(Mt['Ft'][t-1])
+
         return delta2
 
 
-    def _E_chi2(self, t: int) -> np.ndarray:
+    def _partition(self) -> None:
         """
-        Calculate expected value of chi2. See Appendix F 
-        in doc/theory.pdf for details.
+        Create elements for calculating Echi2:
+        self.linv_perm_y_t : permuted then diagonalized y_t
+        self.n_t_t : number of observed measurements at t
+        self.l_perm_t : l of LDL from permuted R_t
+        self.Lambda0_perm_t : Lambda for missing measurements from permuted R_t
+        self.perm_index_t : index order after permutation
+
+        The main part of this function is invoked only when we have 
+        partially observed measurements at time t.
+        """
+        for t in range(self.T):
+            is_missing = np.array(self.is_missing[t])
+            n_t = self.y_length - is_missing.sum()
+            self.n_t_t.append(n_t)
+
+            if n_t == 0:
+                self.linv_perm_y_t.append(None)
+                self.l_perm_t.append(None)
+                self.Lambda0_perm_t.append(self.Rt[t])
+                self.perm_index_t.append(None)
+            elif n_t == self.y_length:
+                self.linv_perm_y_t.append(None)
+                self.l_perm_t.append(None)
+                self.Lambda0_perm_t.append(None)
+                self.perm_index_t.append(None)
+            else: 
+
+
+
+
+
+
+    def _E_chi2(self, Mt: List[np.ndarray], t: int) -> np.ndarray:
+        """
+        Calculate expected value of chi2. See doc/theory.pdf for details.
 
         Parameters:
         ----------
+        Mt : system matrix from ft(theta)  # Note: not theta_i
         t : time index
 
         Returns:
         ----------
-        chi2 : expectation term for y in MLE
+        chi2 : expectation term for y in G
         """
+        if self.n_t == self.y_length:
+            pass
+        elif self.n_t == 0:
+            pass
+        else:
+            pass
+
+
+
+        not_missing = ~np.array(self.is_missing)
+        n_t = not_missing.sum()
+        
+
+
+
         Dx = self.Dt[t].dot(self.Xt[t])
         term1 = (self.Yt[t] - Dx).dot((self.Yt[t] - Dx).T)
         term2 = self.Ht[t].dot(self.xi_t_T[t]).dot((self.Yt[t] - Dx).T)
         term4 = self.Ht[t].dot(self.xi2_t_T[t]).dot(self.Ht[t].T)
         chi2 = term1 - term2 - term2.T + term4
         return chi2
+
+
+    def G(self, theta) -> float:
+        """
+        Calculate G
+
+        Parameters:
+        ----------
+        theta : paramters to feed in self.ft
+
+        Returns:
+        G : objective value for EM algorithms
+        """
+        Mt = self.ft(theta)
+        G0 = 0
+        G1 = 0
+        G2 = 0
+        
+        for t in self.T:
+            G1 += 
+            G1 += 
+            G2 += 
+        
+        G = G0 + G1 + G2
+
+        return G
 
 
     def get_smoothed_y(self) -> List[np.ndarray]:

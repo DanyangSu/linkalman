@@ -1,4 +1,4 @@
-\documentclass[10pt]{article}
+\documentclass[10pt, titlepage]{article}
 \usepackage{enumitem}
 \usepackage{amssymb}
 \usepackage{amsmath}
@@ -14,16 +14,31 @@
     {\end{enumerate}}
 \numberwithin{equation}{section}
 
-\begin{document}
-\title{Notes for Kalman Filter EM algorithms}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    citecolor=blue,
+    linkcolor=blue,
+    linktoc=all
+}
 
+\title{User's Manual of \texttt{linkalman}}
+\author{Su, Danyang}
+\begin{document}
+\pagenumbering{gobble}
+\maketitle
+\thispagestyle{empty}
+\clearpage
+\pagenumbering{arabic}
+\tableofcontents
+\newpage
 \section{Introduction:}
 \texttt{linkalman} is a python package that solves linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has a combination of several advantages:
 \begin{boenumerate}
     \item Account for partially and fully incomplete measurements 
     \item Flexible and convenient model structure
     \item Robust and efficient implementation
-    \item Proper implementation with unknown priors
+    \item Proper implementation for unknown priors
     \item Built-in numerical and EM algorithms
     \item Open-source with a comprehensive user manual 
     \item Modular design with intuitive model specification
@@ -33,7 +48,7 @@ Kalman filtering is a technique that provides an elegant solution to a wide rang
 
 This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a BSTS model, Section (\ref{sec:apply}) presents a representative example, and Section (\ref{sec:codebase}) discusses the package design of \texttt{linkalman}.
 
-\section{Model Setup:} \label{sec:model_setup}
+\section{Model Setup} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
 \begin{align}
     \xi_{t+1} = & F_{t}\xi_{t} + B_{t}x_t + v_t \label{eq:state_evolve} \\
@@ -48,7 +63,7 @@ Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a BSTS mod
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$.
 
 \section{Kalman Filter} \label{sec:filter}
-\subsection{Filtering with Known Initial Conditions:}
+\subsection{Filtering with Known Initial Conditions}
 Given a set of measurements over time, and suppose $\theta$ is known. To predict $y_{T+1}$, we need to perform forward filtering. We start by making the following notations:
 \begin{align*}
     Y_t &\equiv \{y_1, y_2, ..., y_t\} \\
@@ -381,7 +396,7 @@ This section follows closely (\cite{durbin_koopman_2001}) with marginal likeliho
         log|\Upsilon_{\infty,t:(i)}| & \Upsilon_{\infty,t:(i)} > 0 \\
         log|\Upsilon_{*,t:(i)}| + \frac{d_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{*,t:(i)}} & \Upsilon_{\infty,t:(i)}=0
     \end{cases} \nonumber \\
-    Z_t &= H_t\phi_t \nonumber \\
+    Z_t &= H_t\phi_t \label{eq:marginal_correct} \\
     \phi_{t+1} &= F_t\phi_t \nonumber \\
     \phi_1 &= A \nonumber
 \end{align}
@@ -400,33 +415,32 @@ Following equation (\ref{eq:Q}), we maximize marginal $L(Y_T|X_T;\theta)$ by max
 \begin{align*}
     G(Y_T,X_T,\theta) = \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \end{align*}
+
 Denote $G(\theta,\theta_i)$ as: 
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
 \]
 
-Here I provide the univariate formulation for the objective function $G(\theta,\theta_i)$:
-\begin{align}
-    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}\sum_{j=1}^{n_t}G_2^{t:(j)}(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| \label{eq:G_univariate}
-\end{align}
-
-Note that there is no within period variation of $\xi_t:(i)$, so we only calculate $G_1^t(\theta,\theta_i)$ at the beginning of time $t$ using univariate representations, and $G_2^{t:(j)}(\theta,\theta_i)$ is defined as\footnote{In practice, I check whether $R_{t:(j)}>\varepsilon$. If $R_{t:(j)}$ is small, the distribution collapses to the deterministic case.}:
-\begin{align*}
-    G_2^{t:(j)}(\theta,\theta_i) =& const - \frac{1}{2}log(R_{t:(j)})-\frac{1}{2}Tr\left[\frac{E(\chi_{t:(j)}\chi_{t:(j)}^{'}|Y_T,X_T;\theta_{i})}{R_{t:(j)}}\right] \\
-    E(\chi_{t:(j)}\chi_{t:(j)}^{'}|\Theta) =& (y_{t:(j)}-D_{t:(j)}x_t)(y_{t:(j)}-D_{t:(j)}x_t)^{'}-\langle H_{t:(j)}\hat{\xi}_{t|T}(y_{t:(j)}-D_{t:(j)}x_t)^{'}\rangle \\
-    &+ H_{t:(j)}E(\xi_t\xi_t^{'}|\Theta)H_{t:(j)}^{'} 
-\end{align*}
+Note that here $Z_t$ is not the same as $\tilde{Z}_t$ in Section \ref{subsec:NM}. As explained in Appendix \ref{ap:log}, we need pre-orthogonalized $y_t$ for calculating $G(\theta,\theta_i)$, and as a result $H_t$ is pre-orthogonalized as well. 
 
 EM algorithm proceeds as follows:
 \begin{boenumerate}
     \item Start with initial parameter value $\theta_0$
-    \item \label{step:EM_E} For iteration $i$, use Kalman Smoother to compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
-    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in equation (\ref{eq:G_univariate}) and Appendix \ref{ap:log} 
+    \item \label{step:EM_E} For iteration $i$, compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
+    \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in Appendix \ref{ap:log} 
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal
 \end{boenumerate}
 
 \section{Application} \label{sec:apply}
-In this section, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
+\subsection{ARMA(p,q)}
+In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem.
+
+\subsection{Random Walk}
+
+\subsection{Measuring Treatment Effects}
+
+\subsection{A Complex Time Series Model}
+In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
 \begin{align}
     \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}
 \end{align}
@@ -592,7 +606,7 @@ The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \
 \appendix
 
 \section{Kalman Filter}
-\subsection{Derivation of $\hat{\xi}_{t|t}$ and $P_{t|t}$} \label{ap:iter_proj}
+\subsection{Derivation of \texorpdfstring{$\hat{\xi}_{t|t}$}{} and \texorpdfstring{$P_{t|t}$}{}} \label{ap:iter_proj}
 \begin{lemma}[Law of Iterated Projections] \label{lem:1}
     Let $\mathcal{P}(Y_3|Y_2,Y_1)$ be the projection of $Y_3$ on $(Y_2, Y_1)$. Denote $\Omega_{ij}$ as $\Omega_{ij} = E(Y_iY_j^{'})$, then we have projections:
     \[
@@ -612,7 +626,7 @@ The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \
 
 Let $\xi_t$ as $Y_3$, $y_t$ as $Y_2$, and $(x_t,Y_{t-1})$ as $Y_1$, we obtain formula for $\hat{\xi}_{t|t}$ and $P_{t|t}$.
 
-\subsection{Derivation of Joseph Form of $P_{t|t}$} \label{ap:joseph}
+\subsection{Derivation of Joseph Form of \texorpdfstring{$P_{t|t}$}{}} \label{ap:joseph}
 \begin{align*}
     P_{t|t} &= [I - K_tH_t]P_{t|t-1}[I - K_tH_t]' + K_tR_tK_t^{'} \\
     &= P_{t|t-1} - K_tH_tP_{t|t-1} - P_{t|t-1}H_t^{'}K_t^{'} + K_tH_tP_{t|t-1}H_t^{'}K_t^{'} + K_tR_tK_t^{'} \\
@@ -935,7 +949,7 @@ If $\Upsilon_{\infty,t}=0$, $P_{t,t+1|T}$ becomes:
     &- P_{\infty,t}F_t^{'}(N_t^{(2)}P_{\infty,t+1}+N_t^{(1)}P_{*,t+1}) + \mathcal{O}(\kappa^{-1})
 \end{align*}
 
-\subsubsection{Recursive Formula for $r_{t-1}$ and $N_{t-1}$} \label{ap:r_N}
+\subsubsection{Recursive Formula for \texorpdfstring{$r_{t-1}$}{} and \texorpdfstring{$N_{t-1}$}{}} \label{ap:r_N}
 Having derived expressions for $\hat{\xi}_{t|T}$, $P_{t|T}$ and $P_{t,t+1|T}$, I proceed to derive the backward recursive formula for $r_{t-1}$ and $N_{t-1}$. The derivation follows closely (\cite{durbin_koopman_2003}) with some additional details. 
 
 First of all, consider $r_{t-1}$:
@@ -1146,7 +1160,7 @@ because $A^{'}X=0$, and we can use the properties of block diagonal matrix. In a
 
 To establish the second equality, we can simply apply another trick of block matrices described in (\cite{petersen2008matrix}).
 
-\subsection{EM Algorithm Premier:} \label{ap:EM_proof}
+\subsection{EM Algorithm Premier} \label{ap:EM_proof}
 Denote $Y$ as observed measurements, $\xi$ as hidden states, $g(\theta)$ as some function parameterized by $\theta$, and $\theta$ as parameters to be estimated. We want to optimize:
 \begin{align}
     L(\theta) & = log[P(Y|\theta)] + g(\theta) \nonumber \\
@@ -1166,7 +1180,7 @@ To optimize $L(\theta)$ we can iterate through the E steps and M steps to achiev
 \end{align}
 then maximizing $Q(\theta)$ is equivalent to maximizing $ L(\theta)$. For a given $\hat{\theta}$ and $P(\xi|Y, \hat{\theta})$, we find $\theta$ to optimize the first term (M-step). Use the new $\theta$ as $\hat{\theta}$ for the next iteration, and we will reach a local maximum. It is important to note that for a given $\hat{\theta}$, $f(\xi|Y, \hat{\theta})$ is a given quantity and does not change wrt. $\theta$. 
 
-\subsection{Derivation of Log-likelihood for $G(\theta,\theta_i)$} \label{ap:log}
+\subsection{Derivation of Log-likelihood for \texorpdfstring{$G(\theta,\theta_i)$}{}} \label{ap:log}
 From Section \ref{subsec:EM} we know that:
 \[
     G(\theta,\theta_i) \equiv \int log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_i)d\Xi_T + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
@@ -1185,37 +1199,89 @@ By Markov property, we can rewrite $log[\mathbb{P}(Y_T,\Xi_T|X_T,\theta)]$ as:
 I define $G_1^{t}(\theta,\theta_i)$, $G_2^{t}(\theta,\theta_i)$, and $G_0(\theta,\theta_i)$ as:
 \begin{align}
     G_1^{t}(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(\xi_t|\xi_{t-1},\theta)]\mathbb{P}(\Xi_T|Y_T,X_T,\theta_{i})d\Xi_T \nonumber \\
-    &= const -\frac{1}{2}log(|Q_{t-1}|)-\frac{1}{2}Tr[E(Q_{t-1}^{-1}\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \nonumber \\
-    &= const - \frac{1}{2}log(|Q_{t-1}|) - \frac{1}{2}Tr[Q_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log1_trace} \\
+    &= const -\frac{1}{2}log(|\mathbb{Q}_{t-1}|)-\frac{1}{2}Tr[E(\mathbb{Q}_{t-1}^{-1}\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \nonumber \\
+    &= const - \frac{1}{2}log(|\mathbb{Q}_{t-1}|) - \frac{1}{2}Tr[\mathbb{Q}_{t-1}^{-1}E(\delta_t\delta_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log1_trace} \\
     G_2^t(\theta,\theta_{i}) &\equiv \int log[\mathbb{P}(y_t|\xi_{t},x_t; \theta)]\mathbb{P}(\Xi_T|Y_T,X_T;\theta_{i})d\Xi_T \nonumber \\
-    &= const - \frac{1}{2}log(|R_t|)-\frac{1}{2}Tr[R_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log2_trace} \\
-    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|P_{1|0}|) + \frac{1}{2}Tr[P_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})] - \frac{q}{2}log(\kappa)\right\} \nonumber \\
-    &=const - \frac{1}{2}log(|P_*|)-\frac{1}{2}Tr(P_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})) \\
-    \delta_t &\equiv \xi_t - F_{t-1}\xi_{t-1} - B_{t-1}x_{t-1} \nonumber \\
-    \delta_* &\equiv \xi_1 - a \nonumber \\
-    \chi_t &\equiv y_t - H_t\xi_t - D_tx_t \nonumber
+    &= const - \frac{1}{2}log(|\mathbb{R}_t|)-\frac{1}{2}Tr[\mathbb{R}_t^{-1}E(\chi_t\chi_t^{'}|Y_T,X_T;\theta_{i})] \label{eq:log2_trace} \\
+    G_0(\theta,\theta_{i}) &\equiv const - \lim_{\kappa\rightarrow\infty}\left\{\frac{1}{2}log(|\mathbb{P}_{1|0}|) + \frac{1}{2}Tr[\mathbb{P}_{1|0}^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})] - \frac{q}{2}log(\kappa)\right\} \nonumber \\
+    &=const - \frac{1}{2}log(|\mathbb{P}_*|)-\frac{1}{2}Tr(\mathbb{P}_*^{-1}E(\delta_*\delta_*^{'}|Y_T, X_T; \theta_{i})) \\
+    \delta_t &\equiv \xi_t - \mathbb{F}_{t-1}\xi_{t-1} - \mathbb{B}_{t-1}x_{t-1} \nonumber \\
+    \delta_* &\equiv \xi_1 - \mathbb{A} \nonumber \\
+    \chi_t &\equiv y_t - \mathbb{H}_t\xi_t - \mathbb{D}_tx_t \nonumber
 \end{align}
 
-If $Q_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} and \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo inverse and the pseudo determinant of $Q_t$.
+If $\mathbb{Q}_t$ does not have full rank, I use \texttt{scipy.linalg.pinvh} and \texttt{scipy.linalg.eigh}\footnote{After finding all eigenvalues of $Q_t$, multiply non-zero eigenvalues to get the determinant.} to find the pseudo inverse and the pseudo determinant of $\mathbb{Q}_t$.
 
-Denote $\Theta\equiv (Y_T,X_T;\theta)$, I now derive expressions for $E(\delta_t\delta_t^{'}|\Theta)$, $E(\chi_t\chi_t^{'})|\Theta)$, and $E(\delta_*\delta_*^{'}|\Theta)$. Following (\cite{koopman1992exact}), we have:
+Denote $\Theta_i\equiv (Y_T,X_T;\theta_i)$, I now derive expressions for $E(\delta_t\delta_t^{'}|\Theta_i)$, $E(\chi_t\chi_t^{'})|\Theta_i)$, and $E(\delta_*\delta_*^{'}|\Theta_i)$. Following (\cite{koopman1992exact}), we have:
 \begin{align}
-    E(\delta_t\delta_t^{'}|\Theta) =& E(\xi_t\xi_t^{'}|\Theta) - \langle F_{t-1}E(\xi_{t-1}\xi_t^{'}|\Theta)\rangle 
-        - \langle B_{t-1}x_{t-1}[E(\xi_t|\Theta) - F_{t-1}E(\xi_{t-1}|\Theta)]^{'}\rangle \nonumber \\
-        &+F_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta)F_{t-1}^{'} + B_{t-1}x_{t-1}x_{t-1}^{'}B_{t-1}^{'} \label{eq:delta_t} \\
-    E(\chi_t\chi_t^{'}|\Theta) =& (y_t-D_tx_t)(y_t-D_tx_t)^{'}-\langle H_t\hat{\xi}_{t|T}(y_t-D_tx_t)^{'}\rangle + H_tE(\xi_t\xi_t^{'}|\Theta)H_t^{'} \label{eq:chi_t} \\ 
-    E(\delta_*\delta_*^{'}|\Theta) =& E(\xi_1\xi_1^{'}|\Theta) - \langle\hat{\xi}_{1|T}a^{'}\rangle + aa^{'} \label{eq:delta_0} \\
-    E(\xi_t\xi_t^{'}|\Theta) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
-    E(\xi_{t-1}\xi_t^{'}|\Theta) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
+    E(\delta_t\delta_t^{'}|\Theta_i) =& E(\xi_t\xi_t^{'}|\Theta_i) - \langle \mathbb{F}_{t-1}E(\xi_{t-1}\xi_t^{'}|\Theta_i)\rangle 
+        - \langle \mathbb{B}_{t-1}x_{t-1}[E(\xi_t|\Theta_i) - \mathbb{F}_{t-1}E(\xi_{t-1}|\Theta_i)]^{'}\rangle \nonumber \\
+        &+\mathbb{F}_{t-1}E(\xi_{t-1}\xi_{t-1}^{'}|\Theta_i)\mathbb{F}_{t-1}^{'} + \mathbb{B}_{t-1}x_{t-1}x_{t-1}^{'}\mathbb{B}_{t-1}^{'} \nonumber \\
+    =& (\hat{\xi}_{t|T}-\mathbb{F}_{t-1}\hat{\xi}_{t-1|T}-\mathbb{B}_{t-1}x_{t-1})(\hat{\xi}_{t|T}-\mathbb{F}_{t-1}\hat{\xi}_{t-1|T}-\mathbb{B}_{t-1}x_{t-1})^{'} \nonumber \\
+    &+ P_{t|T} - \langle \mathbb{F}_{t-1}P_{t-1,t|T} \rangle + \mathbb{F}_{t-1}P_{t-1|T}\mathbb{F}_{t-1}^{'} \label{eq:delta_t} \\
+    E(\chi_t\chi_t^{'}|\Theta_i) =& (y_t-\mathbb{D}_tx_t)(y_t-\mathbb{D}_tx_t)^{'}-\langle \mathbb{H}_t\hat{\xi}_{t|T}(y_t-\mathbb{D}_tx_t)^{'}\rangle + \mathbb{H}_tE(\xi_t\xi_t^{'}|\Theta_i)\mathbb{H}_t^{'} \nonumber \\
+    =& (y_t - \mathbb{H}_t\hat{\xi}_{t|T} - \mathbb{D}_tx_t)(y_t - \mathbb{H}_t\hat{\xi}_{t|T} - \mathbb{D}_tx_t)^{'} + \mathbb{H}_tP_{t|T}\mathbb{H}_t^{'} \label{eq:chi_t} \\ 
+    E(\delta_*\delta_*^{'}|\Theta_i) =& E(\xi_1\xi_1^{'}|\Theta_i) - \langle\hat{\xi}_{1|T}\mathbb{A}^{'}\rangle + \mathbb{A}\mathbb{A}^{'}=(\hat{\xi}_{1|T} - \mathbb{A})(\hat{\xi}_{1|T} - \mathbb{A})^{'} + P_{1|T} \label{eq:delta_0} \\
+    E(\xi_t\xi_t^{'}|\Theta_i) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
+    E(\xi_{t-1}\xi_t^{'}|\Theta_i) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
+\end{align}
+where $(\mathbb{Q}_t, \mathbb{R}_t, \mathbb{F}_t, \mathbb{H}_t, \mathbb{B}_t, \mathbb{D}_t, \mathbb{P}_{*}, \mathbb{A})$ are the system matrices parameterized by $\theta$. Now $G(\theta,\theta_{i})$ is:
+\begin{align*}
+    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(\mathbb{Z}_t^{'}\mathbb{Z}_t)\right| 
+\end{align*}
+where $\mathbb{Z}_t=\mathbb{H}_t\phi_t$ and $\phi_1=\mathbb{S}$, with $\mathbb{S}$ as the parameterized counterpart of selection matrix $A$ in equation (\ref{eq:init}). Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve a BSTS model with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
+
+For systems with missing measurements, the univariate smoothing technique remains valid for calculating state estimates and $E(\delta_t\delta_t^{'}|\Theta_i)$, but we need to pay special attention to $E(\chi_t\chi_t^{'}|\Theta_i)$. I generalize the result in (\cite{shumway_stoffer_1982}), (\cite{shumway_2000}), and (\cite{shumway2017time}) to allow for flexible forms of system matrices\footnote{For example, we may result impose on certain restrictions on $H_t$ or $F_t$. The derivations in the papers I refer to do not account for these scenario.}. First I assume $y_t$ is already partitioned and diagonalized, using $1$ to denote indices related to the observed measurements, and $0$ to the unobserved measurements. I define $E(\chi_{t}\chi_{t}^{'}|\Theta_i)$ as:
+\begin{align*}
+    E(\chi_{t}\chi_{t}^{'}|\Theta_i) = \begin{pmatrix}
+        E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i) & E(\chi_{t,1}\chi_{t,0}^{'}|\Theta_i) \\
+        E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i) & E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)
+    \end{pmatrix}
+\end{align*}
+with $E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i)$ defined as:
+\begin{align}
+    E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i) &= (y_{t,1} - \mathbb{H}_{t,1}\hat{\xi}_{t|T} - \mathbb{D}_{t,1}x_t)(y_{t,1} - \mathbb{H}_{t,1}\hat{\xi}_{t|T} 
+        - \mathbb{D}_{t,1}x_t)^{'} + \mathbb{H}_{t,1}P_{t|T}\mathbb{H}_{t,1}^{'} \label{eq:chi2_start} 
 \end{align}
 
-Now $G(\theta,\theta_{i})$ is:
+Now consider $E(\chi_{t,1}\chi_{t,0}^{'}|\Theta_i)$ and $E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)$. For $E(\chi_{t,1}\chi_{t,0}^{'}|\Theta_i)$, we have:
 \begin{align*}
-    G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(Z_t^{'}Z_t)\right| 
+    E(\chi_{t,0}\chi_{t,1}^{'}|y_{t,1},\xi_t,\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\xi_t+(D_{t,0}-\mathbb{D}_{t,0})x_t]
+        (y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'} \\
+    &+E(w_t|y_{t,1},\xi_t,\Theta_i)(y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'} \\
+    =& [(H_{t,0}-\mathbb{H}_{t,0})\xi_t+(D_{t,0}-\mathbb{D}_{t,0})x_t]
+        (y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'}
 \end{align*}
 
-It is important to note that $F_t$, $H_t$, $Q_t$, $R_t$, $B_t$, $D_t$ depend on $\theta$, not $\theta_i$. Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve a BSTS model with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
+The second equality holds because we assume independence between measurements (or preprocessed by orthogonalization). After some algebra, we have:
+\begin{align}
+    E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t]
+        (y_{t,1}-\mathbb{H}_{t,1}\hat{\xi}_{t|T}-\mathbb{D}_{t,1})^{'} \\
+        &- (H_{t,0}-\mathbb{H}_{t,0})P_{t|T}\mathbb{H}_{t,1}^{'} \nonumber
+\end{align}
 
-For the univariate case with fully missing measurements for some periods, $G_1^t(\theta,\theta_i)$ is updated differently. Note that $Q_{t:(i)}$ are essentially $0$ for $i\leq n_t$, so we only calculate $G_1^{t:(1)}$ with [$t:(1)$] and [$t-1:(n_{t-1}+1)$] in place of $t$ and $t-1$. In addition, we should not skip any $t$ even if there are no measurements, otherwise we need to redefine $Q_{t-1}$ and $\delta_t$ accordingly. 
+Similarly, we may derive $E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)$ as:
+\begin{align}
+    E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t]
+        [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t] \label{eq:chi2_end} \\
+    &+ (H_{t,0}-\mathbb{H}_{t,0})P_{t|T}(H_{t,0}-\mathbb{H}_{t,0})^{'} + R_{t,00} \nonumber
+\end{align}
+where $R_t$ is defined as\footnote{Here $R_t$ is parameterized by $\theta_i$, and is permuted and orthogonalized.}:
+\begin{align*}
+    R_t = \begin{pmatrix}
+        R_{t,11} & 0 \\
+        0 & R_{t,00}
+    \end{pmatrix}
+\end{align*}
 
+I practice, we need to re-arrange and partition the measurements to use equations (\ref{eq:chi2_start}) through (\ref{eq:chi2_end}). Define $J_t$ as the row permutation matrix that partitioned $R_t$ into the observed group and the unobserved group. In addition, I compute $l_t$ and $\Lambda_t$ from:
+\begin{align*}
+    J_tR_tJ_t^{'} = l_t\Lambda_tl_t^{'}
+\end{align*}
+
+Note that $R_{t,00} \equiv \Lambda_{t,00}$. Now I can calculate $G_2^{t}(\theta,\theta_i)$ as: 
+\begin{align}
+    G_2^{t}(\theta, \theta_i) &= const - \frac{1}{2}log(|\mathbb{R}_t|)-\frac{1}{2}Tr[(J_t\mathbb{R}_tJ_t^{'})^{-1}l_tE(\tilde{\chi}_t\tilde{\chi}_t^{'}|\Theta_{i})l_t^{'}] 
+\end{align}
+where $\tilde{(\cdot)}_t \equiv l_t^{-1}J_t(\cdot)_t$. We can proceed to calculate $G(\theta,\theta_i)$. Note that If $y_t$ is fully observed or fully missing, we do not need to permute the matrix. We should also note that when permutation is involved, the marginal likelihood correction term in equation (\ref{eq:marginal_correct}) does not have to be permuted because $J_t^{'}J_t=I$. In addition, since we revert the orthogonalization in computing $G_2^{t}(\theta,\theta_i)$, variables of the marginal likelihood correction term are in their original forms.
 \end{document}

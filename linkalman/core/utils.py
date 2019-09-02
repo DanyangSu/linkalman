@@ -11,7 +11,8 @@ import warnings
 
 __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_diag',
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
-        'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet']
+        'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
+        'permute', 'revert_permute', 'partition_index']
 
 
 max_val = 1e10  # detect infinity
@@ -22,7 +23,7 @@ min_val = 1e-8  # detect 0
 def mask_nan(is_nan: np.ndarray, mat: np.ndarray, 
         dim: str='both', diag: float=0) -> np.ndarray:
     """
-    Takes the list of NaN indices and mask the ros and columns 
+    Takes the list of NaN indices and mask the rows and columns 
     of a matrix with 0 if index has NaN value.
 
     Example:
@@ -402,6 +403,78 @@ def clean_matrix(mat: np.ndarray) -> np.ndarray:
     cleaned_mat[np.abs(cleaned_mat) > max_val] = inf_val
 
     return cleaned_mat
+
+
+def permute(matrix: np.ndarray, index: np.ndarray) -> np.ndarray:
+    """
+    Permute a square matrix
+    
+    For example:
+    a = np.array([[1, 2, 3],
+                  [2, 5, 6],
+                  [3, 6, 9]])
+    b = np.array([2, 0, 1])
+
+    permute(a, b) returns:
+    np.array([[9, 3, 6],
+              [3, 1, 2],
+              [6, 2, 5]])
+
+    Parameters:
+    ----------
+    matrix : input matrix to be permuted
+    index : index order for permutation
+
+    Returns:
+    ----------
+    perm_matrix : permuted matrix
+    """
+    perm_matrix = (matrix[index, :])[:, index]
+    return perm_matrix
+
+
+def revert_permute(index: np.ndarray) -> np.ndarray:
+    """
+    Revert matrix indexing to the original order. 
+
+    For example:
+    a = np.array([2, 3, 1, 0]) means the original matrix is 
+    reordered as [3rd, 4th, 2nd, 1st]. 
+    revert_permute(a) returns np.array([3, 2, 0, 1]), which 
+    can be used to restore the matrix to its original order.
+
+    Parameters:
+    ----------
+    index : current indexing
+
+    Returns:
+    ----------
+    revert_index : index of the original order
+    """
+    revert_index = index.argsort()
+    return revert_index
+
+
+def partition_index(is_missing: List) -> np.ndarray:
+    """
+    Reshuffle the index with index of observed measurement 
+    first. 
+
+    For example:
+    is_missing = [True, False, True, False]
+    partition_index(is_missing) returns:
+    np.array([1, 3, 0, 2])
+
+    Parameters:
+    ----------
+    is_missing : list of dummies whether y_{t:i} is missing
+
+    Returns:
+    ----------
+    partitioned_index : partitioned index
+    """
+    partitioned_index = np.array(is_missing).argsort()
+    return partitioned_index
 
 
 def ft(theta: List[float], f: Callable, T: int,
