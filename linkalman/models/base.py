@@ -115,10 +115,34 @@ class BaseOpt(object):
             self.theta_opt = self.solver(theta_init, obj, **kwarg)
 
         elif self.method == 'EM':
-            pass
+            dist = 1
+            self.theta_i = deepcopy(theta_init)
+            self.G_i = np.inf
+            while dist > self.EM_threshold:
+                obj = lambda theta: self.get_LLEM(theta, Yt, Xt)
+                theta_opt, G_opt = self.solver(self.theta_i, obj, **kwarg)
+                dist = np.abs(self.G_i - G_opt)
+                self.G_i = G_opt
+                self.theta_i = deepcopy(theta_opt)
+            self.theta_opt = deepcopy(theta_opt)
 
         else:
-            pass
+
+            # Cold start with EM
+            for EM_iter in range(self.num_iter):
+                obj = lambda theta: self.get_LLEM(theta, Yt, Xt)
+                theta_opt, G_opt = self.solver(self.theta_i, obj, **kwarg)
+                self.G_i = G_opt
+                self.theta_i = deepcopy(theta_opt)
+
+            # Warm start with LLY
+            obj = lambda theta: self.get_LLY(theta, Yt, Xt)
+            self.theta_opt = self.solver(theta_i, obj, **kwarg)
+
+
+    def get_LLEM(self, theta: List[float], Yt: List[np.ndarray],
+            Xt: List[np.ndarray]=None) -> float:
+        raise ValueError('need add')
 
 
     def get_LLY(self, theta: List[float], Yt: List[np.ndarray], 

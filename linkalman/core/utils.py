@@ -405,9 +405,11 @@ def clean_matrix(mat: np.ndarray) -> np.ndarray:
     return cleaned_mat
 
 
-def permute(matrix: np.ndarray, index: np.ndarray) -> np.ndarray:
+def permute(matrix: np.ndarray, index: np.ndarray, 
+        axis: str='row') -> np.ndarray:
     """
-    Permute a square matrix
+    Permute a square matrix, may perform row permutation,
+    column permutation, or both.
     
     For example:
     a = np.array([[1, 2, 3],
@@ -415,7 +417,7 @@ def permute(matrix: np.ndarray, index: np.ndarray) -> np.ndarray:
                   [3, 6, 9]])
     b = np.array([2, 0, 1])
 
-    permute(a, b) returns:
+    permute(a, b, axis='both') returns:
     np.array([[9, 3, 6],
               [3, 1, 2],
               [6, 2, 5]])
@@ -424,12 +426,20 @@ def permute(matrix: np.ndarray, index: np.ndarray) -> np.ndarray:
     ----------
     matrix : input matrix to be permuted
     index : index order for permutation
+    axis : axis along which to do permutation
 
     Returns:
     ----------
     perm_matrix : permuted matrix
     """
-    perm_matrix = (matrix[index, :])[:, index]
+    if axis == 'row':
+        perm_matrix = matrix[index,:]
+    elif axis == 'col':
+        perm_matrix = matrix[:, index]
+    elif axis == 'both':
+        perm_matrix = (matrix[index, :])[:, index]
+    else:
+        raise ValueError('axis must be "row", "col", or "both".')
     return perm_matrix
 
 

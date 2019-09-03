@@ -272,40 +272,6 @@ class Smoother(object):
         return delta2
 
 
-    def _partition(self) -> None:
-        """
-        Create elements for calculating Echi2:
-        self.linv_perm_y_t : permuted then diagonalized y_t
-        self.n_t_t : number of observed measurements at t
-        self.l_perm_t : l of LDL from permuted R_t
-        self.Lambda0_perm_t : Lambda for missing measurements from permuted R_t
-        self.perm_index_t : index order after permutation
-
-        The main part of this function is invoked only when we have 
-        partially observed measurements at time t.
-        """
-        for t in range(self.T):
-            is_missing = np.array(self.is_missing[t])
-            n_t = self.y_length - is_missing.sum()
-            self.n_t_t.append(n_t)
-
-            if n_t == 0:
-                self.linv_perm_y_t.append(None)
-                self.l_perm_t.append(None)
-                self.Lambda0_perm_t.append(self.Rt[t])
-                self.perm_index_t.append(None)
-            elif n_t == self.y_length:
-                self.linv_perm_y_t.append(None)
-                self.l_perm_t.append(None)
-                self.Lambda0_perm_t.append(None)
-                self.perm_index_t.append(None)
-            else: 
-
-
-
-
-
-
     def _E_chi2(self, Mt: List[np.ndarray], t: int) -> np.ndarray:
         """
         Calculate expected value of chi2. See doc/theory.pdf for details.
@@ -319,27 +285,59 @@ class Smoother(object):
         ----------
         chi2 : expectation term for y in G
         """
-        if self.n_t == self.y_length:
-            pass
-        elif self.n_t == 0:
-            pass
-        else:
-            pass
-
-
-
-        not_missing = ~np.array(self.is_missing)
+        not_missing = ~np.array(self.Yt_missing[t])
         n_t = not_missing.sum()
-        
+        if self.n_t == self.y_length:
+            chi = self.Yt[t] - Mt['Ht'][t].dot(self.xi_t_T[t]) - \
+                    Mt['Dt'][t].dot(self.Xt[t])
+            chi2 = chi.dot(chi.T) + Mt['Ht'][t].dot(self.P_t_T[t]).dot(
+                    Mt['Ht'][t].T)
+        elif self.n_t == 0:
+            delta_H = self.Ht_raw[t] - Mt['Ht'][t]
+            chi = (delta_H).dot(self.xi_t_T[t]) + \
+                    (self.Dt_raw[t] - Mt['Dt'][t]).dot(self.Xt[t])
+            chi2 = chi.dot(chi.T) + delta_H.dot(self.P_t_T).dot(delta_H.T) + \
+                    self.Rt[t]
+        else:  # If partially missing, rearrange and orthogonalize first
+            part_index = partition_index(self.Yt_missing[t])
 
+            # Compute l_t and Lambda_t
+            R_t = permute(self.Rt_raw[t], part_index, axis='both')
+            l_t, Lambda_t, _ = linalg.ldl(R_t) 
+            l_inv, _ = linalg.lapack.clapack.dtrtri(l_t)
 
+            # Compute rearranged and orthogonalized matrices
+            H_t = l_inv.dot(permute(self.Ht_raw[t], part_index, axis='row'))
+            D_t = l_inv.dot(permute(self.Dt_raw[t], part_index, axis='row'))
+            H_t_new = l_inv.dot(permute(Mt['Ht'][t], part_index, axis='row'))
+            D_t_new = l_inv.dot(permute(Mt['Dt'][t], part_index, axis='row'))
+            y_t = l_inv.dot(permute(self.Yt[t], part_index, axis='row'))
 
-        Dx = self.Dt[t].dot(self.Xt[t])
-        term1 = (self.Yt[t] - Dx).dot((self.Yt[t] - Dx).T)
-        term2 = self.Ht[t].dot(self.xi_t_T[t]).dot((self.Yt[t] - Dx).T)
-        term4 = self.Ht[t].dot(self.xi2_t_T[t]).dot(self.Ht[t].T)
-        chi2 = term1 - term2 - term2.T + term4
-        return chi2
+            delta_H = H_t - H_t_new
+            delta_D = D_t - D_t_new
+
+            chi_1 = (y_t[0:n_t] - H_t_new[0:n_t].dot(self.xi_t_T[t]) - \
+                    D_t_new[0:n_t].dot(self.Xt[t])
+            chi_0 = delta_H[n_t:].dot(self.xi_t_T[t]) + \
+                    delta_D[n_t:].dot(self.Xt[t])
+
+            chi2_11 = chi_1.dot(chi_1.T) + H_t_new[0:n_t].dot(
+                self.P_t_T).dot(H_t_new[0:n_t].T)
+
+            chi2_01 = chi_0.dot(chi_1.T)
+
+            chi2_00 = chi_0.dot(chi_0.T) + delta_H[n_t:].dot(
+                self.P_t_T).dot(delta_H[n_t:].T) + Lambda_t[n_t:, n_t:]
+
+            # Build and de-orthogonalize chi2_tilde
+            chi2_tilde = l_t.dot(np.block([[chi2_11, chi2_01.T],
+                [chi2_01, chi2_00]])).dot(l_t.T) 
+
+            # Restore the original index of chi2
+            original_index = revert_permute(part_index)
+            chi2 = permute(chi2_tilde, original_index, axis='both')
+
+            return chi2
 
 
     def G(self, theta) -> float:
@@ -353,19 +351,27 @@ class Smoother(object):
         Returns:
         G : objective value for EM algorithms
         """
-        Mt = self.ft(theta)
-        G0 = 0
+        Mt = self.ft(theta, self.T)
         G1 = 0
         G2 = 0
         
         for t in self.T:
-            G1 += 
-            G1 += 
-            G2 += 
+            if t == 0:
+                q, A, Pi = self.get_selection_mat(Mt['P_1_0'])
+                P_clean = deepcopy(Mt['P_1_0'])
+                P_clean[np.isnan(P_clean)] = 0
+                P_star_1 = Pi.dot(P_clean).dot(Pi.T)
+                G1 += -np.log(pdet(P_star_1)) - np.trace(linalg.pinvh(
+                    P_star_1).dot(self._E_delta2(Mt, t))) 
+            else:
+            G1 += np.log(pdet(Mt['Qt'][t-1])) + np.trace(linalg.pinvh(
+                Mt['Qt'][t-1]).dot(self._E_delta2(Mt, t)))
+            G2 += np.log(pdet(Mt['Rt'][t])) + np.trace(linalg.pinvh(
+                Mt['Rt'][t]).dot(self._E_chi2(Mt, t)))
         
-        G = G0 + G1 + G2
+        G = G1 + G2 - np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'], A)))
 
-        return G
+        return -G.asscalar(G)
 
 
     def get_smoothed_y(self) -> List[np.ndarray]:

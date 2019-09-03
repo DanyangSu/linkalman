@@ -1281,7 +1281,7 @@ I practice, we need to re-arrange and partition the measurements to use equation
 
 Note that $R_{t,00} \equiv \Lambda_{t,00}$. Now I can calculate $G_2^{t}(\theta,\theta_i)$ as: 
 \begin{align}
-    G_2^{t}(\theta, \theta_i) &= const - \frac{1}{2}log(|\mathbb{R}_t|)-\frac{1}{2}Tr[(J_t\mathbb{R}_tJ_t^{'})^{-1}l_tE(\tilde{\chi}_t\tilde{\chi}_t^{'}|\Theta_{i})l_t^{'}] 
+    G_2^{t}(\theta, \theta_i) &= const - \frac{1}{2}log(|\mathbb{R}_t|)-\frac{1}{2}Tr[\mathbb{R}_t^{-1}J_t^{'}l_tE(\tilde{\chi}_t\tilde{\chi}_t^{'}|\Theta_{i})l_t^{'}J_t] 
 \end{align}
 where $\tilde{(\cdot)}_t \equiv l_t^{-1}J_t(\cdot)_t$. We can proceed to calculate $G(\theta,\theta_i)$. Note that If $y_t$ is fully observed or fully missing, we do not need to permute the matrix. We should also note that when permutation is involved, the marginal likelihood correction term in equation (\ref{eq:marginal_correct}) does not have to be permuted because $J_t^{'}J_t=I$. In addition, since we revert the orthogonalization in computing $G_2^{t}(\theta,\theta_i)$, variables of the marginal likelihood correction term are in their original forms.
 \end{document}
