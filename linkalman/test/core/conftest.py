@@ -27,3 +27,17 @@ def Xt():
     Xt = [np.ones((2, 1))]
     return Xt
 
+
+@pytest.fixture()
+def perm_mat():
+    mat = np.array([[1, 2, 3, 4],
+                    [2, 5, 6, 7],
+                    [3, 6, 8, 9],
+                    [4, 7, 9, 0]])
+    return mat
+
+
+@pytest.fixture()
+def perm_vector():
+    vec = np.array([[1], [2], [3], [4]])
+    return vec

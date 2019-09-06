@@ -8,17 +8,19 @@ from pandas.api.types import is_numeric_dtype
 from numpy.random import multivariate_normal
 from copy import deepcopy
 import warnings
+warnings.simplefilter('default')
 
 __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_diag',
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
-        'permute', 'revert_permute', 'partition_index']
+        'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
+        'check_consistence', 'gen_Xt']
 
 
 max_val = 1e10  # detect infinity
 inf_val = 1e100  # value used to indicate infinity
 min_val = 1e-8  # detect 0
-
+    
 
 def mask_nan(is_nan: np.ndarray, mat: np.ndarray, 
         dim: str='both', diag: float=0) -> np.ndarray:
@@ -107,6 +109,31 @@ def inv(h_array: np.ndarray) -> np.ndarray:
     return h_inv
 
 
+def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
+        -> List[np.ndarray]:
+    """
+    Generate a list of zero arrays if Xt is None
+
+    Parameters:
+    ----------
+    Xt : input Xt
+    B : provide dimension information for generating dummy Xt
+    T : provide length of the output list Xt
+
+    Returns:
+    ----------
+    Xt_ : output Xt, if input is None, fill with zeros
+    """
+    if Xt is None:
+        if B is None or T is None:
+            raise ValueError('B and T must not be None')
+        Xt_ = Constant_M(np.zeros(
+                (B.shape[1], 1)), T)
+    else:
+        Xt_ = deepcopy(Xt)
+    return Xt_
+
+
 def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
     """
     Convert pandas dataframe to list of arrays.
@@ -120,10 +147,12 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
     ----------
     L : len(L) == df.shape[0], L[0].shape[0] == df.shape[1]
     """
-    # If col_list is None, return None
+    # If col_list is None, return None. None is treated by
+    # downstream functions as an indicator.
     if col_list is None:
         return None
     else:
+
         # Raise exception if df is not a dataframe
         if not isinstance(df, pd.DataFrame):
             raise TypeError('df must be a dataframe')
@@ -134,9 +163,9 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
                 raise TypeError('Input dataframe must be numeric')
 
         # Convert df to list row-wise
-        L = []
+        L = [None] * df.shape[0]
         for i in range(df.shape[0]):
-            L.append(np.array([df[col_list].loc[i,:]]).T)
+            L[i] = np.array([df[col_list].loc[i,:]]).T
         return L
 
 
@@ -155,7 +184,6 @@ def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
     """
     if not isinstance(col, list):
         raise TypeError('col must be a list of strings')
-    concat_list = []
     num_col = len(col)
     
     for i in L:
@@ -210,8 +238,98 @@ def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
     return epsilon
 
 
+def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray) -> None:
+    """
+    Check consistence of matrix dimensions. Ensure
+    all matrix operations are properly done. The
+    assumption is the shape of a matrix remains 
+    constant over time. Also assume Mt contains all 
+    the required keys. 
+
+    Parameters:
+    ----------
+    Mt : Dict of system matrices
+    y_t : measurement vector
+    x_t : regressor vector
+    """
+    # Check whether Mt contains all elements
+    keys = set(['Ft', 'Bt', 'Qt', 'Ht', 'Dt', 'Rt', 
+            'xi_1_0', 'P_1_0'])
+    M_keys = set(Mt.keys())
+
+    if not keys.issubset(M_keys):
+        diff_keys = keys.difference(M_keys)
+        raise ValueError('Mt does not contain all required keys. ' + \
+                'The missing keys are {}'.format(list(diff_keys)))
+
+    # Collect dimensional information
+    dim = {}
+    dim.update({'Ft': Mt['Ft'][0].shape})
+    dim.update({'Bt': Mt['Bt'][0].shape})
+    dim.update({'Ht': Mt['Ht'][0].shape})
+    dim.update({'Dt': Mt['Dt'][0].shape}) 
+    dim.update({'Qt': Mt['Qt'][0].shape}) 
+    dim.update({'Rt': Mt['Rt'][0].shape})
+    dim.update({'xi_t': Mt['xi_1_0'].shape})
+    dim.update({'y_t': y_t.shape}) 
+    dim.update({'x_t': x_t.shape})
+    
+    # Check whether dimension is 2-D
+    for m_name in dim.keys():
+        if len(dim[m_name]) != 2:
+            raise ValueError('{} has the wrong dimensions'.format(m_name))
+
+    # Check Ft and xi_t
+    if (dim['Ft'][1] != dim['Ft'][0]) or (dim['Ft'][1] != dim['xi_t'][0]):
+        raise ValueError('Ft and xi_t do not match in dimensions')
+
+    # Check Ht and xi_t
+    if dim['Ht'][1] != dim['xi_t'][0]:
+        raise ValueError('Ht and xi_t do not match in dimensions')
+
+    # Check Ht and y_t
+    if dim['Ht'][0] != dim['y_t'][0]:
+        raise ValueError('Ht and y_t do not match in dimensions')
+
+    # Check Bt and xi_t
+    if dim['Bt'][0] != dim['xi_t'][0]:
+        raise ValueError('Bt and xi_t do not match in dimensions')
+
+    # Check Bt and x_t
+    if dim['Bt'][1] != dim['x_t'][0]:
+        raise ValueError('Bt and x_t do not match in dimensions')
+
+    # Check Dt and y_t
+    if dim['Dt'][0] != dim['y_t'][0]:
+        raise ValueError('Dt and y_t do not match in dimensions')
+
+    # Check Dt and x_t
+    if dim['Dt'][1] != dim['x_t'][0]:
+        raise ValueError('Dt and x_t do not match in dimensions')
+
+    # Check Qt and xi_t
+    if (dim['Qt'][1] != dim['Qt'][0]) or (dim['Qt'][1] != dim['xi_t'][0]):
+        raise ValueError('Qt and xi_t do not match in dimensions')
+
+    # Check Rt and y_t
+    if (dim['Rt'][1] != dim['Rt'][0]) or (dim['Rt'][1] != dim['y_t'][0]):
+        raise ValueError('Rt and y_t do not match in dimensions')
+
+    # Check if y_t is a vector
+    if dim['y_t'][1] != 1:
+        raise ValueError('y_t must be a vector')
+
+    # Check if xi_t is a vector
+    if dim['xi_t'][1] != 1:
+        raise ValueError('xi_t must be a vector')
+
+    # Check if x_t is a vector
+    if dim['x_t'][1] != 1:
+        raise ValueError('x_t must be a vector')
+
+
 def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None, 
-        T: int=None, xi_1_0: np.ndarray=None, P_1_0:np.ndarray=None) -> \
+        T: int=None) -> \
         Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Generate simulated data from a given BSTS system. Xt and T
@@ -224,8 +342,6 @@ def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None,
     theta : argument of ft
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
-    xi_1_0 : initial mean array
-    P_1_0 : initial covariance matrix
 
     Returns:
     ----------
@@ -247,29 +363,33 @@ def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None,
     else:
         T = Xt.shape[0]
         X_t = df_to_list(Xt, list(Xt.columns))
+    
+    # Check consistence
+    x_dim = X_t[0].shape[0]
+    y_sample = np.ones([y_dim, 1])
+    x_sample = np.ones([x_dim, 1])
+    check_consistence(M_, y_sample, x_sample)
+    
     Mt = Ft(theta, T)
-
-    # Create xi_1_0 and P_1_0
-    if xi_1_0 is None:
-        xi_1_0 = np.zeros([Mt['Ft'][0].shape[1], 1])
-    if P_1_0 is None:
-        P_1_0 = get_ergodic(Mt['Ft'][0], Mt['Qt'][0], Mt['Bt'][0])
+    
+    # Generate initial values
+    xi_1_0 = deepcopy(Mt['xi_1_0'])
+    P_1_0 = deepcopy(Mt['P_1_0'])
     P_1_0[np.isnan(P_1_0)] = 1  # give an arbitrary value to diffuse priors
-    Xi_t = [xi_1_0 + noise(xi_dim, P_1_0)]
+    Xi_t = [None] * T
+    Xi_t[0] = xi_1_0 + noise(xi_dim, P_1_0)
 
     # Iterate through time steps
-    Y_t = []
+    Y_t = [None] * T
     for t in range(T):
-        # Generate Y_t
-        y_t = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
+        # Generate y_t
+        Y_t[t] = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
                 noise(y_dim, Mt['Rt'][t])
-        Y_t.append(y_t)
 
-        # Genereate Xi_t
+        # Genereate xi_t1
         if t < T - 1:
-            xi_t1 = Mt['Ft'][t].dot(Xi_t[t]) + Mt['Bt'][t].dot(X_t[t]) + \
+            Xi_t[t+1] = Mt['Ft'][t].dot(Xi_t[t]) + Mt['Bt'][t].dot(X_t[t]) + \
                     noise(xi_dim, Mt['Qt'][t])
-            Xi_t.append(xi_t1)
 
     # Generate df
     y_col = ['y_{}'.format(i) for i in range(y_dim)]
@@ -310,7 +430,8 @@ def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
 
 
 def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
-        force_diffuse: List[bool]=None) -> np.ndarray:
+        x_0: np.ndarray=None, force_diffuse: List[bool]=None) -> \
+                List[np.ndarray]:
     """
     Calculate initial state covariance matrix, and identify 
     diffuse state. It effectively solves a Lyapuov equation
@@ -319,19 +440,21 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     ----------
     F : state transition matrix
     Q : initial error covariance matrix
-    B : regression matrix, if not 0, indicating diffuse priors
+    B : regression matrix
+    x_0 : initial x, used for calculating ergodic mean
     force_diffuse : List of booleans of user-determined diffuse state
 
     Returns:
     ----------
     P_0 : the initial state covariance matrix, np.inf for diffuse state
+    xi_0 : the initial state mean, 0 for diffuse state
     """
     Q_ = deepcopy(Q)
     dim = Q.shape[0]
     
     # Is is_diffuse is not supplied, create the list
     if force_diffuse is None:
-        is_diffuse = [False for i in range(dim)]
+        is_diffuse = [False] * dim
     else: 
         is_diffuse = deepcopy(force_diffuse)
         if len(is_diffuse) != dim:
@@ -344,7 +467,17 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
         raise TypeError('Q must be a square matrix')
     if F.shape[0] != Q.shape[0]:
         raise TypeError('Q and F must be of same size')
-    
+   
+    # If explosive roots, use fully diffuse initialization
+    # and issue a warning
+    eig = linalg.eigvals(F)
+    if np.any(np.abs(eig) > 1 + min_val):
+        warnings.warn('Ft contains explosive roots. ' + \
+                'Default to fullly diffused initialization. ' + \
+                'Results may be biased. Please provide user ' + \
+                'defined xi_1_0 and P_1_0.', RuntimeWarning)
+        is_diffuse = [True] * dim
+
     # Modify Q_ to reflect diffuse states
     Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
         
@@ -364,7 +497,49 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
 
     # Add nan to diffuse diagonal values
     P_0_PSD += np.diag(np.array([np.nan if i else 0 for i in is_diffuse]))
-    return P_0_PSD
+
+    # Compute ergodic mean
+    if B is None or x_0 is None:
+        Bx = np.zeros([dim, 1])
+    else:
+        if B.shape[0] != dim:
+            raise ValueError('B has the wrong dimension')
+        Bx = B.dot(x_0)
+    Bx[is_diffuse] = 0
+    F_star = deepcopy(F)
+    F_star[is_diffuse] = 0
+    xi_0 = linalg.pinv(np.eye(dim) - F_star).dot(Bx)
+
+    return P_0_PSD, xi_0
+
+
+def get_init_mat(P_1_0: np.ndarray) \
+        -> Tuple[int, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Get information for diffuse initialization
+
+    Parameters:
+    ----------
+    P_1_0 : initial state covariance. Diagonal value np.nan if diffuse
+
+    Returns:
+    ----------
+    number_diffuse : number of diffuse state
+    A : selection matrix for diffuse states, equal to P_inf
+    Pi : selection matrix for stationary states
+    P_star : non-diffuse part of P_1_0
+    """
+    is_diffuse = np.isnan(P_1_0.diagonal())
+    number_diffuse = np.count_nonzero(is_diffuse)
+    A = np.diag(is_diffuse.astype(float))
+    Pi = np.diag((~is_diffuse).astype(float))
+
+    P_clean = deepcopy(P_1_0)
+    P_clean[np.isnan(P_clean)] = 0
+    P_inf = A.dot(A.T)
+    P_star = Pi.dot(P_clean).dot(Pi.T)
+    
+    return number_diffuse, A, Pi, P_star
 
 
 def get_nearest_PSD(mat: np.ndarray) -> np.ndarray:
@@ -465,7 +640,7 @@ def revert_permute(index: np.ndarray) -> np.ndarray:
     return revert_index
 
 
-def partition_index(is_missing: List) -> np.ndarray:
+def partition_index(is_missing: List[bool]) -> np.ndarray:
     """
     Reshuffle the index with index of observed measurement 
     first. 
@@ -528,6 +703,16 @@ def ft(theta: List[float], f: Callable, T: int,
     for key in M_keys:
         if len(M[key].shape) < 2:
             raise TypeError('System matrices must be 2D')
+
+    # Check PSD of R and Q
+    try:
+        np.linalg.cholesky(M['Q'])
+    except:
+        raise ValueError('Q is not PSD')
+    try:
+        np.linalg.cholesky(M['R'])
+    except:
+        raise ValueError('R is not PSD')
     
     # Generate ft for required keys
     Ft = Constant_M(M['F'], T)
@@ -548,10 +733,8 @@ def ft(theta: List[float], f: Callable, T: int,
     Dt = Constant_M(M['D'], T)
 
     # Initialization
-    if xi_1_0 is None:
-        xi_1_0 = np.zeros([M['F'].shape[0],1])
-    if P_1_0 is None: 
-        P_1_0 = get_ergodic(M['F'], M['Q'], M['B'], 
+    if P_1_0 is None or xi_1_0 is None: 
+        P_1_0, xi_1_0 = get_ergodic(M['F'], M['Q'], M['B'], 
                 force_diffuse=force_diffuse) 
 
     Mt = {'Ft': Ft, 

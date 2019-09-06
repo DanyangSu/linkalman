@@ -2,7 +2,8 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 from copy import deepcopy
 from scipy import linalg
-from .utils import inv, get_nearest_PSD, min_val, permute, revert_permute, partition_index
+from .utils import inv, get_nearest_PSD, min_val, permute, \
+        revert_permute, partition_index
 from . import Filter
 
 __all__ = ['Smoother']
@@ -48,6 +49,7 @@ class Smoother(object):
         self.N0_t = []
         self.N1_t = []
         self.N2_t = []
+        self.fitted = False
         
         # attributes for EM
         self.linv_perm_y_t = []  # permuted then diagonalized y_t
@@ -91,6 +93,8 @@ class Smoother(object):
         self.N0_t = list(reversed(self.N0_t))
         self.N1_t = list(reversed(self.N1_t))
         self.N2_t = list(reversed(self.N2_t))
+
+        self.fitted = True
             
 
     def _sequential_smooth(self, t: int) -> None:
@@ -316,7 +320,7 @@ class Smoother(object):
             delta_H = H_t - H_t_new
             delta_D = D_t - D_t_new
 
-            chi_1 = (y_t[0:n_t] - H_t_new[0:n_t].dot(self.xi_t_T[t]) - \
+            chi_1 = y_t[0:n_t] - H_t_new[0:n_t].dot(self.xi_t_T[t]) - \
                     D_t_new[0:n_t].dot(self.Xt[t])
             chi_0 = delta_H[n_t:].dot(self.xi_t_T[t]) + \
                     delta_D[n_t:].dot(self.Xt[t])
@@ -354,7 +358,11 @@ class Smoother(object):
         Mt = self.ft(theta, self.T)
         G1 = 0
         G2 = 0
-        
+       
+        # Raise Error if the smoother object is not run first
+        if not self.fitted:
+            raise ValueError('Smoother is not fitted.')
+
         for t in self.T:
             if t == 0:
                 q, A, Pi = self.get_selection_mat(Mt['P_1_0'])
@@ -364,8 +372,9 @@ class Smoother(object):
                 G1 += -np.log(pdet(P_star_1)) - np.trace(linalg.pinvh(
                     P_star_1).dot(self._E_delta2(Mt, t))) 
             else:
-            G1 += np.log(pdet(Mt['Qt'][t-1])) + np.trace(linalg.pinvh(
-                Mt['Qt'][t-1]).dot(self._E_delta2(Mt, t)))
+                G1 += np.log(pdet(Mt['Qt'][t-1])) + np.trace(linalg.pinvh(
+                    Mt['Qt'][t-1]).dot(self._E_delta2(Mt, t)))
+                
             G2 += np.log(pdet(Mt['Rt'][t])) + np.trace(linalg.pinvh(
                 Mt['Rt'][t]).dot(self._E_chi2(Mt, t)))
         

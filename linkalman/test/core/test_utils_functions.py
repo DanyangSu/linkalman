@@ -178,12 +178,24 @@ def test_df_to_list():
     """
     df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
     expected_result = [np.array([[1.], [2.]]), np.array([[2.], [3.]]), np.array([[3.], [4.]])]
-    result = df_to_list(df)
+    col_list = ['a', 'b']
+    result = df_to_list(df, col_list)
     outcome = True
 
     for i in range(len(expected_result)):
         outcome = outcome and np.array_equal(expected_result[i], result[i])
     assert(outcome)
+
+
+def test_df_to_list_nan():
+    """
+    Test if return None when not specify col_list
+    """
+    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
+    expected_result = None
+    result = df_to_list(df)
+
+    assert result == expected_result
 
 
 def test_df_to_list_NaN():
@@ -192,7 +204,8 @@ def test_df_to_list_NaN():
     """
     df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., np.nan, 4.]})
     expected_result = [np.array([[1.], [2.]]), np.array([[2.], [np.nan]]), np.array([[3.], [4.]])]
-    result = df_to_list(df)
+    col_list = ['a', 'b']
+    result = df_to_list(df, col_list)
     
     for i in range(len(expected_result)):
         np.testing.assert_array_equal(expected_result[i], result[i])
@@ -203,8 +216,9 @@ def test_df_to_list_all_NaN():
     Test 2 fully missing observations 
     """
     df = pd.DataFrame({'a': [1., np.nan, 3.], 'b': [2., np.nan, 4.]})
+    col_list = ['a', 'b']
     expected_result = [np.array([[1.], [2.]]), np.array([[np.nan], [np.nan]]), np.array([[3.], [4.]])]
-    result = df_to_list(df)
+    result = df_to_list(df, col_list)
 
     for i in range(len(expected_result)):
         np.testing.assert_array_equal(expected_result[i], result[i])
@@ -215,15 +229,15 @@ def test_df_to_list_string():
     Test str input exceptions
     """
     df = pd.DataFrame({'a': [1., 2., 3.], 'b': [1, 'str2', 'str3']})
-
+    col_list = ['a', 'b']
     with pytest.raises(TypeError):
-        df_to_list(df)
+        df_to_list(df, col_list)
 
 
 def test_df_to_list_not_df():
     df = pd.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6]})
     with pytest.raises(TypeError):
-        df_to_list(df['a'])
+        df_to_list(df['a'], ['a'])
     
 
 # Test list_to_df
@@ -318,13 +332,42 @@ def test_simulated_data_type_error():
     """
     Test if raise exception when both Xt and T are None
     """
-    Mt = {'Ft': [np.array([[1.0]])],
-            'Ht': [np.array([[1.0]])],
-            'Qt': [np.array([[1.0]])],
-            'Bt': [np.array([[1.0]])],
-            'Dt': [np.array([[1.0]])]}
+    def ft(theta, T):
+        Mt = {'Ft': [np.array([[theta]])],
+                'Ht': [np.array([[theta]])],
+                'Qt': [np.array([[theta]])],
+                'Bt': [np.array([[theta]])],
+                'Rt': [np.array([[theta]])],
+                'Dt': [np.array([[theta]])],
+                'xi_1_0': np.array([[theta]]),
+                'P_1_0': np.array([[theta]])}
+        return Mt
+
+    theta = 1.0
+
     with pytest.raises(ValueError):
-        df = simulated_data(Mt)
+        df = simulated_data(ft, theta)
+
+# Test simulated_data run through with diffuse prior
+def test_simulated_data_data_output():
+    """
+    Test if raise exception when both Xt and T are None
+    """
+    def ft(theta, T):
+        Mt = {'Ft': [np.array([[theta]])],
+                'Ht': [np.array([[theta]])],
+                'Qt': [np.array([[theta]])],
+                'Bt': [np.array([[theta]])],
+                'Rt': [np.array([[theta]])],
+                'Dt': [np.array([[theta]])],
+                'xi_1_0': np.array([[theta]]),
+                'P_1_0': np.array([[theta]])}
+        return Mt
+
+    theta = 1.0
+
+    with pytest.raises(ValueError):
+        df = simulated_data(ft, theta)
 
 
 # Test clean_matrix
@@ -340,13 +383,247 @@ def test_clean_matrix():
 
 
 # Test get_ergodic
-def test_get_ergodic_unit_roots():
+def test_get_ergodic_unit_roots_var():
     """
     Test whether return diffuse prior if unit roots
     """
     F = np.array([[1, 1, 0], [0, 1, 0], [0, 0, 0.8]])
     Q = 0.36 * np.eye(3)
-    result = get_ergodic(F, Q)
+    result, _ = get_ergodic(F, Q)
     expected_result = np.array([[np.nan, 0, 0],
         [0, np.nan, 0], [0, 0, 1]])
     np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_unit_roots_mean():
+    """
+    Test whether return diffuse prior mean if unit roots
+    """
+    F = np.array([[1, 1, 0], [0, 1, 0], [0, 0, 0.8]])
+    Q = 0.36 * np.eye(3)
+    _, result = get_ergodic(F, Q, B=np.ones([3, 1]), x_0=np.array([[0.3]]))
+    expected_result = np.array([[0, 0, 1.5]]).T
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_unit_roots_mean_ar2():
+    """
+    Test whether return diffuse prior mean if unit roots and ar2
+    """
+    F = np.array([[0.5, 0.5, 0, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[3][3] = 0
+    _, result = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    F = np.array([[0.3, 0.2], [1, 0]])
+    ergodic_mean = linalg.pinv(np.eye(2) - F).dot(np.array([[0.3, 0.3]]).T)
+    expected_result = np.zeros([4, 1])
+    expected_result[2] = ergodic_mean[0]
+    expected_result[3] = ergodic_mean[1]
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_unit_roots_var_ar2_Q33_0():
+    """
+    Test whether return diffuse prior mean if unit roots and ar2
+    In addition, I set Q[3][3] = 0. I test the result by evaluating 
+    the lyapunov equation
+    """
+    F = np.array([[0.5, 0.5, 0, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[3][3] = 0
+    cov_, _ = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    ergo_var = cov_[2:4, 2:4]
+    ergo_F = F[2:4, 2:4]
+    ergo_Q = Q[2:4, 2:4]
+    result = ergo_F.dot(ergo_var).dot(ergo_F.T) + ergo_Q
+    expected_result = ergo_var
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_unit_roots_var_ar2_Q33_0_diffuse():
+    """
+    Test whether return diffuse prior mean if unit roots and ar2
+    In addition, I set Q[3][3] = 0. Here I check whether it returns 
+    the correct diffuse part.
+    """
+    F = np.array([[0.5, 0.5, 0.1, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[3][3] = 0
+    cov_, _ = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    diffuse_var = cov_[0:2, 0:2]
+    result = diffuse_var
+    expected_result = np.array([[np.nan, 0], [0, np.nan]])
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_explosive_roots_mean():
+    """
+    Test cases where we have explosive roots
+    """
+    F = np.array([[0.8, 0.6, 0.2, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[1][1] = 0
+    Q[3][3] = 0
+    cov_, mean = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    result = mean
+    expected_result = np.zeros([4,1])
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+def test_get_ergodic_explosive_roots_var():
+    """
+    Test cases where we have explosive roots
+    """
+    F = np.array([[0.8, 0.6, 0.2, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[1][1] = 0
+    Q[3][3] = 0
+    cov_, mean = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    result = cov_
+    expected_result = np.diag([np.nan] * 4)
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+# Test get_init_mat
+def test_get_init_mat():
+    """
+    Test normal run
+    """
+    P_1_0 = np.eye(4)
+    P_1_0[1][1] = np.nan
+    P_1_0[3][3] = np.nan
+
+    num_diff, A, Pi, P_star = get_init_mat(P_1_0)
+    expected_num_diff = 2
+    expected_A = np.eye(4)
+    expected_A[0][0] = 0
+    expected_A[2][2] = 0
+    expected_Pi = np.eye(4) - expected_A
+    expected_P_star = expected_Pi
+    np.testing.assert_array_almost_equal(expected_A, A)
+    np.testing.assert_array_almost_equal(expected_Pi, Pi)
+    np.testing.assert_array_almost_equal(expected_P_star, P_star)
+    assert num_diff == expected_num_diff
+
+
+# Test clean_matrix
+def test_clean_matrix():
+    """
+    Test normal run
+    """
+    M = np.array([1e-12, 1e14])
+    expected_result = np.array([0, inf_val])
+    result = clean_matrix(M)
+    np.testing.assert_array_almost_equal(expected_result, result)
+
+
+# Test permute
+def test_permute_row(perm_vector):
+    """
+    Test row permutation
+    """
+    new_index = np.array([1, 3, 0, 2])
+    expected_result = np.array([[2], [4], [1], [3]])
+    result = permute(perm_vector, new_index)
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_permute_col(perm_mat):
+    """
+    Test column permutation
+    """
+    new_index = np.array([1, 3, 0, 2])
+    expected_result = np.array([[2, 4, 1, 3],
+                                [5, 7, 2, 6],
+                                [6, 9, 3, 8],
+                                [7, 0, 4, 9]])
+    result = permute(perm_mat, new_index, axis='col')
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_permute_both(perm_mat):
+    """
+    Test permutation for row and column
+    """
+    new_index = np.array([1, 3, 0, 2])
+    expected_result = np.array([[5, 7, 2, 6],
+                                [7, 0, 4, 9], 
+                                [2, 4, 1, 3],
+                                [6, 9, 3, 8],])
+    result = permute(perm_mat, new_index, axis='both')
+    np.testing.assert_array_equal(expected_result, result)
+
+
+# Test revert_permute
+def revert_permute():
+    """
+    Test normal run
+    """
+    index = np.array([2, 3, 1, 0])
+    expected_result = np.array([3, 2, 0, 1])
+    result = revert_permute(index)
+    np.testing.assert_array_equal(expected_result, result)
+
+
+# Test partition_index
+def test_partition_index():
+    """
+    Test normal run
+    """
+    is_missing = [True, False, False, True, False, True, False]
+    expected_result = np.array([1, 2, 4, 6, 0, 3, 5])
+    result = partition_index(is_missing)
+    np.testing.assert_array_equal(expected_result, result)
+
+
+# Test gen_Xt
+def test_gen_Xt_None():
+    """
+    Test if Xt is None
+    """
+    B = np.array([[1,2],[3,4]])
+    T = 1
+    result = gen_Xt(B=B, T=T)[0]
+    expected_result = np.zeros([2,1])
+    np.testing.assert_array_equal(expected_result, result)
+    
+
+def test_gen_Xt_no_BT():
+    """
+    Test if No Xt and no B or T
+    """
+    with pytest.raises(ValueError) as error:
+        Xt = gen_Xt()
+    expected_result = 'B and T must not be None'
+    result = str(error.value)
+    assert result == expected_result
+
+    
+# Test LL_correct
+def test_LL_correct():
+    """
+    Test normal run
+    """
+    Ht = [np.array([[1, 2]])] * 2
+    Ft = [np.array([[3, 4], [5, 6]])] * 2
+    A = np.ones([2, 2])
+    A[0][0] = 0 
+
+    result = LL_correct(Ht, Ft, A)
+    expected_result = np.array([[260, 470], [470, 850]])
+    np.testing.assert_array_equal(expected_result, result)
