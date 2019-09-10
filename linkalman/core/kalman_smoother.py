@@ -49,7 +49,7 @@ class Smoother(object):
         self.N0_t = []
         self.N1_t = []
         self.N2_t = []
-        self.fitted = False
+        self.is_smoothed = False
         
         # attributes for EM
         self.linv_perm_y_t = []  # permuted then diagonalized y_t
@@ -59,7 +59,7 @@ class Smoother(object):
         self.perm_index_t = []  # index order after permutation
 
 
-    def __call__(self, kf: Filter) -> None:
+    def fit(self, kf: Filter) -> None:
         """
         Run backward smoothing. 
 
@@ -67,7 +67,11 @@ class Smoother(object):
         ----------
         kf : a Filter instance
         """
-        # Include filtered results
+        # Include filtered results if kf is fitted and kf.for_smoother is True
+        if not kf.is_filtered:
+            raise TypeError('The Kalman filter object is not fitted yet')
+        if not kf.for_smoother:
+            raise TypeError('The Kalman filter object is not for smoothers')
         self.__dict__.update(kf.__dict__)
 
         # Initiate r and N
@@ -393,6 +397,10 @@ class Smoother(object):
         Yt_smoothed : smoothed Yt
         Yt_smoothed_cov : standard error of smoothed Yt
         """
+        # Raise error if not fitted yet
+        if not self.is_smoothed:
+            raise TypeError('The Kalman filter is not smoothed yet')
+
         Yt_smoothed = []
         Yt_smoothed_cov = []
         for t in range(self.T):

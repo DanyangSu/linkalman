@@ -27,7 +27,7 @@ class BaseOpt(object):
         ----------
         method : method to fit. Default "mix" if not specified
         """
-        self.ft = ft
+        self.ft = None
         self.theta_opt = None
         self.x_col = None
         self.y_col = None
@@ -37,7 +37,7 @@ class BaseOpt(object):
             raise ValueError('method must be "mix", "EM", or "LLY".')
 
 
-    def get_f(self, Ft: Callable) -> None:
+    def set_f(self, Ft: Callable) -> None:
         """
         Mapping from theta to M. Ft must be the form: 
         f: Ft(theta, T) -> [M_1, M_2,...,M_T]. 
@@ -54,7 +54,7 @@ class BaseOpt(object):
         self.ft = Ft
 
 
-    def get_solver(self, solver: Any) -> None:
+    def set_solver(self, solver: Any) -> None:
         """
         Get solver object for the model. The solver must be 
         solver(theta, obj, **kwargs) where theta is the paramter,

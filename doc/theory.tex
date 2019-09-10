@@ -386,7 +386,21 @@ If $t \geq t_q$, we have:
 Recall that the state estimates are the same between $t:(i)$ and $t:(i+1)$ for any given time, so we may choose any measurement index $(i)$. Equation (\ref{eq:diff_smooth_start}) and (\ref{eq:diff_smooth_end}) are preferred here because their indexing are consistent with those in Kalman filters and smoothers, and are capable of handling fully missing measurements.
 
 \section{Parameter Estimation} \label{sec:param}
-Up to this point, we have assumed that system matrices of a BSTS model is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors. 
+Up to this point, we have assumed that system matrices of a BSTS model is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. In what follows, I provide more details about the two algorithms in the case of diffuse priors.
+
+\subsection{Initialization} 
+If we are dealing with a BSTS model with constant system matrices, and $P_{1|0}$ or $\hat{\xi}_{1|0}$ is not provided, it is possible to compute them\footnote{For BSTS models with time varying system matrices, it is advised to supply user-defined $\hat{\xi}_{1|0}$ and $P_{1|0}$.}. Effectively we want to find the ergodic mean and variance (or their diffuse counterparts). First consider $P_{1|0}$. To find ergodic variance is equivalent to solving a Lyapunov stability equation:
+\begin{align}
+    FP_{1|0}F^{'} + Q = P_{1|0} \label{eq:lyap}
+\end{align}
+where $F$ is $F_t$ without the time subscript $t$. I use \texttt{scipy.linalg.solve\_discrete\_lyapunov} function to find $P_{1|0}$. If there is at least one unit root for $F$, the resulting $P_{1|0}$ will have very large values along the diagonal axis at indices that we may treat as diffuse states. In the rare cases we run into $F$ with explosive roots (i.e. eigenvalues are greater than one), equation (\ref{eq:lyap}) still generate a finite but unstable $P_{1|0}$. Therefore, I mark all the states as diffuse states to avoid confusions\footnote{It is possible that a better solution will partitioned $F$ into the diffuse and the stationary groups. I haven't found one reference though.}.
+
+The solution for $\hat{\xi}_{1|0}$ is easier to obtain. Consider the following:
+\begin{align*}
+    \hat{\xi}_{1|0} &= F\hat{\xi}_{1|0} + Bx \\
+    &= (I - F)^{-1}Bx
+\end{align*}
+where $B$ and $x$ are $B_t$ and $x_t$ without $t$, respectively. In practice, it is easier to set to $0$ the rows of $B$, and $F$ corresponding to the diffuse states. Alternatively, users may provide precomputed or customized $P_{1|0}$ and $\hat{\xi}_{1|0}$.
 
 \subsection{Numerical Maximization} \label{subsec:NM}
 This section follows closely (\cite{durbin_koopman_2001}) with marginal likelihood corrections from (\cite{francke2010likelihood}) and (\cite{harville1974bayesian}). First we parameterize system matrices. To ensure PSD of $Q_t$ and $R_t$ while allowing unconstrained parameterization, I use Cholesky decomposition described in (\cite{pinheiro1996unconstrained}). Next, I provide the expression for marginal likelihood\footnote{Interested readers may refer to Appendix \ref{ap:NL}.} $l_m(Y_T)$ as:

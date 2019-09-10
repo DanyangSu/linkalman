@@ -2,7 +2,9 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 import scipy
 from copy import deepcopy 
-from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, min_val, pdet
+from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, \
+        min_val, pdet, check_consistence, get_init_mat, permute, \
+        partition_index
 
 __all__ = ['Filter']
 
@@ -29,7 +31,7 @@ class Filter(object):
     distribution of the BSTS model. Refer to doc/theory.pdf for details.
     """
 
-    def __init__(self, ft: Callable) -> None:
+    def __init__(self, ft: Callable, for_smoother: bool=False) -> None:
         """
         Initialize a Kalman Filter. Filter take system matrices 
         Mt returns characteristics of the BSTS model. Note that self.Qt
@@ -38,10 +40,14 @@ class Filter(object):
         Parameters:
         ----------
         ft : function that generate Mt
+        for_smoother : whether to store extra information for Kalman smoothers
         """
         self.ft = ft
+        self.for_smoother = for_smoother
+        self.is_filtered = False  # determine if the filter object has been fitted
 
         # Create placeholders for other class attributes
+        self.theta = None
         self.Ht_raw = None
         self.Dt_raw = None
         self.Rt_raw = None
@@ -57,45 +63,31 @@ class Filter(object):
         self.Xt = None
         self.T = None
         self.I = None
+        self.P_star = None
 
         # Create output matrices
         self.xi_1_0 = None
         self.P_1_0 = None
-        self.xi_t = []
-        self.Ht_tilde = []
-        self.Yt_missing = []
-        self.Upsilon_inf_t = []
-        self.Upsilon_star_t = []
-        self.d_t = []
-        self.L0_t = []
-        self.L1_t = []
-        self.L_star_t = []
-        self.P_inf_t = []
-        self.P_star_t = []
-        self.Upsilon_inf_gt_0_t = []  # store whether Upsilon_{\inf} > 0
+        self.xi_t = None
+        self.Ht_tilde = None
+        self.Yt_missing = None
+        self.Upsilon_inf_t = None
+        self.Upsilon_star_t = None
+        self.d_t = None
+        self.L0_t = None
+        self.L1_t = None
+        self.L_star_t = None
+        self.P_inf_t = None
+        self.P_star_t = None
+        self.Upsilon_inf_gt_0_t = None  # store whether Upsilon_{\inf} > 0
         self.t_q = 0
 
-
-    def get_selection_mat(self, P_1_0: np.ndarray) \
-            -> Tuple[int, np.ndarray, np.ndarray]:
-        """
-        Get information for diffuse initialization
-
-        Parameters:
-        ----------
-        P_1_0 : initial state covariance. Diagonal value np.nan if diffuse
-
-        Returns:
-        ----------
-        number_diffuse : number of diffuse state
-        A : selection matrix for diffuse states
-        Pi : selection matrix for stationary states
-        """
-        is_diffuse = np.isnan(self.P_1_0.diagonal())
-        number_diffuse = np.count_nonzero(is_diffuse)
-        A = np.diag(is_diffuse.astype(float))
-        Pi = np.diag((~is_diffuse).astype(float))
-        return number_diffuse, A, Pi
+        # Create output matrices for smoothers
+        if self.for_smoother:
+            self.l_t = None  # l from ldl
+            self.l_t_inv = None
+            self.n_t = None
+            self.partition_index = None
 
 
     def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
@@ -110,14 +102,16 @@ class Filter(object):
         Xt : regressors, must be deterministic and has no missing values.
             If set as None, will generate zero vectors
         """
+        self.theta = theta
         self.Yt = deepcopy(Yt)
         self.T = len(self.Yt)
 
-        # Generate Mt and populate system matrices of the BSTS model
-        Mt = self.ft(theta, self.T)
-        self.Ht_raw = deepcopy(M_wrap(Mt['Ht']))
-        self.Dt_raw = deepcopy(M_wrap(Mt['Dt']))
-        self.Rt_raw = deepcopy(M_wrap(Mt['Rt']))
+        # Generate Mt and Xt, and populate system matrices of the BSTS model
+        Mt = self.ft(self.theta, self.T)
+        self.Xt = gen_Xt(Xt=Xt, B=Mt[Bt][0], T=self.T)
+
+        # Check consistence
+        check_consistence(Mt, self.Yt[0], self.Xt[0])
 
         self.Ft = M_wrap(Mt['Ft'])
         self.Bt = M_wrap(Mt['Bt'])
@@ -130,50 +124,45 @@ class Filter(object):
         self.I = np.eye(self.xi_length)
 
         # Create output matrices
-        self.xi_1_0 = deepcopy(Mt['xi_1_0'])
-        self.P_1_0 = deepcopy(Mt['P_1_0'])
+        self.xi_1_0 = Mt['xi_1_0']
+        self.P_1_0 = Mt['P_1_0']
 
-        # Generate zeros arrays for Xt if Xt is None
-        self.gen_Xt(Xt)
-        
-        # Check Mt and Xt, Yt dimension consistence
-        self.check_consistence()
-        
         # Collect initialization information
-        self.q, self.A, self.Pi = self.get_selection_mat(Mt['P_1_0'])
+        self.q, self.A, self.Pi, self.P_star = get_init_mat(self.P_1_0)
 
         # Initialize xi_1_0 and  P_1_0
-        self.xi_t.append([self.xi_1_0])
-        self.d_t.append([])
-        self.L_star_t.append([])
-        self.Upsilon_star_t.append([])
+        self.xi_t = [[None] * (self.y_length + 1)] * self.T
+        self.xi_t[0][0] = self.xi_1_0
+        self.d_t = [[None] * self.y_length] * self.T
+        self.L_star_t = [[None] * self.y_length] * self.T
+        self.Upsilon_star_t = [[None] * self.y_length] * self.T
+        self.P_star_t = [[None] * (self.y_length + 1)] * self.T
+        self.P_star_t[0][0] = self.P_star
         
         if self.q > 0:
-            P_clean = deepcopy(self.P_1_0)
-            P_clean[np.isnan(P_clean)] = 0
-            self.P_inf_t.append([self.A.dot(self.A.T)])
-            self.P_star_t.append([self.Pi.dot(P_clean).dot(self.Pi.T)])
-            self.L0_t.append([])
-            self.L1_t.append([])
-            self.Upsilon_inf_t.append([])
-            self.Upsilon_inf_gt_0_t.append([])
-        else:
-            self.P_star_t.append([self.P_1_0])
+            self.P_inf_t = [[None] * (self.y_length + 1)] * self.T
+            self.P_inf_t[0][0] = self.A
+            self.L0_t = [[None] * self.y_length] * self.T
+            self.L1_t = [[None] * self.y_length] * self.T
+            self.Upsilon_inf_t = [[None] * self.y_length] * self.T
+            self.Upsilon_inf_gt_0_t = [[None] * self.y_length] * self.T
+
+        if self.for_smoother:
+            self.l_t = [None] * self.T
+            self.l_t_inv = [None] * self.T
+            self.n_t = [None] * self.T
+            self.partition_index = [None] * self.T
 
         # Filter
         for t in range(self.T):
             if self.q > 0:
                 self._sequential_update_diffuse(t)
             
-                # Raise exception if we don't have enough data
-                if t == self.T - 1:
-                    raise ValueError('Not enough data to handle diffuse priors')
             else:
                 self._sequential_update(t)
 
-        # Drop P_{T+1|T} and xi_{T+1|T}
-        self.P_star_t.pop(-1)
-        self.xi_t.pop(-1)
+        # Mark the object as fitted
+        self.is_filtered = True
 
 
     def _sequential_update_diffuse(self, t: int) -> None:
@@ -188,86 +177,134 @@ class Filter(object):
         t : time index
         """
         # LDL 
-        Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
-        self.Ht_tilde.append(H_t)
-        self.Yt_missing.append(is_missing)
+        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
         self.t_q += 1
 
         # Start sequential updating xi_{t:(i)}, 
         # P_inf_t_{t:(i)}, and P_star_t_{t:(i)}
-        for i in range(self.y_length):
-            if is_missing[i]:
-                continue
+        for i in range(1, n_t + 1):
+            ob_index = i - 1  # y index starts from 0 not 1
+            P_inf = self.P_inf_t[t][ob_index]  # the most recent P
+            P_star = self.P_star_t[t][ob_index]
+            xi_i = self.xi_t[t][ob_index]
+            H_i = H_t[ob_index:i]
+            abs_Hi = np.abs(H_i)
+            D_i = D_t[ob_index:i]
+            sigma2 = R_t[ob_index][ob_index]
+            Upsilon_inf = H_i.dot(P_inf).dot(H_i.T)
+            Upsilon_star = H_i.dot(P_star).dot(H_i.T) + sigma2
+            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
+            
+            # If Upsilon_inf > 0
+            gt_0 = Upsilon_inf > min_val * np.power(
+                    abs_Hi[abs_Hi > min_val].min(), 2)
+            if gt_0:
+                K_0 = P_inf.dot(H_i.T) / Upsilon_inf
+                K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
+                xi_t_i1 = xi_i + K_0.dot(d_t_i)
+                L0_t_i = self.I - K_0.dot(H_i)
+                L1_t_i = - K_1.dot(H_i)
+                KRK = K_0.dot(sigma2).dot(K_0.T)
+                P_inf_i1 = self._joseph_form(L0_t_i, P_inf)
+                P_star_i1 = self._joseph_form(L0_t_i, P_star, KRK)
+                self.L0_t[t][ob_index] = L0_t_i
+                self.L1_t[t][ob_index] = L1_t_i
+
+                # update number of diffuse state
+                self.q = min(self.q - 1, np.linalg.matrix_rank(P_inf_i1))
+
+            # If Upsilon_inf == 0
             else:
-                P_inf = self.P_inf_t[t][-1]  # the most recent P
-                P_star = self.P_star_t[t][-1]
-                xi_i = self.xi_t[t][-1]
-                H_i = H_t[i].reshape(1, -1)
-                abs_Hi = np.abs(H_i)
-                D_i = D_t[i].reshape(1, -1)
-                sigma2 = R_t[i][i]
-                Upsilon_inf = H_i.dot(P_inf).dot(H_i.T)
-                Upsilon_star = H_i.dot(P_star).dot(H_i.T) + sigma2
-                d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
-                
-                # If Upsilon_inf > 0
-                gt_0 = Upsilon_inf > min_val * np.power(
-                        abs_Hi[abs_Hi > min_val].min(), 2)
-                if gt_0:
-                    K_0 = P_inf.dot(H_i.T) / Upsilon_inf
-                    K_1 = (P_star.dot(H_i.T) - K_0.dot(Upsilon_star)) / Upsilon_inf
-                    xi_t_i1 = xi_i + K_0.dot(d_t_i)
-                    L0_t_i = self.I - K_0.dot(H_i)
-                    L1_t_i = - K_1.dot(H_i)
-                    L_star_t_i = None
-                    KRK = K_0.dot(sigma2).dot(K_0.T)
-                    P_inf_i1 = self._joseph_form(L0_t_i, P_inf)
-                    P_star_i1 = self._joseph_form(L0_t_i, P_star, KRK)
+                K_star = P_star.dot(H_i.T) / Upsilon_star
+                xi_t_i1 = xi_i + K_star.dot(d_t_i)
+                L_star_t_i = self.I - K_star.dot(H_i)
+                KRK = K_star.dot(sigma2).dot(K_star.T)
+                P_inf_i1 = deepcopy(P_inf)
+                P_star_i1 = self._joseph_form(L_star_t_i, P_star, KRK)
+                self.L_star_t[t][ob_index] = L_star_t_i
 
-                    # update number of diffuse state
-                    self.q = min(self.q - 1, np.linalg.matrix_rank(P_inf_i1))
-
-                # If Upsilon_inf == 0
-                else:
-                    K_star = P_star.dot(H_i.T) / Upsilon_star
-                    xi_t_i1 = xi_i + K_star.dot(d_t_i)
-                    L_star_t_i = self.I - K_star.dot(H_i)
-                    KRK = K_star.dot(sigma2).dot(K_star.T)
-                    P_inf_i1 = deepcopy(P_inf)
-                    P_star_i1 = self._joseph_form(L_star_t_i, P_star, KRK)
-                    L0_t_i = None
-                    L1_t_i = None
-
-                self.xi_t[t].append(xi_t_i1)
-                self.P_inf_t[t].append(P_inf_i1)
-                self.P_star_t[t].append(P_star_i1)
-                self.L0_t[t].append(L0_t_i)
-                self.L1_t[t].append(L1_t_i)
-                self.L_star_t[t].append(L_star_t_i)
-                self.Upsilon_inf_t[t].append(Upsilon_inf)
-                self.Upsilon_star_t[t].append(Upsilon_star)
-                self.d_t[t].append(d_t_i)
-                self.Upsilon_inf_gt_0_t[t].append(gt_0)
+            self.xi_t[t][i] = xi_t_i1
+            self.P_inf_t[t][i] = P_inf_i1
+            self.P_star_t[t][i] = P_star_i1
+            self.Upsilon_inf_t[t][ob_index] = Upsilon_inf
+            self.Upsilon_star_t[t][ob_index] = Upsilon_star
+            self.d_t[t][ob_index] = d_t_i
+            self.Upsilon_inf_gt_0_t[t][ob_index] = gt_0
 
         # Calculate xi_t1_t, P_inf_t1_t, and P_star_t1_t, 
         # and add placeholders for others
-        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
                 self.Bt[t].dot(self.Xt[t])
         P_inf_t1_1 = self.Ft[t].dot(
-                self.P_inf_t[t][-1]).dot(self.Ft[t].T)
+                self.P_inf_t[t][n_t]).dot(self.Ft[t].T)
         P_star_t1_1 = self.Ft[t].dot(
-                self.P_star_t[t][-1]).dot(self.Ft[t].T) + self.Qt[t]
+                self.P_star_t[t][n_t]).dot(self.Ft[t].T) + self.Qt[t]
+        
+        # Raise exception if we don't have enough data
+        if t == self.T - 1:
+            raise ValueError('Not enough data to handle diffuse priors')
+        else:  # if no error raised, we are able to update the filter for t + 1
+        self.xi_t[t+1][0] = xi_t1_1
+        self.P_inf_t[t+1][0] = P_inf_t1_1
+        self.P_star_t[t+1][0] = P_star_t1_1
 
-        self.xi_t.append([xi_t1_1])
-        self.P_inf_t.append([P_inf_t1_1])
-        self.P_star_t.append([P_star_t1_1])
-        self.Upsilon_inf_t.append([])
-        self.Upsilon_star_t.append([])
-        self.L0_t.append([])
-        self.L1_t.append([])
-        self.L_star_t.append([])
-        self.d_t.append([])
-        self.Upsilon_inf_gt_0_t.append([])
+        if self.for_smoother:
+            self.l_t[t] = l_t  # l from ldl
+            self.l_t_inv[t] = l_inv
+            self.n_t[t] = n_t
+            self.partition_index[t] = partitioned_index
+
+
+    def _sequential_update(self, t: int) -> None:
+        """
+        Sequentially update Kalman Filter at time t. If Q_t
+        is not diagonal, we first transform it to a diagonal
+        matrix using LDL transformation. 
+
+        Parameters:
+        ----------
+        t : time index
+        """
+        # LDL 
+        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
+
+        # Skip missing measurements
+        for i in range(1, n_t+1):
+            ob_index = i - 1
+            xi_i = self.xi_t[t][ob_index]
+            P_i = self.P_star_t[t][ob_index]
+            H_i = H_t[ob_index:i]
+            D_i = D_t[ob_index:i]
+            sigma2 = R_t[ob_index][ob_index]
+            Upsilon = H_i.dot(P_i).dot(H_i.T) + sigma2
+            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
+            K = P_i.dot(H_i.T) / Upsilon
+            xi_t_i1 = xi_i + K.dot(d_t_i)
+            L_t_i = self.I - K.dot(H_i)
+            KRK = K.dot(sigma2).dot(K.T)
+            P_i1 = self._joseph_form(L_t_i, P_i, KRK)
+
+            self.xi_t[t][i] = xi_t_i1
+            self.P_star_t[t][i] = P_i1
+            self.L_star_t[t][ob_index] = L_t_i
+            self.Upsilon_star_t[t][ob_index] = Upsilon
+            self.d_t[t][ob_index] = d_t_i
+
+        # Calculate xi_t1_t and P_t, and add placeholders for others
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
+                self.Bt[t].dot(self.Xt[t])
+        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][n_t]).dot(
+                self.Ft[t].T) + self.Qt[t]
+
+        if t < self.T - 1:
+            self.xi_t[t+1][0] = xi_t1_1
+            self.P_star_t[t+1][0] = P_t1_1
+
+        if self.for_smoother:
+            self.l_t[t] = l_t  # l from ldl
+            self.l_t_inv[t] = l_inv
+            self.n_t[t] = n_t
+            self.partition_index[t] = partitioned_index
 
 
     def _joseph_form(self, L: np.ndarray, P: np.ndarray, 
@@ -294,58 +331,8 @@ class Filter(object):
         return P_1
 
 
-    def _sequential_update(self, t: int) -> None:
-        """
-        Sequentially update Kalman Filter at time t. If Q_t
-        is not diagonal, we first transform it to a diagonal
-        matrix using LDL transformation. 
-
-        Parameters:
-        ----------
-        t : time index
-        """
-        # LDL 
-        Y_t, H_t, D_t, R_t, is_missing = self._LDL(t)
-        self.Ht_tilde.append(H_t)
-        self.Yt_missing.append(is_missing)
-
-        # Skip missing measurements
-        for i in range(self.y_length):
-            if is_missing[i]:
-                continue
-            else:
-                xi_i = self.xi_t[t][-1]
-                P_i = self.P_star_t[t][-1]
-                H_i = H_t[i].reshape(1, -1)
-                D_i = D_t[i].reshape(1, -1)
-                sigma2 = R_t[i][i]
-                Upsilon = H_i.dot(P_i).dot(H_i.T) + sigma2
-                d_t_i = Y_t[i] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
-                K = P_i.dot(H_i.T) / Upsilon
-                xi_t_i1 = xi_i + K.dot(d_t_i)
-                L_t_i = self.I - K.dot(H_i)
-                KRK = K.dot(sigma2).dot(K.T)
-                P_i1 = self._joseph_form(L_t_i, P_i, KRK)
-
-            self.xi_t[t].append(xi_t_i1)
-            self.P_star_t[t].append(P_i1)
-            self.L_star_t[t].append(L_t_i)
-            self.Upsilon_star_t[t].append(Upsilon)
-            self.d_t[t].append(d_t_i)
-
-        # Calculate xi_t1_t and P_t, and add placeholders for others
-        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][-1]) + \
-                self.Bt[t].dot(self.Xt[t])
-        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][-1]).dot(
-                self.Ft[t].T) + self.Qt[t]
-        self.xi_t.append([xi_t1_1])
-        self.P_star_t.append([P_t1_1])
-        self.L_star_t.append([])
-        self.Upsilon_star_t.append([])
-        self.d_t.append([])
-
-
-    def _LDL(self, t: int) -> Tuple[np.ndarray]: 
+    def _LDL(self, t: int) -> Tuple[int, np.ndarray, np.ndarray, \
+            np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]: 
         """
         Transform the BSTS model using LDL methods. 
 
@@ -355,6 +342,7 @@ class Filter(object):
 
         Returns:
         ----------
+        n_t : number of observed measurement at time t
         Y_t : transformed Yt[t], NaN values are replaced with 0
         H_t : transformed Yt[t], rows that correspond to NaN 
             in Yt[t] are replaced with 0
@@ -362,22 +350,31 @@ class Filter(object):
             in Yt[t] are replaced with 0
         R_t : transformed Rt[t], rows and columns that correspond
             to NaN in Yt[t] are replaced with 0, then diagonalized
-        is_missing : indicator whether elements in Yt[t] are missing
+        L_t : l from ldl
+        L_inv : l^{-1}, used for EM algorithms
+        partitioned_index : sorted index, used for EM algorithms
         """
         # Preprocess Rt and Yt if Yt has missing measurements
         is_missing = np.hstack(np.isnan(self.Yt[t]))
+        n_t = (~is_missing).sum()
+
+        # Sort observed measurements to the top
+        partitioned_index = partition_index(is_missing)  
+
         if np.any(is_missing):
-            self.Yt[t] = mask_nan(is_missing, self.Yt[t])
-            self.Rt[t] = mask_nan(is_missing, self.Rt[t])
-            self.Ht[t] = mask_nan(is_missing, self.Ht[t], dim='row')
-            self.Dt[t] = mask_nan(is_missing, self.Dt[t], dim='row')
+            self.Yt[t] = mask_nan(is_missing, self.Yt[t], dim='row')
+            self.Yt[t] = permute(self.Yt[t], partitioned_index)
+            self.Rt[t] = permute(self.Rt[t], partitioned_index, axis='both')
+            self.Ht[t] = permute(self.Ht[t], partitioned_index)
+            self.Dt[t] = permute(self.Dt[t], partitioned_index)
 
         # Diagonalize Y_t, H_t, and D_t
         L_t, R_t, L_inv = self.Rt.ldl(t)
         Y_t = L_inv.dot(self.Yt[t])
         H_t = L_inv.dot(self.Ht[t])
         D_t = L_inv.dot(self.Dt[t])
-        return Y_t, H_t, D_t, R_t, is_missing
+        
+        return n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, partitioned_index
 
 
     def get_filtered_y(self) -> List[np.ndarray]:
@@ -391,22 +388,26 @@ class Filter(object):
         Yt_filtered : filtered Yt
         Yt_filtered_cov : standard error of filtered Yt
         """
-        Yt_filtered = []
-        Yt_filtered_cov = []
+        # Raise error if not fitted yet
+        if not self.is_filtered:
+            raise TypeError('The Kalman filter is not fitted yet')
+        
+        Mt = self.ft(self.theta, self.T)
+
+        Yt_filtered = [None] * self.T
+        Yt_filtered_cov = [None] * self.T
         for t in range(self.T):
             # Get filtered y_t
-            yt_f = self.Ht_raw[t].dot(self.xi_t[t][0]) + \
-                    self.Dt_raw[t].dot(self.Xt[t])
-            Yt_filtered.append(yt_f)
+            yt_f = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
+                    Mt['Dt'][t].dot(self.Xt[t])
+            Yt_filtered[t] = yt_f
 
             # Get standard error of filtered y_t
-            if t < self.t_q:
-                yt_error = None
-            else:
-                yt_error = self.Ht_raw[t].dot(self.P_star_t[t][0]).dot(
-                        self.Ht_raw[t].T) + self.Rt_raw[t]
+            if t >= self.t_q:
+                yt_error = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
+                        Mt['Ht'][t].T) + Mt['Rt'][t]
+                Yt_filtered_cov[t] = yt_error
             
-            Yt_filtered_cov.append(yt_error)
         return Yt_filtered, Yt_filtered_cov
 
 
@@ -427,7 +428,7 @@ class Filter(object):
             if t < self.t_q:
                 gt_0 = self.Upsilon_inf_gt_0_t[t]
                 Upsilon_inf = self.Upsilon_inf_t[t]
-                for i in range(len(Upsilon_inf)):
+                for i in range(self.n_t[t]):
                     if gt_0[i]:
                         LL += np.log(Upsilon_inf[i])
                     else:
@@ -436,10 +437,10 @@ class Filter(object):
 
             # If not diffuse, skip Psi_t
             else:
-                for i in range(len(Upsilon_star)):
+                for i in range(self.n_t[t]):
                     LL += np.log(Upsilon_star[i]) + (
                             (d_t[i].T).dot(d_t[i]) / Upsilon_star[i])
         
         # Add marginal correction term
-        LL -= np.log(pdet(LL_correct(self.Ht_tilde, self.Ft, self.A)))
+        LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.A)))
         return -np.asscalar(LL)

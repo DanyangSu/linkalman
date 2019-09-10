@@ -130,7 +130,7 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
         Xt_ = Constant_M(np.zeros(
                 (B.shape[1], 1)), T)
     else:
-        Xt_ = deepcopy(Xt)
+        Xt_ = Xt
     return Xt_
 
 
@@ -536,7 +536,6 @@ def get_init_mat(P_1_0: np.ndarray) \
 
     P_clean = deepcopy(P_1_0)
     P_clean[np.isnan(P_clean)] = 0
-    P_inf = A.dot(A.T)
     P_star = Pi.dot(P_clean).dot(Pi.T)
     
     return number_diffuse, A, Pi, P_star
@@ -640,7 +639,7 @@ def revert_permute(index: np.ndarray) -> np.ndarray:
     return revert_index
 
 
-def partition_index(is_missing: List[bool]) -> np.ndarray:
+def partition_index(is_missing: np.ndarray) -> np.ndarray:
     """
     Reshuffle the index with index of observed measurement 
     first. 
@@ -658,7 +657,7 @@ def partition_index(is_missing: List[bool]) -> np.ndarray:
     ----------
     partitioned_index : partitioned index
     """
-    partitioned_index = np.array(is_missing).argsort()
+    partitioned_index = is_missing.argsort()
     return partitioned_index
 
 
