@@ -585,7 +585,7 @@ def test_partition_index():
     """
     Test normal run
     """
-    is_missing = [True, False, False, True, False, True, False]
+    is_missing = np.array([True, False, False, True, False, True, False])
     expected_result = np.array([1, 2, 4, 6, 0, 3, 5])
     result = partition_index(is_missing)
     np.testing.assert_array_equal(expected_result, result)

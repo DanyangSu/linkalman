@@ -4,7 +4,7 @@ import scipy
 from copy import deepcopy 
 from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, \
         min_val, pdet, check_consistence, get_init_mat, permute, \
-        partition_index
+        partition_index, gen_Xt
 
 __all__ = ['Filter']
 
@@ -90,25 +90,25 @@ class Filter(object):
             self.partition_index = None
 
 
-    def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
+    def init_attr(self, theta: List, Yt: List[np.ndarray], 
             Xt: List[np.ndarray]=None) -> None:
         """
-        Run forward filtering, given input measurements and regressors
-
+        Initialize inputs to the Kalman filter. 
+    
         Parameters:
         ----------
-        theta : list of parameters for self.ft
-        Yt : measurements, may contain missing values
-        Xt : regressors, must be deterministic and has no missing values.
-            If set as None, will generate zero vectors
+        theta : input parameters
+        Yt : input Yt from self.fit()
+        Xt : input Xt from self.fit()
         """
+        # Initialize data inputs
         self.theta = theta
         self.Yt = deepcopy(Yt)
         self.T = len(self.Yt)
 
         # Generate Mt and Xt, and populate system matrices of the BSTS model
         Mt = self.ft(self.theta, self.T)
-        self.Xt = gen_Xt(Xt=Xt, B=Mt[Bt][0], T=self.T)
+        self.Xt = gen_Xt(Xt=Xt, B=Mt['Bt'][0], T=self.T)
 
         # Check consistence
         check_consistence(Mt, self.Yt[0], self.Xt[0])
@@ -152,6 +152,22 @@ class Filter(object):
             self.l_t_inv = [None] * self.T
             self.n_t = [None] * self.T
             self.partition_index = [None] * self.T
+
+
+    def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
+            Xt: List[np.ndarray]=None) -> None:
+        """
+        Run forward filtering, given input measurements and regressors
+
+        Parameters:
+        ----------
+        theta : list of parameters for self.ft
+        Yt : measurements, may contain missing values
+        Xt : regressors, must be deterministic and has no missing values.
+            If set as None, will generate zero vectors
+        """
+        # Initialize input data
+        self.init_attr(theta, Yt, Xt)
 
         # Filter
         for t in range(self.T):
@@ -244,9 +260,9 @@ class Filter(object):
         if t == self.T - 1:
             raise ValueError('Not enough data to handle diffuse priors')
         else:  # if no error raised, we are able to update the filter for t + 1
-        self.xi_t[t+1][0] = xi_t1_1
-        self.P_inf_t[t+1][0] = P_inf_t1_1
-        self.P_star_t[t+1][0] = P_star_t1_1
+            self.xi_t[t+1][0] = xi_t1_1
+            self.P_inf_t[t+1][0] = P_inf_t1_1
+            self.P_star_t[t+1][0] = P_star_t1_1
 
         if self.for_smoother:
             self.l_t[t] = l_t  # l from ldl
