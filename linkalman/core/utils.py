@@ -14,7 +14,7 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
-        'check_consistence', 'gen_Xt']
+        'check_consistence', 'gen_Xt', 'preallocate']
 
 
 max_val = 1e10  # detect infinity
@@ -219,6 +219,17 @@ def create_col(col: List[str], suffix: str='_pred') -> List[str]:
     for i in col:
         col_new.append(i + suffix)
     return col_new
+
+
+def preallocate(dim1, dim2=None):
+    """
+    Preallocate a list by createing either [None] * dim1
+    or [[None] * dim2] * dim1. I use for loop to break reference
+    """
+    if dim2 is None:
+        return [None for _ in range(dim1)]
+    else:
+        return [[None for _1 in range(dim2)] for _2 in range(dim1)]
 
 
 def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
@@ -661,7 +672,7 @@ def partition_index(is_missing: np.ndarray) -> np.ndarray:
     return partitioned_index
 
 
-def ft(theta: List[float], f: Callable, T: int,
+def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None,
         xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
         force_diffuse: List[bool]=None) -> Dict:
     """
@@ -673,6 +684,7 @@ def ft(theta: List[float], f: Callable, T: int,
     theta : input of f(theta). Underlying paramters to be optimized
     f : obtained from get_f. Mapping theta to M
     T : length of Mt. "Duplicate" M for T times
+    x_0 : establish initial state mean
     xi_1_0: initial state mean
     P_1_0: initial state cov
     force_diffuse : use-defined diffuse state
@@ -704,14 +716,19 @@ def ft(theta: List[float], f: Callable, T: int,
             raise TypeError('System matrices must be 2D')
 
     # Check PSD of R and Q
-    try:
-        np.linalg.cholesky(M['Q'])
-    except:
-        raise ValueError('Q is not PSD')
-    try:
-        np.linalg.cholesky(M['R'])
-    except:
-        raise ValueError('R is not PSD')
+    if np.array_equal(M['Q'], M['Q'].T):
+        eig_Q = linalg.eigvals(M['Q'])
+        if not np.all(eig_Q >= 0):
+            raise ValueError('Q is not semi-PSD')
+    else: 
+        raise ValueError('Q is not symmetric')
+    
+    if np.array_equal(M['R'], M['R'].T):
+        eig_R = linalg.eigvals(M['R'])
+        if not np.all(eig_R >= 0):
+            raise ValueError('R is not semi-PSD')
+    else: 
+        raise ValueError('R is not symmetric')
     
     # Generate ft for required keys
     Ft = Constant_M(M['F'], T)
@@ -734,8 +751,7 @@ def ft(theta: List[float], f: Callable, T: int,
     # Initialization
     if P_1_0 is None or xi_1_0 is None: 
         P_1_0, xi_1_0 = get_ergodic(M['F'], M['Q'], M['B'], 
-                force_diffuse=force_diffuse) 
-
+                x_0=x_0, force_diffuse=force_diffuse) 
     Mt = {'Ft': Ft, 
             'Bt': Bt, 
             'Ht': Ht, 
@@ -904,7 +920,7 @@ class M_wrap(Sequence):
         """
         if (not self._equal_M(index)) or self.L is None:
             self.L, self.D, _ = linalg.ldl(self.m)
-            self.L_I, _ = linalg.lapack.clapack.dtrtri(self.L, lower=True)
+            self.L_I, _ = linalg.lapack.dtrtri(self.L, lower=True)
         return self.L, self.D, self.L_I
 
 

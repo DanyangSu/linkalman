@@ -66,12 +66,21 @@ def ft_ar1():
 
 
 @pytest.fixture()
-def y_ar1():
+def Yt_1d():
     """
-    DataFrame for AR1 process
+    1d Yt
     """
-    y = np.array([1, 2, 2.5]).reshape(-1, 1)
+    y = [np.array([[1]]), np.array([[np.nan]]), np.array([[2.5]])]
     return y
+
+
+@pytest.fixture()
+def Xt_1d():
+    """
+    1d Xt
+    """
+    x = [np.array([[0.1]]), np.array([[0.2]]), np.array([[0.3]])]
+    return x
 
 
 @pytest.fixture()
@@ -91,7 +100,7 @@ def theta_mvar():
 
 @pytest.fixture()
 def theta_mvar_diffuse():
-    theta_ = [-30, 0.3, -0.1, -0.2, 0.1, 0.2, 0.15, 0.25]
+    theta_ = [-30, 0.3]
     return theta_
 
 
@@ -109,7 +118,9 @@ def ft_mvar():
 
             F = np.array([[phi_1]])
             Q = np.array([[sigma_Q]])
-            R = gen_PSD(theta[2:8], 3)
+            R = np.array([[3, 2, 1], 
+                          [2, 4, 3],
+                          [1, 3, 6]])
             H = np.array([[1], [2], [2.4]])
             B = np.array([[0.1]])
             D = np.array([[-0.1], [-0.2], [0.1]])
@@ -129,11 +140,91 @@ def Yt_mvar():
     """
     Yt = [np.array([1, 2, 2.1]).reshape(-1, 1),
             np.array([np.nan, 2.2, 3]).reshape(-1, 1),
+            np.array([np.nan, np.nan, np.nan]).reshape(-1, 1),
             np.array([2, np.nan, 3.2]).reshape(-1, 1)]
     return Yt
 
 
 @pytest.fixture()
 def Xt_mvar():
-    Xt = [np.array([[0.2]]), np.array([[0.3]]), np.array([[0.4]])]
+    Xt = [np.array([[0.2]]), np.array([[0.3]]), np.array([[0.4]]), 
+            np.array([[0.1]])]
+    return Xt
+
+
+@pytest.fixture()
+def ft_rw_1():
+    """
+    Random walk process with one measurements
+    """
+    def ft_(theta, T):
+        xi_1_0 = np.array([[0.2]])
+        P_1_0 = np.array([[2]])
+        def f(theta):
+            phi_1 = 1
+            sigma_Q = np.exp(theta[0])
+            sigma_R = np.exp(theta[1])
+            F = np.array([[phi_1]])
+            Q = np.array([[sigma_Q]])
+            R = np.array([[sigma_R]])
+            H = np.array([[1]])
+            B = np.array([[0.1]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'B': B} 
+            return M
+        Mt = ft(theta, f, T, xi_1_0=xi_1_0, P_1_0=P_1_0)
+        return Mt
+    return ft_
+
+
+@pytest.fixture()
+def theta_rw():
+    theta_ = [-0.1, 0.1]
+    return theta_
+
+
+@pytest.fixture()
+def theta_ar2_mvar():
+    theta = [0.2, 0.3, 1, 1, 2]
+    return theta
+
+
+@pytest.fixture()
+def ft_ar2_mvar():
+    """
+    ft for ar2 process 
+    """
+    def ft_(theta, T):
+        def f(theta):
+            F = np.array([[theta[0], theta[1]], [1, 0]])
+            B = np.array([[0.2], [0]])
+            Q = np.array([[theta[2], 0], [0, 0]])
+            H = np.array([[2, 0], [3, 0], [4, 1]])
+            D = np.array([[0.1], [2], [3]])
+            R = np.array([[4, 2, 1], 
+                          [2, 5, 3],
+                          [1, 3, 6]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'B': B, 'D': D} 
+            return M
+        x_0 = np.array([[1]])
+        Mt = ft(theta, f, T, x_0=x_0)
+        return Mt
+
+    return ft_
+
+
+@pytest.fixture()
+def Yt_ar2_mvar():
+    Yt = [np.array([1, 2, 3]).reshape(-1, 1),
+          np.array([2, np.nan, 4]).reshape(-1, 1),
+          np.array([np.nan, np.nan, np.nan]).reshape(-1, 1),
+          np.array([np.nan, 2.5, 3.5]).reshape(-1, 1)]
+    return Yt
+
+
+@pytest.fixture()
+def Xt_ar2_mvar():
+    Xt = [np.array([[1]]),
+          np.array([[2]]),
+          np.array([[1.5]]),
+          np.array([[0.8]])]
     return Xt

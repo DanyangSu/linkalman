@@ -147,6 +147,52 @@ def test_ft_auto_complete():
     np.testing.assert_equal(Mt['Dt'][0], np.zeros((1, 1)))
 
 
+def test_ft_Q_symmetric():
+    """
+    Test if Q is not symmetric
+    """
+    def f(theta):
+        array = np.array([[theta[0]]])
+        F = B = H = D = R = array
+        Q = np.array([[1, 2],[3, 4]])
+        return {'F': F,
+                'H': H,
+                'Q': Q,
+                'R': R}
+
+    theta = [2]
+    T = 2
+
+    with pytest.raises(ValueError) as error:
+        Mt = ft(theta, f, T)
+    expected_result = 'Q is not symmetric'
+    result = str(error.value)
+    assert result == expected_result
+
+
+def test_ft_Q_symmetric():
+    """
+    Test if Q is not symmetric
+    """
+    def f(theta):
+        array = np.array([[theta[0]]])
+        F = B = H = D = R = array
+        Q = np.array([[1, 2],[2, 1]])
+        return {'F': F,
+                'H': H,
+                'Q': Q,
+                'R': R}
+
+    theta = [2]
+    T = 2
+
+    with pytest.raises(ValueError) as error:
+        Mt = ft(theta, f, T)
+    expected_result = 'Q is not semi-PSD'
+    result = str(error.value)
+    assert result == expected_result
+
+
 # Test gen_PSD
 def test_gen_PSD():
     """
@@ -627,3 +673,24 @@ def test_LL_correct():
     result = LL_correct(Ht, Ft, A)
     expected_result = np.array([[260, 470], [470, 850]])
     np.testing.assert_array_equal(expected_result, result)
+
+
+def test_preallocate_dim1():
+    """
+    Test for 1d list of None
+    """
+    dim1 = 3
+    result = preallocate(dim1)
+    expected_result = [None, None, None]
+    assert result == expected_result
+
+
+def test_preallocate_dim2():
+    """
+    Test for 2d list of None
+    """
+    dim1 = 3
+    dim2 = 2
+    result = preallocate(dim1, dim2)
+    expected_result = [[None, None], [None, None], [None, None]]
+    assert result == expected_result

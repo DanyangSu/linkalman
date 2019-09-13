@@ -4,7 +4,7 @@ import scipy
 from copy import deepcopy 
 from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, \
         min_val, pdet, check_consistence, get_init_mat, permute, \
-        partition_index, gen_Xt
+        partition_index, gen_Xt, preallocate
 
 __all__ = ['Filter']
 
@@ -131,27 +131,27 @@ class Filter(object):
         self.q, self.A, self.Pi, self.P_star = get_init_mat(self.P_1_0)
 
         # Initialize xi_1_0 and  P_1_0
-        self.xi_t = [[None] * (self.y_length + 1)] * self.T
+        self.xi_t = preallocate(self.T, self.y_length + 1)
         self.xi_t[0][0] = self.xi_1_0
-        self.d_t = [[None] * self.y_length] * self.T
-        self.L_star_t = [[None] * self.y_length] * self.T
-        self.Upsilon_star_t = [[None] * self.y_length] * self.T
-        self.P_star_t = [[None] * (self.y_length + 1)] * self.T
+        self.d_t = preallocate(self.T, self.y_length)
+        self.L_star_t = preallocate(self.T, self.y_length)
+        self.Upsilon_star_t = preallocate(self.T, self.y_length)
+        self.P_star_t = preallocate(self.T, self.y_length + 1)
         self.P_star_t[0][0] = self.P_star
         
         if self.q > 0:
-            self.P_inf_t = [[None] * (self.y_length + 1)] * self.T
+            self.P_inf_t = preallocate(self.T, self.y_length + 1)
             self.P_inf_t[0][0] = self.A
-            self.L0_t = [[None] * self.y_length] * self.T
-            self.L1_t = [[None] * self.y_length] * self.T
-            self.Upsilon_inf_t = [[None] * self.y_length] * self.T
-            self.Upsilon_inf_gt_0_t = [[None] * self.y_length] * self.T
+            self.L0_t = preallocate(self.T, self.y_length)
+            self.L1_t = preallocate(self.T, self.y_length)
+            self.Upsilon_inf_t = preallocate(self.T, self.y_length)
+            self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length)
 
         if self.for_smoother:
-            self.l_t = [None] * self.T
-            self.l_t_inv = [None] * self.T
-            self.n_t = [None] * self.T
-            self.partition_index = [None] * self.T
+            self.l_t = preallocate(self.T)
+            self.l_t_inv = preallocate(self.T)
+            self.n_t = preallocate(self.T)
+            self.partition_index = preallocate(self.T)
 
 
     def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
