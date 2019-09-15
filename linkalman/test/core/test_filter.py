@@ -358,3 +358,178 @@ def test_sequential_update_mvar_missing_first(ft_ar2_mvar, theta_ar2_mvar,
     np.testing.assert_array_almost_equal(expected_xi_t_nt, 
             kf.xi_t[t][kf.n_t[t]])
 
+
+# Test sequential_update_diffuse
+def test_sequential_update_diffuse_missing(ft_rw_1_diffuse, theta_rw, 
+        Yt_1d_missing, Xt_1d):
+    """
+    Test first missing
+    """
+    t = 0
+    kf = Filter(ft_rw_1_diffuse, for_smoother=True)
+    kf.init_attr(theta_rw, Yt_1d_missing, Xt_1d)
+    for t_ in range(t+1):
+        kf._sequential_update_diffuse(t_)
+    e_P_inf_t1_0 = np.array([[1]])
+    e_xi_t1_0 = np.array([[0]])
+    np.testing.assert_array_almost_equal(e_P_inf_t1_0, kf.P_inf_t[t+1][0])
+    np.testing.assert_array_almost_equal(e_xi_t1_0, kf.xi_t[t+1][0])
+
+
+def test_sequential_update_diffuse(ft_rw_1_diffuse, theta_rw,
+        Yt_1d_missing, Xt_1d):
+    """
+    Test normal run
+    """
+    t = 1
+    kf = Filter(ft_rw_1_diffuse, for_smoother=True)
+    kf.init_attr(theta_rw, Yt_1d_missing, Xt_1d)
+    for t_ in range(t+1):
+        kf._sequential_update_diffuse(t_)
+    e_P_inf_t1_0 = np.array([[0]])
+    e_P_star_t1_0 = kf.Rt[0] + kf.Qt[0]
+    e_xi_t1_0 = kf.Yt[1]
+    np.testing.assert_array_almost_equal(e_P_inf_t1_0, kf.P_inf_t[t+1][0])
+    np.testing.assert_array_almost_equal(e_xi_t1_0, kf.xi_t[t+1][0])
+    np.testing.assert_array_almost_equal(e_P_star_t1_0, kf.P_star_t[t+1][0])
+
+
+def test_sequential_update_diffuse_ll_1d(ft_ll_1d_diffuse,
+        theta_ll_1d_diffuse, Yt_1d_full):
+    """
+    Test local linear models from chapter 5 of Koopman and Durbin (2012)
+    """
+    t = 3
+    kf = Filter(ft_ll_1d_diffuse, for_smoother=True)
+    kf.init_attr(theta_ll_1d_diffuse, Yt_1d_full)
+    for t_ in range(t):
+        kf._sequential_update_diffuse(t_)
+    
+    # Test period 0 result
+    q1 = theta_ll_1d_diffuse[0] / theta_ll_1d_diffuse[2]
+    q2 = theta_ll_1d_diffuse[1] / theta_ll_1d_diffuse[2]
+    e_P_inf_t1_0 = np.ones([2, 2])
+    e_P_star_t1_0 = np.array([[1 + q1, 0], [0, q2]]) * theta_ll_1d_diffuse[2] 
+    e_xi_t1_0 = np.array([[Yt_1d_full[0][0]], [0]])
+    
+    np.testing.assert_array_almost_equal(e_P_inf_t1_0, kf.P_inf_t[1][0])
+    np.testing.assert_array_almost_equal(e_xi_t1_0, kf.xi_t[1][0])
+    np.testing.assert_array_almost_equal(e_P_star_t1_0, kf.P_star_t[1][0])
+
+
+    # Test period 1 result
+    e_P_inf_t1_0 = np.zeros([2, 2])
+    e_P_star_t1_0 = np.array([[5 + 2 * q1 + q2, 3 + q1 + q2], 
+                              [3 + q1 + q2, 2 + q1 + 2 * q2]]) * \
+                                      theta_ll_1d_diffuse[2]
+    y2 = Yt_1d_full[1][0][0]
+    y1 = Yt_1d_full[0][0][0]
+    e_xi_t1_0 = np.array([[2 * y2 - y1], [y2 - y1]])
+    
+    np.testing.assert_array_almost_equal(e_P_inf_t1_0, kf.P_inf_t[2][0])
+    np.testing.assert_array_almost_equal(e_xi_t1_0, kf.xi_t[2][0])
+    np.testing.assert_array_almost_equal(e_P_star_t1_0, kf.P_star_t[2][0])
+
+
+    # Test period 2 result, should return same result as _sequential_update()
+    P_inf_t1_0 = kf.P_inf_t[3][0].copy()
+    P_star_t1_0 = kf.P_star_t[3][0].copy()
+    xi_t1_0 = kf.xi_t[3][0].copy()
+
+    kf._sequential_update(2)
+    np.testing.assert_array_almost_equal(P_inf_t1_0, np.zeros([2, 2]))
+    np.testing.assert_array_almost_equal(xi_t1_0, kf.xi_t[3][0])
+    np.testing.assert_array_almost_equal(P_star_t1_0, kf.P_star_t[3][0])
+
+
+def test_sequential_update_diffuse_ll_Upsilon_inf0(ft_ll_mvar_diffuse,
+        theta_ll_mvar_diffuse, Yt_mvar_diffuse):
+    """
+    For ll model, only measurements across time can reduce rank of P_inf_t
+    """
+    t = 1
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.init_attr(theta_ll_mvar_diffuse, Yt_mvar_diffuse)
+    for t_ in range(t):
+        kf._sequential_update_diffuse(t_)
+    
+    # Test period 0 result
+    e_P_inf_t1_0 = np.ones([2, 2])
+    expected_q = 1
+    
+    np.testing.assert_array_almost_equal(e_P_inf_t1_0, kf.P_inf_t[1][0])
+    assert expected_q == kf.q
+    
+    # Test update when Upsilon_inf = 0
+    index = 2
+    ob = index - 1
+    t = 0
+    l_inv = kf.l_t_inv[0]
+    R_t = l_inv.dot(kf.Rt[t])
+    H_t = (l_inv.dot(kf.Ht[t]))[ob:index]
+    D_t = (l_inv.dot(kf.Dt[t]))[ob:index]
+    Upsilon = H_t.dot(kf.P_star_t[t][ob]).dot(H_t.T) + R_t[ob][ob]
+    K = kf.P_star_t[t][ob].dot(H_t.T) / Upsilon
+    v = l_inv.dot(kf.Yt[t])[ob] - H_t.dot(kf.xi_t[t][ob]) - D_t.dot(kf.Xt[t])
+    expected_xi_t_11 = kf.xi_t[t][ob] + K * v
+    expected_P_t_11 = kf.P_star_t[t][ob] - kf.P_star_t[t][ob].dot(
+            (K.dot(H_t)).T)
+    expected_P_t1_0 = kf.Ft[t].dot(expected_P_t_11).dot(
+            kf.Ft[t].T) + kf.Qt[t]
+    expected_xi_t1_0 = kf.Ft[t].dot(expected_xi_t_11) + \
+            kf.Bt[t].dot(kf.Xt[t])
+    np.testing.assert_array_almost_equal(expected_xi_t_11, 
+            kf.xi_t[t][kf.n_t[t]])
+    np.testing.assert_array_almost_equal(expected_P_t_11, 
+            kf.P_star_t[t][kf.n_t[t]])
+    np.testing.assert_array_almost_equal(expected_P_t1_0, 
+            kf.P_star_t[t+1][0])
+    np.testing.assert_array_almost_equal(expected_xi_t1_0, 
+            kf.xi_t[t+1][0])
+
+
+def test_sequential_update_diffuse_ll_equivalent(ft_ll_mvar_diffuse,
+        ft_ll_mvar_1d, Yt_mvar_diffuse_missing, Yt_mvar_1d, 
+        theta_ll_mvar_diffuse):
+    """
+    Test in the case of misisng values such that at most 1 measurement present
+    at time t, whether we get same result as 1d case
+    """
+    kf_mvar = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf_mvar.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+
+    kf_1d = Filter(ft_ll_mvar_1d, for_smoother=True)
+    kf_1d.fit(theta_ll_mvar_diffuse, Yt_mvar_1d)
+    
+    for t_ in range(kf_mvar.T-1):
+        np.testing.assert_array_almost_equal(kf_1d.P_star_t[t_][0], 
+                kf_mvar.P_star_t[t_][0])
+        np.testing.assert_array_almost_equal(kf_1d.P_inf_t[t_][0], 
+                kf_mvar.P_inf_t[t_][0])
+        np.testing.assert_array_almost_equal(kf_1d.xi_t[t_][0], 
+                kf_mvar.xi_t[t_][0])
+
+
+# Test get_filtered_y
+def test_get_filtered_y_not_filtered(ft_ll_mvar_1d):
+    """
+    Test error message when fit is not run
+    """
+    kf = Filter(ft_ll_mvar_1d, for_smoother=True)
+    with pytest.raises(TypeError) as error:
+        kf.get_filtered_y()
+    expected_result = 'The Kalman filter object is not fitted yet'
+    result = str(error.value)
+    assert result == expected_result
+
+
+def test_get_filtered_y_missing(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing, 
+        theta_ll_mvar_diffuse):
+    """
+    Test missing measurements handling
+    """
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+
+    Yt_filtered, Yt_filtered_cov = kf.get_filtered_y()
+    np.testing.assert_array_equal(kf.Ht[2].dot(kf.xi_t[2][0]), Yt_filtered[2])

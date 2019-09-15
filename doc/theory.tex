@@ -151,12 +151,12 @@ Diffused initial state is to represent the fact the we have no prior knowledge o
 
 A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and interested readers may refer to Appendix \ref{ap:transition} for a simple proof\footnote{For a complete treatment, refer to (\cite{koopman_1997}) for details.}. 
 
-Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_t\equiv rank(P_{\infty,t})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>\varepsilon)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>\varepsilon)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, the new benchmark rank is $q_t-1$. Define $\hat{q}_t$ as the benchmark rank for $P_{\infty,t}$ and $\hat{q}_1=q$. After each period, we set: 
+Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_1\equiv rank(P_{\infty,1})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>\varepsilon)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>\varepsilon)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, then: 
 \[
-    \hat{q}_{t+1}=min[\hat{q}_t-1,q_{t+1}]
+    q_{t+1}=q_t-1
 \]
 
-When $\hat{q}_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. This formulation guarantees degeneration to regular Kalman filters.
+When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. This formulation guarantees degeneration to regular Kalman filters.
 
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
 So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) Section 6.4 and \cite{durbin_koopman_2000} for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. In addition, univariate treatment of Kalman filters allows clean formulation with diffuse priors. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
@@ -175,7 +175,7 @@ In addition, at the beginning of time $t$ before any Kalman updating, we have:
     &= F_{t-1}P_{t-1:(n_{t-1}+1)|t-1:(n_{t-1})}F_{t-1} + Q_{t-1} \label{eq:diff_P_seq0}
 \end{align}
 
-For sequential filtering to work, we need $R_t$ to be diagonal. In the case where $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original BSTS model into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, in practice, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.clapack.dtrtri} subroutine.}:
+For sequential filtering to work, we need $R_t$ to be diagonal. In the case where $R_t$ is not diagonal, we can use LDL Decomposition\footnote{In practice, I perform LDL Decomposition with \texttt{scipy.linalg.ldl}.} to transform the original BSTS model into one with independent measurement noise. Given that $R_t$ is PSD, we have $R_t = l_t\Lambda_tl_t^{'}$. Pre-multiply equation (\ref{eq:measure}) by $l_t^{-1}$, and we have\footnote{Due to special properties of triangular matrices, in practice, I perform matrix inverse on triangular matrix with \texttt{scipy.linalg.lapack.dtrtri} subroutine.}:
 \begin{align}
     \tilde{y}_t = \tilde{H}_t\xi_{t} + \tilde{D}_{t}x_t + \tilde{w}_t \label{eq:ldl}
 \end{align}
@@ -388,19 +388,21 @@ Recall that the state estimates are the same between $t:(i)$ and $t:(i+1)$ for a
 \section{Parameter Estimation} \label{sec:param}
 Up to this point, we have assumed that system matrices of a BSTS model is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. It is important to note, however, that the two approaches are consistent, but not unbiased. Therefore, users should practice with caution when using likelihood based models for parameter estimation. In what follows, I provide more details about the two algorithms in the case of diffuse priors.
 
-\subsection{Initialization} 
+\subsection{Initialization with Lyapunov Equation and Directed Graphs} 
 If we are dealing with a BSTS model with constant system matrices, and $P_{1|0}$ or $\hat{\xi}_{1|0}$ is not provided, it is possible to compute them\footnote{For BSTS models with time varying system matrices, it is advised to supply user-defined $\hat{\xi}_{1|0}$ and $P_{1|0}$.}. Effectively we want to find the ergodic mean and variance (or their diffuse counterparts). First consider $P_{1|0}$. To find ergodic variance is equivalent to solving a Lyapunov stability equation:
 \begin{align}
     FP_{1|0}F^{'} + Q = P_{1|0} \label{eq:lyap}
 \end{align}
-where $F$ is $F_t$ without the time subscript $t$. I use \texttt{scipy.linalg.solve\_discrete\_lyapunov} function to find $P_{1|0}$. If there is at least one unit root for $F$, the resulting $P_{1|0}$ will have very large values along the diagonal axis at indices that we may treat as diffuse states. In the rare cases we run into $F$ with explosive roots (i.e. eigenvalues are greater than one), equation (\ref{eq:lyap}) still generate a finite but unstable $P_{1|0}$. Therefore, I mark all the states as diffuse states to avoid confusions\footnote{It is possible that a better solution will partitioned $F$ into the diffuse and the stationary groups. I haven't found one reference though.}.
+where $F$ is $F_t$ without the time subscript $t$. I use \texttt{scipy.linalg.solve\_discrete\_lyapunov} function to find $P_{1|0}$. If there is at least one unit root for $F$, the resulting $P_{1|0}$ will have very large values along the diagonal axis at indices that we may treat as diffuse states. 
+
+In addition, we may run into BSTS models with explosive roots (i.e. eigenvalues of $F$ are greater than one), equation (\ref{eq:lyap}) still generate a finite (but unstable) $P_{1|0}$ and fails to detect the diffuse state. In such cases, I use techniques in graph theory and first partition $F$ into several strongly connected components\footnote{I use the \texttt{networkx} package to find such components.}. I then calculate the largest eigenvalue in each component, and label these states as diffuse by setting a very large value on the corresponding diagonal values of $F$. Now the explosive states are properly marked, so solving a Lyapunov Equation will produce the correction partition between the diffuse component and the ergodic component of $P_{1|0}$.
 
 The solution for $\hat{\xi}_{1|0}$ is easier to obtain. Consider the following:
 \begin{align*}
     \hat{\xi}_{1|0} &= F\hat{\xi}_{1|0} + Bx \\
     &= (I - F)^{-1}Bx
 \end{align*}
-where $B$ and $x$ are $B_t$ and $x_t$ without $t$, respectively. In practice, it is easier to set to $0$ the rows of $B$, and $F$ corresponding to the diffuse states. Alternatively, users may provide precomputed or customized $P_{1|0}$ and $\hat{\xi}_{1|0}$.
+where $B$ and $x$ are $B_t$ and $x_t$ without $t$, respectively. In practice, it is easier to set to $0$ the rows of $B$, and $F$ corresponding to the diffuse states. Alternatively, users may provide precomputed or customized $P_{1|0}$ and $\hat{\xi}_{1|0}$. It is also very important to conduct sanity checks on system matrices to avoid pathological systems (e.g. $\xi_{t} = \xi_t + v_t$).
 
 \subsection{Numerical Maximization} \label{subsec:NM}
 This section follows closely (\cite{durbin_koopman_2001}) with marginal likelihood corrections from (\cite{francke2010likelihood}) and (\cite{harville1974bayesian}). First we parameterize system matrices. To ensure PSD of $Q_t$ and $R_t$ while allowing unconstrained parameterization, I use Cholesky decomposition described in (\cite{pinheiro1996unconstrained}). Next, I provide the expression for marginal likelihood\footnote{Interested readers may refer to Appendix \ref{ap:NL}.} $l_m(Y_T)$ as:
@@ -445,15 +447,19 @@ EM algorithm proceeds as follows:
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal
 \end{boenumerate}
 
-\section{Application} \label{sec:apply}
+\section{Examples} \label{sec:apply}
+\subsection{AR(2)}
+
 \subsection{ARMA(p,q)}
 In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem.
 
 \subsection{Random Walk}
 
+\subsection{Local Level Model}
+
 \subsection{Measuring Treatment Effects}
 
-\subsection{A Complex Time Series Model}
+\subsection{A Comprehensive BSTS Model}
 In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
 \begin{align}
     \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}

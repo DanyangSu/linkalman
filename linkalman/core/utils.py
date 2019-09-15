@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 import numpy as np
 import pandas as pd
+import networkx as nx
 from scipy import linalg
 from scipy.linalg import solve_discrete_lyapunov as lyap
 from typing import List, Any, Callable, Dict, Tuple
@@ -14,11 +15,11 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
-        'check_consistence', 'gen_Xt', 'preallocate']
+        'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse']
 
 
-max_val = 1e10  # detect infinity
-inf_val = 1e100  # value used to indicate infinity
+max_val = 1e8  # detect infinity
+inf_val = 1e50  # value used to indicate infinity
 min_val = 1e-8  # detect 0
     
 
@@ -107,6 +108,46 @@ def inv(h_array: np.ndarray) -> np.ndarray:
     else:
         h_inv = linalg.pinv2(h_array)
     return h_inv
+
+
+def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
+    """
+    If contains explosive roots, find strongly
+    connected components. Check eigen values for
+    each component submatrix, set large number to
+    the ones with large component and run through 
+    Lyapunov solver again to identify all the explosive
+    roots.
+    
+    Parameters:
+    ----------
+    F : input state transition matrix
+    
+    Returns:
+    ----------
+    is_diffuse : indicator of diffuse states
+    """
+    # Find edges
+    nonzeros = np.nonzero(F)
+    index_ = list(zip(nonzeros[1], nonzeros[0]))
+    
+    # Calculate stronly connected components (scc)
+    DG = nx.DiGraph()
+    DG.add_edges_from(index_)
+    scc = list(nx.strongly_connected_components(DG))
+    F_ = deepcopy(F)
+    
+    # Loop through each component for explosive roots
+    for comp_ in scc:
+        l_comp = list(comp_)
+        sub_F = F_[np.ix_(l_comp, l_comp)]
+        eig_ = linalg.eigvals(sub_F)
+        if np.any(np.abs(eig_) > 1 + min_val):
+            F_[l_comp, l_comp] = inf_val
+    
+    # Get diffuse states 
+    is_diffuse = (np.diag(F_) > max_val).tolist()
+    return is_diffuse
 
 
 def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
@@ -465,7 +506,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     
     # Is is_diffuse is not supplied, create the list
     if force_diffuse is None:
-        is_diffuse = [False] * dim
+        is_diffuse = [False for _ in range(dim)]
     else: 
         is_diffuse = deepcopy(force_diffuse)
         if len(is_diffuse) != dim:
@@ -483,11 +524,13 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     # and issue a warning
     eig = linalg.eigvals(F)
     if np.any(np.abs(eig) > 1 + min_val):
-        warnings.warn('Ft contains explosive roots. ' + \
-                'Default to fullly diffused initialization. ' + \
-                'Results may be biased. Please provide user ' + \
-                'defined xi_1_0 and P_1_0.', RuntimeWarning)
-        is_diffuse = [True] * dim
+        warnings.warn('Ft contains explosive roots. Assumptions ' + \
+                'of marginal LL correction may be violated, and ' + \
+                'results may be biased or inconsistent. Please provide ' + \
+                'user-defined xi_1_0 and P_1_0.', RuntimeWarning)
+        is_diffuse_explosive = get_explosive_diffuse(F)
+        is_diffuse = [a or b for a, b in zip(is_diffuse, 
+            is_diffuse_explosive)]
 
     # Modify Q_ to reflect diffuse states
     Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
@@ -739,10 +782,16 @@ def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None,
     # Set Bt if Bt is not Given
     if 'B' not in M_keys:
         dim_xi = M['F'].shape[0]
-        M.update({'B': np.zeros((dim_xi, 1))})
+        if 'D' not in M_keys:
+            M.update({'B': np.zeros((dim_xi, 1))})
+        else:
+            dim_x = M['D'].shape[1]
+            M.update({'B': np.zeros((dim_xi, dim_x))})
+
     if 'D' not in M_keys:
+        dim_x = M['B'].shape[1]  # B is already defined
         dim_y = M['H'].shape[0]
-        M.update({'D': np.zeros((dim_y, 1))})
+        M.update({'D': np.zeros((dim_y, dim_x))})
 
     # Get Bt and Dt for ft
     Bt = Constant_M(M['B'], T)

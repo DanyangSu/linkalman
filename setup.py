@@ -7,7 +7,7 @@ if sys.version_info[:2] < (3, 5):
 
 setup(
     name="linkalman", 
-    version='0.1',
+    version='0.9.1',
     author='Danyang Su', 
     description='Flexible Linear Kalman Filter',
     license='BSD 3',
@@ -15,7 +15,7 @@ setup(
     install_requires=[
         'numpy',
         'scipy',
-        'nlopt',
         'pandas',
+        'networkx'
         ],
     )

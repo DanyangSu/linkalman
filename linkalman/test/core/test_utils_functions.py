@@ -522,9 +522,10 @@ def test_get_ergodic_explosive_roots_mean():
     Q = 0.36 * np.eye(4)
     Q[1][1] = 0
     Q[3][3] = 0
-    cov_, mean = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    B = np.array([1, 0, 1, 0]).reshape(-1, 1)
+    cov_, mean = get_ergodic(F, Q, B=B, x_0=np.array([[0.3]]))
     result = mean
-    expected_result = np.zeros([4,1])
+    expected_result = np.array([0, 0, 0.6, 0.6]).reshape(-1, 1)
     np.testing.assert_array_almost_equal(expected_result, result)
 
 
@@ -539,10 +540,48 @@ def test_get_ergodic_explosive_roots_var():
     Q = 0.36 * np.eye(4)
     Q[1][1] = 0
     Q[3][3] = 0
-    cov_, mean = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]))
+    B = np.array([1, 0, 1, 0]).reshape(-1, 1)
+    cov_, mean_ = get_ergodic(F, Q, B=B, x_0=np.array([[0.3]]))
     result = cov_
-    expected_result = np.diag([np.nan] * 4)
+    vec_Q = np.array([Q[0][0], Q[1][0], Q[1][1]]).reshape(-1, 1)
+    M = np.array([[0.91, -0.12, -0.04],
+                  [-0.3, 0.8, 0],
+                  [-1, 0, 1]])
+    vec_var = linalg.pinv(M).dot(vec_Q)
+    ergo_var = np.array([[vec_var[0][0], vec_var[1][0]],
+                         [vec_var[1][0], vec_var[2][0]]])
+    expected_result = np.zeros([4, 4])
+    expected_result[0][0] = np.nan
+    expected_result[1][1] = np.nan
+    expected_result[2:4, 2:4] = ergo_var
+    expected_mean = np.array([0, 0, 0.6, 0.6]).reshape(-1, 1)
     np.testing.assert_array_almost_equal(expected_result, result)
+    np.testing.assert_array_almost_equal(expected_mean, mean_)
+
+
+def test_get_ergodic_explosive_roots_var_force_diffuse():
+    """
+    Test cases where we have explosive roots
+    """
+    F = np.array([[0.8, 0.6, 0.2, 0], 
+                  [1, 0, 0, 0], 
+                  [0, 0, 0.3, 0.2],
+                  [0, 0, 1, 0]])
+    Q = 0.36 * np.eye(4)
+    Q[1][1] = 0
+    Q[3][3] = 0
+    force_diffuse = [False, False, False, True]
+    cov_, mean_ = get_ergodic(F, Q, B=np.ones([4, 1]), x_0=np.array([[0.3]]),
+            force_diffuse=force_diffuse)
+    result = cov_
+    vec_Q = np.array([Q[0][0], Q[1][0], Q[1][1]]).reshape(-1, 1)
+    M = np.array([[0.91, -0.12, -0.04],
+                  [-0.3, 0.8, 0],
+                  [-1, 0, 1]])
+    expected_result = np.diag([np.nan] * 4)
+    expected_mean = np.zeros([4, 1])
+    np.testing.assert_array_almost_equal(expected_result, result)
+    np.testing.assert_array_almost_equal(expected_mean, mean_)
 
 
 # Test get_init_mat
@@ -675,6 +714,7 @@ def test_LL_correct():
     np.testing.assert_array_equal(expected_result, result)
 
 
+# Test preallocate
 def test_preallocate_dim1():
     """
     Test for 1d list of None
@@ -693,4 +733,41 @@ def test_preallocate_dim2():
     dim2 = 2
     result = preallocate(dim1, dim2)
     expected_result = [[None, None], [None, None], [None, None]]
+    assert result == expected_result
+
+
+# Test get_explosive_diffuse
+def test_get_explosive_diffuse4():
+    """
+    Test F with four strongly connected components
+    """
+
+    test_F = np.array([[2, 1, 0, 0, 0, 0, 0, 0],
+                        [1, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0.1, 0.2, 0, 0, 0, 0],
+                        [0, 0, 1, 0, 0, 0, 0, 0],
+                        [0, 0, 0.1, 0, 2, 1, 0, 0],
+                        [0, 0, 0, 0, 1, 0, 0, 0],
+                        [0.01, 0, 0, 0, 0, 0, 0.1, 0.2],
+                        [0, 0, 0, 0, 0, 0, 1, 0]])
+    result = get_explosive_diffuse(test_F)
+    expected_result = [True, True, False, False, True, True, False, False]
+    assert result == expected_result
+
+
+def test_get_explosive_diffuse3():
+    """
+    Test F with four strongly connected components
+    """
+
+    test_F = np.array([[2, 1, 0, 0, 0, 0, 0, 0],
+                        [1, 0, 0, 0, 0, 0, 0, 0],
+                        [0, 0, 0.1, 0.2, 0, 0.01, 0, 0],
+                        [0, 0, 1, 0, 0, 0, 0, 0],
+                        [0, 0, 0.1, 0, 2, 1, 0, 0],
+                        [0, 0, 0, 0, 1, 0, 0, 0],
+                        [0.01, 0, 0, 0, 0, 0, 0.1, 0.2],
+                        [0, 0, 0, 0, 0, 0, 1, 0]])
+    result = get_explosive_diffuse(test_F)
+    expected_result = [True, True, True, True, True, True, False, False]
     assert result == expected_result

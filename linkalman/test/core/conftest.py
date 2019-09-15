@@ -178,7 +178,7 @@ def ft_rw_1():
 
 @pytest.fixture()
 def theta_rw():
-    theta_ = [-0.1, 0.1]
+    theta_ = [0.2, 0.1]
     return theta_
 
 
@@ -228,3 +228,155 @@ def Xt_ar2_mvar():
           np.array([[1.5]]),
           np.array([[0.8]])]
     return Xt
+
+
+@pytest.fixture()
+def ft_rw_1_diffuse():
+    """
+    Random walk process with one measurements and diffuse state
+    """
+    def ft_(theta, T):
+        def f(theta):
+            phi_1 = 1
+            sigma_Q = theta[0]
+            sigma_R = theta[1]
+            F = np.array([[phi_1]])
+            Q = np.array([[sigma_Q]])
+            R = np.array([[sigma_R]])
+            H = np.array([[1]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R} 
+            return M
+        Mt = ft(theta, f, T)
+        return Mt
+    return ft_
+
+
+@pytest.fixture()
+def Yt_1d_missing():
+    """
+    1d Yt
+    """
+    y = [np.array([[np.nan]]), np.array([[1]]), np.array([[2.5]])]
+    return y
+
+
+@pytest.fixture()
+def theta_ll_1d_diffuse():
+    theta = [0.2, 0.3, 0.8]
+    return theta
+
+
+@pytest.fixture()
+def ft_ll_1d_diffuse():
+    """
+    Local linear model with 1 measurements
+    """
+    def ft_(theta, T):
+        def f(theta):
+            F = np.array([[1, 1], [0, 1]])
+            Q = np.array([[theta[0], 0], [0, theta[1]]])
+            R = np.array([[theta[2]]])
+            H = np.array([[1, 0]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R} 
+            return M
+        Mt = ft(theta, f, T)
+        return Mt
+    return ft_
+
+    
+@pytest.fixture()
+def Yt_1d_full():
+    """
+    1d Yt fully observed
+    """
+    y = [np.array([[2]]), np.array([[1.3]]), np.array([[2.5]]), np.array([[3.1]])]
+    return y
+
+
+@pytest.fixture()
+def ft_ll_mvar_diffuse():
+    """
+    Local linear model with 2 measurements
+    """
+    def ft_(theta, T):
+        def f(theta):
+            F = np.array([[1, 1], [0, 1]])
+            Q = np.array([[theta[0], 0], [0, theta[1]]])
+            R = np.array([[theta[2], theta[3]], [theta[3], theta[4]]])
+            H = np.array([[1, 0], [2, 0]])
+            D = np.array([[2, 0], [1, 0]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'D': D} 
+            return M
+        Mt = ft(theta, f, T)
+        return Mt
+    return ft_
+
+
+@pytest.fixture()
+def Yt_mvar_diffuse():
+    """
+    Local linear model with complete yt, refer Chapter 5 of Koopman and Durbin (2012)
+    """
+    y = [np.array([1, 2]).reshape(-1, 1), 
+         np.array([2, np.nan]).reshape(-1, 1), 
+         np.array([np.nan, 3.5]).reshape(-1, 1),
+         np.array([3, 5]).reshape(-1, 1)]
+    return y
+
+
+@pytest.fixture()
+def theta_ll_mvar_diffuse():
+    theta = [0.3, 0.8, 0.5, 0.4, 0.6]
+    return theta
+
+
+@pytest.fixture()
+def Yt_mvar_diffuse_missing():
+    """
+    Yt with missing measurements at t
+    """
+    y = [np.array([np.nan, 2]).reshape(-1, 1), 
+         np.array([np.nan, np.nan]).reshape(-1, 1), 
+         np.array([2.5, np.nan]).reshape(-1, 1),
+         np.array([3, 5]).reshape(-1, 1)]
+    return y
+
+
+@pytest.fixture()
+def ft_ll_mvar_1d():
+    """
+    Create a 1d equivalence of mvar with missing measurements.
+    Refer to ft_ll_mvar_diffuse().
+    """
+    def ft_(theta, T):
+        F = np.array([[1, 1], [0, 1]])
+        Ft = [F.copy() for _ in range(T)]
+        Q = np.array([[theta[0], 0], [0, theta[1]]])
+        Qt = [Q.copy() for _ in range(T)]
+        Rt = [np.array([[theta[4]]]),
+             np.array([[1]]),  # not being used
+             np.array([[theta[2]]]), 
+             np.array([[1]])]  # not relevant
+        Ht = [np.array([[2, 0]]), 
+              np.array([[1.5, 0]]),
+              np.array([[1, 0]]),
+              np.array([[4, 0]])]
+
+        Bt = [np.array([[0, 0]]).reshape(-1, 1) for _ in range(T)]
+        Dt = [np.array([[0]]) for _ in range(T)]
+        xi_1_0 = np.array([[0], [0]])
+        P_1_0 = np.diag([np.nan, np.nan])
+
+        Mt = {'Ft': Ft, 'Qt': Qt, 'Bt': Bt, 'Ht': Ht, 'Dt': Dt, 
+                'Rt': Rt, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0} 
+        return Mt
+    return ft_
+
+
+@pytest.fixture()
+def Yt_mvar_1d():
+    y = [np.array([[2]]),
+         np.array([[np.nan]]),
+         np.array([[2.5]]),
+         np.array([[7]])]
+    return y

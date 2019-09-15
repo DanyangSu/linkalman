@@ -134,7 +134,6 @@ class Filter(object):
         self.xi_t = preallocate(self.T, self.y_length + 1)
         self.xi_t[0][0] = self.xi_1_0
         self.d_t = preallocate(self.T, self.y_length)
-        self.L_star_t = preallocate(self.T, self.y_length)
         self.Upsilon_star_t = preallocate(self.T, self.y_length)
         self.P_star_t = preallocate(self.T, self.y_length + 1)
         self.P_star_t[0][0] = self.P_star
@@ -142,8 +141,6 @@ class Filter(object):
         if self.q > 0:
             self.P_inf_t = preallocate(self.T, self.y_length + 1)
             self.P_inf_t[0][0] = self.A
-            self.L0_t = preallocate(self.T, self.y_length)
-            self.L1_t = preallocate(self.T, self.y_length)
             self.Upsilon_inf_t = preallocate(self.T, self.y_length)
             self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length)
 
@@ -152,6 +149,11 @@ class Filter(object):
             self.l_t_inv = preallocate(self.T)
             self.n_t = preallocate(self.T)
             self.partition_index = preallocate(self.T)
+            self.L_star_t = preallocate(self.T, self.y_length)
+
+            if self.q > 0:
+                self.L0_t = preallocate(self.T, self.y_length)
+                self.L1_t = preallocate(self.T, self.y_length)
 
 
     def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
@@ -195,10 +197,11 @@ class Filter(object):
         # LDL 
         n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
         self.t_q += 1
+        self.n_t[t] = n_t
 
         # Start sequential updating xi_{t:(i)}, 
         # P_inf_t_{t:(i)}, and P_star_t_{t:(i)}
-        for i in range(1, n_t + 1):
+        for i in range(1, n_t+1):
             ob_index = i - 1  # y index starts from 0 not 1
             P_inf = self.P_inf_t[t][ob_index]  # the most recent P
             P_star = self.P_star_t[t][ob_index]
@@ -209,8 +212,8 @@ class Filter(object):
             sigma2 = R_t[ob_index][ob_index]
             Upsilon_inf = H_i.dot(P_inf).dot(H_i.T)
             Upsilon_star = H_i.dot(P_star).dot(H_i.T) + sigma2
-            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
-            
+            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])    
+
             # If Upsilon_inf > 0
             gt_0 = Upsilon_inf > min_val * np.power(
                     abs_Hi[abs_Hi > min_val].min(), 2)
@@ -223,11 +226,13 @@ class Filter(object):
                 KRK = K_0.dot(sigma2).dot(K_0.T)
                 P_inf_i1 = self._joseph_form(L0_t_i, P_inf)
                 P_star_i1 = self._joseph_form(L0_t_i, P_star, KRK)
-                self.L0_t[t][ob_index] = L0_t_i
-                self.L1_t[t][ob_index] = L1_t_i
+
+                if self.for_smoother:
+                    self.L0_t[t][ob_index] = L0_t_i
+                    self.L1_t[t][ob_index] = L1_t_i
 
                 # update number of diffuse state
-                self.q = min(self.q - 1, np.linalg.matrix_rank(P_inf_i1))
+                self.q = self.q - 1
 
             # If Upsilon_inf == 0
             else:
@@ -237,7 +242,9 @@ class Filter(object):
                 KRK = K_star.dot(sigma2).dot(K_star.T)
                 P_inf_i1 = deepcopy(P_inf)
                 P_star_i1 = self._joseph_form(L_star_t_i, P_star, KRK)
-                self.L_star_t[t][ob_index] = L_star_t_i
+                
+                if self.for_smoother:
+                    self.L_star_t[t][ob_index] = L_star_t_i 
 
             self.xi_t[t][i] = xi_t_i1
             self.P_inf_t[t][i] = P_inf_i1
@@ -254,15 +261,15 @@ class Filter(object):
         P_inf_t1_1 = self.Ft[t].dot(
                 self.P_inf_t[t][n_t]).dot(self.Ft[t].T)
         P_star_t1_1 = self.Ft[t].dot(
-                self.P_star_t[t][n_t]).dot(self.Ft[t].T) + self.Qt[t]
-        
+                self.P_star_t[t][n_t]).dot(self.Ft[t].T) + self.Qt[t]      
+
         # Raise exception if we don't have enough data
         if t == self.T - 1:
             raise ValueError('Not enough data to handle diffuse priors')
-        else:  # if no error raised, we are able to update the filter for t + 1
+        else:  # if no error raised, we are able to update the filter for t+1
             self.xi_t[t+1][0] = xi_t1_1
             self.P_inf_t[t+1][0] = P_inf_t1_1
-            self.P_star_t[t+1][0] = P_star_t1_1
+            self.P_star_t[t+1][0] = P_star_t1_1 
 
         if self.for_smoother:
             self.l_t[t] = l_t  # l from ldl
@@ -283,6 +290,7 @@ class Filter(object):
         """
         # LDL 
         n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
+        self.n_t[t] = n_t
 
         # Skip missing measurements
         for i in range(1, n_t+1):
@@ -302,9 +310,11 @@ class Filter(object):
 
             self.xi_t[t][i] = xi_t_i1
             self.P_star_t[t][i] = P_i1
-            self.L_star_t[t][ob_index] = L_t_i
             self.Upsilon_star_t[t][ob_index] = Upsilon
             self.d_t[t][ob_index] = d_t_i
+
+            if self.for_smoother:
+                self.L_star_t[t][ob_index] = L_t_i
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
         xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
@@ -319,7 +329,6 @@ class Filter(object):
         if self.for_smoother:
             self.l_t[t] = l_t  # l from ldl
             self.l_t_inv[t] = l_inv
-            self.n_t[t] = n_t
             self.partition_index[t] = partitioned_index
 
 
@@ -406,12 +415,13 @@ class Filter(object):
         """
         # Raise error if not fitted yet
         if not self.is_filtered:
-            raise TypeError('The Kalman filter is not fitted yet')
+            raise TypeError('The Kalman filter object is not fitted yet')
         
         Mt = self.ft(self.theta, self.T)
 
-        Yt_filtered = [None] * self.T
-        Yt_filtered_cov = [None] * self.T
+        Yt_filtered = preallocate(self.T)
+        Yt_filtered_cov = preallocate(self.T)
+
         for t in range(self.T):
             # Get filtered y_t
             yt_f = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
@@ -420,9 +430,9 @@ class Filter(object):
 
             # Get standard error of filtered y_t
             if t >= self.t_q:
-                yt_error = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
+                yt_error_var = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
                         Mt['Ht'][t].T) + Mt['Rt'][t]
-                Yt_filtered_cov[t] = yt_error
+                Yt_filtered_cov[t] = yt_error_var
             
         return Yt_filtered, Yt_filtered_cov
 
@@ -455,7 +465,7 @@ class Filter(object):
             else:
                 for i in range(self.n_t[t]):
                     LL += np.log(Upsilon_star[i]) + (
-                            (d_t[i].T).dot(d_t[i]) / Upsilon_star[i])
+                            d_t[i].T).dot(d_t[i]) / Upsilon_star[i]
         
         # Add marginal correction term
         LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.A)))
