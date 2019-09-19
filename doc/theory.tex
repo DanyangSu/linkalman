@@ -151,9 +151,9 @@ Diffused initial state is to represent the fact the we have no prior knowledge o
 
 A diffuse Kalman filter degenerates to a usual one if $P_{\infty,t}=0$. In practice, we may check if $P_{\infty,t}=0$, but it is subject to numerical errors. (\cite{helske_2016}) implemented a more robust algorithms in his R package \texttt{KFAS}. I provide the procedure below, and interested readers may refer to Appendix \ref{ap:transition} for a simple proof\footnote{For a complete treatment, refer to (\cite{koopman_1997}) for details.}. 
 
-Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_1\equiv rank(P_{\infty,1})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>\varepsilon)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>\varepsilon)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. If $\Upsilon_{\infty,t}\geq \varepsilon_t$, then: 
+Here I focus on the univariate measurement case, because it is less complex and convertible from multivariate Kalman filters. Define $q_1\equiv rank(P_{\infty,1})$, then by construction of $P_{1,0}$, $q_1$ has rank $q$, where $q$ is the number of diffuse state variables. Let $\varepsilon_t>0$ be some small threshold value\footnote{In practice, I follow (\cite{helske_2016}) and set $\varepsilon_t=\varepsilon\times min(|H_t|;|H_t|>\varepsilon)^2$,  where $\varepsilon=$1e-8 is some base threshold, and $min(|H_t|;|H_t|>\varepsilon)$ is the minimum of the absolute values in $H_t$ that is not $0$.} such that if $\Upsilon_{\infty,t}<\varepsilon_t$, we treat $\Upsilon_{\infty,t}=0$. Define If $\Upsilon_{\infty,t}\geq \varepsilon_t$, then: 
 \[
-    q_{t+1}=q_t-1
+    q_{t+1}=min[q_t-1, rank(P_{\infty,t+1})]
 \]
 
 When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual one. This formulation guarantees degeneration to regular Kalman filters.

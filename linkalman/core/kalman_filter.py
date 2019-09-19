@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 import scipy
 from copy import deepcopy 
-from .utils import mask_nan, inv, LL_correct, M_wrap, Constant_M, \
+from .utils import mask_nan, LL_correct, M_wrap, Constant_M, \
         min_val, pdet, check_consistence, get_init_mat, permute, \
         partition_index, gen_Xt, preallocate
 
@@ -48,9 +48,6 @@ class Filter(object):
 
         # Create placeholders for other class attributes
         self.theta = None
-        self.Ht_raw = None
-        self.Dt_raw = None
-        self.Rt_raw = None
         self.Ft = None
         self.Bt = None
         self.Ht = None
@@ -64,19 +61,15 @@ class Filter(object):
         self.T = None
         self.I = None
         self.P_star = None
+        self.n_t = None
 
         # Create output matrices
         self.xi_1_0 = None
         self.P_1_0 = None
         self.xi_t = None
-        self.Ht_tilde = None
-        self.Yt_missing = None
         self.Upsilon_inf_t = None
         self.Upsilon_star_t = None
         self.d_t = None
-        self.L0_t = None
-        self.L1_t = None
-        self.L_star_t = None
         self.P_inf_t = None
         self.P_star_t = None
         self.Upsilon_inf_gt_0_t = None  # store whether Upsilon_{\inf} > 0
@@ -86,8 +79,14 @@ class Filter(object):
         if self.for_smoother:
             self.l_t = None  # l from ldl
             self.l_t_inv = None
-            self.n_t = None
             self.partition_index = None
+            self.L0_t = None
+            self.L1_t = None
+            self.L_star_t = None
+            self.Ht_tilde = None
+            self.Rt_tilde = None
+            self.Yt_tilde = None
+            self.Dt_tilde = None
 
 
     def init_attr(self, theta: List, Yt: List[np.ndarray], 
@@ -137,6 +136,7 @@ class Filter(object):
         self.Upsilon_star_t = preallocate(self.T, self.y_length)
         self.P_star_t = preallocate(self.T, self.y_length + 1)
         self.P_star_t[0][0] = self.P_star
+        self.n_t = preallocate(self.T)
         
         if self.q > 0:
             self.P_inf_t = preallocate(self.T, self.y_length + 1)
@@ -147,7 +147,10 @@ class Filter(object):
         if self.for_smoother:
             self.l_t = preallocate(self.T)
             self.l_t_inv = preallocate(self.T)
-            self.n_t = preallocate(self.T)
+            self.Ht_tilde = preallocate(self.T)
+            self.Dt_tilde = preallocate(self.T)
+            self.Rt_tilde = preallocate(self.T)
+            self.Yt_tilde = preallocate(self.T)
             self.partition_index = preallocate(self.T)
             self.L_star_t = preallocate(self.T, self.y_length)
 
@@ -181,6 +184,64 @@ class Filter(object):
 
         # Mark the object as fitted
         self.is_filtered = True
+
+
+    def _sequential_update(self, t: int) -> None:
+        """
+        Sequentially update Kalman Filter at time t. If Q_t
+        is not diagonal, we first transform it to a diagonal
+        matrix using LDL transformation. 
+
+        Parameters:
+        ----------
+        t : time index
+        """
+        # LDL 
+        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
+        self.n_t[t] = n_t
+
+        # Skip missing measurements
+        for i in range(1, n_t+1):
+            ob_index = i - 1  # state variables have one more value
+            xi_i = self.xi_t[t][ob_index]
+            P_i = self.P_star_t[t][ob_index]
+            H_i = H_t[ob_index:i]
+            D_i = D_t[ob_index:i]
+            sigma2 = R_t[ob_index][ob_index]
+            Upsilon = H_i.dot(P_i).dot(H_i.T) + sigma2
+            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
+            K = P_i.dot(H_i.T) / Upsilon
+            xi_t_i1 = xi_i + K.dot(d_t_i)
+            L_t_i = self.I - K.dot(H_i)
+            KRK = K.dot(sigma2).dot(K.T)
+            P_i1 = self._joseph_form(L_t_i, P_i, KRK)
+
+            self.xi_t[t][i] = xi_t_i1
+            self.P_star_t[t][i] = P_i1
+            self.Upsilon_star_t[t][ob_index] = Upsilon
+            self.d_t[t][ob_index] = d_t_i
+
+            if self.for_smoother:
+                self.L_star_t[t][ob_index] = L_t_i
+
+        # Calculate xi_t1_t and P_t, and add placeholders for others
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
+                self.Bt[t].dot(self.Xt[t])
+        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][n_t]).dot(
+                self.Ft[t].T) + self.Qt[t]
+
+        if t < self.T - 1:
+            self.xi_t[t+1][0] = xi_t1_1
+            self.P_star_t[t+1][0] = P_t1_1
+
+        if self.for_smoother:
+            self.l_t[t] = l_t  # l from ldl
+            self.l_t_inv[t] = l_inv
+            self.Ht_tilde[t] = H_t
+            self.Dt_tilde[t] = D_t
+            self.Rt_tilde[t] = R_t
+            self.Yt_tilde[t] = Y_t
+            self.partition_index[t] = partitioned_index
 
 
     def _sequential_update_diffuse(self, t: int) -> None:
@@ -240,7 +301,7 @@ class Filter(object):
                 xi_t_i1 = xi_i + K_star.dot(d_t_i)
                 L_star_t_i = self.I - K_star.dot(H_i)
                 KRK = K_star.dot(sigma2).dot(K_star.T)
-                P_inf_i1 = deepcopy(P_inf)
+                P_inf_i1 = P_inf
                 P_star_i1 = self._joseph_form(L_star_t_i, P_star, KRK)
                 
                 if self.for_smoother:
@@ -263,6 +324,9 @@ class Filter(object):
         P_star_t1_1 = self.Ft[t].dot(
                 self.P_star_t[t][n_t]).dot(self.Ft[t].T) + self.Qt[t]      
 
+        # Update q at the end of time t
+        self.q = min(self.q, np.linalg.matrix_rank(P_inf_t1_1))
+
         # Raise exception if we don't have enough data
         if t == self.T - 1:
             raise ValueError('Not enough data to handle diffuse priors')
@@ -274,61 +338,10 @@ class Filter(object):
         if self.for_smoother:
             self.l_t[t] = l_t  # l from ldl
             self.l_t_inv[t] = l_inv
-            self.n_t[t] = n_t
-            self.partition_index[t] = partitioned_index
-
-
-    def _sequential_update(self, t: int) -> None:
-        """
-        Sequentially update Kalman Filter at time t. If Q_t
-        is not diagonal, we first transform it to a diagonal
-        matrix using LDL transformation. 
-
-        Parameters:
-        ----------
-        t : time index
-        """
-        # LDL 
-        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
-        self.n_t[t] = n_t
-
-        # Skip missing measurements
-        for i in range(1, n_t+1):
-            ob_index = i - 1
-            xi_i = self.xi_t[t][ob_index]
-            P_i = self.P_star_t[t][ob_index]
-            H_i = H_t[ob_index:i]
-            D_i = D_t[ob_index:i]
-            sigma2 = R_t[ob_index][ob_index]
-            Upsilon = H_i.dot(P_i).dot(H_i.T) + sigma2
-            d_t_i = Y_t[ob_index] - H_i.dot(xi_i) - D_i.dot(self.Xt[t])
-            K = P_i.dot(H_i.T) / Upsilon
-            xi_t_i1 = xi_i + K.dot(d_t_i)
-            L_t_i = self.I - K.dot(H_i)
-            KRK = K.dot(sigma2).dot(K.T)
-            P_i1 = self._joseph_form(L_t_i, P_i, KRK)
-
-            self.xi_t[t][i] = xi_t_i1
-            self.P_star_t[t][i] = P_i1
-            self.Upsilon_star_t[t][ob_index] = Upsilon
-            self.d_t[t][ob_index] = d_t_i
-
-            if self.for_smoother:
-                self.L_star_t[t][ob_index] = L_t_i
-
-        # Calculate xi_t1_t and P_t, and add placeholders for others
-        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
-                self.Bt[t].dot(self.Xt[t])
-        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][n_t]).dot(
-                self.Ft[t].T) + self.Qt[t]
-
-        if t < self.T - 1:
-            self.xi_t[t+1][0] = xi_t1_1
-            self.P_star_t[t+1][0] = P_t1_1
-
-        if self.for_smoother:
-            self.l_t[t] = l_t  # l from ldl
-            self.l_t_inv[t] = l_inv
+            self.Ht_tilde[t] = H_t
+            self.Dt_tilde[t] = D_t
+            self.Rt_tilde[t] = R_t
+            self.Yt_tilde[t] = Y_t
             self.partition_index[t] = partitioned_index
 
 
@@ -468,5 +481,5 @@ class Filter(object):
                             d_t[i].T).dot(d_t[i]) / Upsilon_star[i]
         
         # Add marginal correction term
-        LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.A)))
+        LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.n_t, self.A)))
         return -np.asscalar(LL)

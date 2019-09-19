@@ -676,6 +676,16 @@ def test_partition_index():
     np.testing.assert_array_equal(expected_result, result)
 
 
+def test_partition_index_all_missing():
+    """
+    Test all missing
+    """
+    is_missing = np.array([True] * 7)
+    expected_result = np.array(list(range(7)))
+    result = partition_index(is_missing)
+    np.testing.assert_array_equal(expected_result, result)
+
+
 # Test gen_Xt
 def test_gen_Xt_None():
     """
@@ -702,15 +712,31 @@ def test_gen_Xt_no_BT():
 # Test LL_correct
 def test_LL_correct():
     """
-    Test normal run
+    Test cases when index is sorted
     """
-    Ht = [np.array([[1, 2]])] * 2
+    Ht = [np.array([[1, 2], [3, 4]])] * 2
     Ft = [np.array([[3, 4], [5, 6]])] * 2
-    A = np.ones([2, 2])
+    n_t = [1, 2]
+    A = np.eye(2)
     A[0][0] = 0 
 
-    result = LL_correct(Ht, Ft, A)
-    expected_result = np.array([[260, 470], [470, 850]])
+    result = LL_correct(Ht, Ft, n_t, A)
+    expected_result = np.array([[0, 0], [0, 1556]])
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_LL_correct_not_sorted():
+    """
+    Test cases when index is not sorted
+    """
+    Ht = [np.array([[1, 2], [3, 4]])] * 2
+    Ft = [np.array([[3, 4], [5, 6]])] * 2
+    n_t = [1, 2]
+    index = [[1, 0], [1, 0]]
+    A = np.eye(2)
+
+    result = LL_correct(Ht, Ft, n_t, A, index=index)
+    expected_result = np.array([[1019, 1264], [1264, 1568]])
     np.testing.assert_array_equal(expected_result, result)
 
 

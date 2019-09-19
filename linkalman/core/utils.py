@@ -266,11 +266,23 @@ def preallocate(dim1, dim2=None):
     """
     Preallocate a list by createing either [None] * dim1
     or [[None] * dim2] * dim1. I use for loop to break reference
+
+    Parameters:
+    ----------
+    dim1 : length of list
+    dim2 : if not None, each element is also a list of None
+
+    Returns:
+    ----------
+    allocated_list : preallocated placeholders
     """
-    if dim2 is None:
-        return [None for _ in range(dim1)]
-    else:
-        return [[None for _1 in range(dim2)] for _2 in range(dim1)]
+    allocated_list = None
+    if dim1 > 0:
+        if dim2 is None:
+            allocated_list = [None for _ in range(dim1)]
+        else:
+            allocated_list = [[None for _1 in range(dim2)] for _2 in range(dim1)]
+    return allocated_list
 
 
 def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
@@ -562,7 +574,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     Bx[is_diffuse] = 0
     F_star = deepcopy(F)
     F_star[is_diffuse] = 0
-    xi_0 = linalg.pinv(np.eye(dim) - F_star).dot(Bx)
+    xi_0 = inv(np.eye(dim) - F_star).dot(Bx)
 
     return P_0_PSD, xi_0
 
@@ -833,7 +845,8 @@ def pdet(array: np.ndarray) -> float:
 
 
 def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray], 
-        A: np.ndarray) -> np.ndarray:
+        n_t: List[int], A: np.ndarray, index: List[List[int]]=None) \
+        -> np.ndarray:
     """
     Calculate Correction term for the marginal likelihood
 
@@ -841,17 +854,25 @@ def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray],
     ----------
     Ht : list of measurement specification matrices
     Ft : list of state transition matrices
+    n_t : only the first n_t[t] rows of Ht are used
     A : selection matrix for P_inf_1_0
+    index : if not None, sort Ht first
 
     Returns:
     MLL_correct : correction term for the marginal likelihood
     """
     psi = deepcopy(A)
     MLL_correct = np.zeros(Ft[0].shape)
-    for t in range(len(Ht)):
-        Zt = Ht[t].dot(psi)
-        MLL_correct += (Zt.T).dot(Zt)
-        psi = Ft[t].dot(psi)
+    if index is None:
+        for t in range(len(Ht)):
+            Zt = Ht[t][0:n_t[t]].dot(psi)
+            MLL_correct += (Zt.T).dot(Zt)
+            psi = Ft[t].dot(psi)
+    else:
+        for t in range(len(Ht)):
+            Zt = Ht[t][index[t]][0:n_t[t]].dot(psi)
+            MLL_correct += (Zt.T).dot(Zt)
+            psi = Ft[t].dot(psi)
 
     return MLL_correct
     

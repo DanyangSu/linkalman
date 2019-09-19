@@ -24,7 +24,7 @@ def test_joseph_form(ft_ar1, theta_ar1):
 
 
 # Test init
-def test_attr_input(ft_mvar, theta_mvar, Yt_mvar, Xt_mvar):
+def test_init_attr_input(ft_mvar, theta_mvar, Yt_mvar, Xt_mvar):
     """
     Test normal run
     """
@@ -486,6 +486,18 @@ def test_sequential_update_diffuse_ll_Upsilon_inf0(ft_ll_mvar_diffuse,
             kf.P_star_t[t+1][0])
     np.testing.assert_array_almost_equal(expected_xi_t1_0, 
             kf.xi_t[t+1][0])
+
+
+def test_sequential_update_diffuse_update_multiple_q(ft_q,
+        theta_ll_mvar_diffuse, Yt_q):
+    """
+    For ll model, only measurements across time can reduce rank of P_inf_t
+    """
+    t = 1
+    kf = Filter(ft_q, for_smoother=True)
+    kf.init_attr(theta_ll_mvar_diffuse, Yt_q)
+    kf._sequential_update_diffuse(0)
+    assert kf.q == 0
 
 
 def test_sequential_update_diffuse_ll_equivalent(ft_ll_mvar_diffuse,

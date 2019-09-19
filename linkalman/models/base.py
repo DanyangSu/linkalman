@@ -69,6 +69,25 @@ class BaseOpt(object):
         self.solver = solver
 
 
+    def get_opt_filter(self, for_smoother: bool=True) -> Filter:
+        """
+        Get optimized filter.
+        
+        Parameters:
+        ----------
+        for_smoother : whether filter contains additional attributes
+
+        Returns:
+        ----------
+        opt_kf : Kalman filter object with optimal theta
+        """
+        if self.opt_theta is None:
+            raise TypeError('Model is not optimized')
+        
+        opt_kf = Filter(self.ft, for_smoother=for_smoother)
+        return opt_kf
+
+
     def fit(self, df: pd.DataFrame, theta_init: np.ndarray,
             y_col: List[str], x_col: List[str]=None, **kwarg) -> None:
         """

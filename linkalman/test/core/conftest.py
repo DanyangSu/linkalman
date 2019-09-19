@@ -331,6 +331,29 @@ def theta_ll_mvar_diffuse():
 
 
 @pytest.fixture()
+def Yt_mvar_diffuse_smooth():
+    """
+    Local linear model with complete yt, refer to Chapter 5 of Koopman and Durbin (2012)
+    """
+    y = [np.array([1, 2]).reshape(-1, 1), 
+         np.array([np.nan, np.nan]).reshape(-1, 1), 
+         np.array([np.nan, 3.5]).reshape(-1, 1),
+         np.array([3, 5]).reshape(-1, 1)]
+    return y
+
+
+@pytest.fixture()
+def Yt_mvar_diffuse_smooth_vec():
+    """
+    Local linear model with complete yt, refer to Koopman (1997)
+    """
+    y = [np.array([1, 2]).reshape(-1, 1), 
+         np.array([2.4, 3.2]).reshape(-1, 1),
+         np.array([3, 5]).reshape(-1, 1)]
+    return y
+
+
+@pytest.fixture()
 def Yt_mvar_diffuse_missing():
     """
     Yt with missing measurements at t
@@ -379,4 +402,37 @@ def Yt_mvar_1d():
          np.array([[np.nan]]),
          np.array([[2.5]]),
          np.array([[7]])]
+    return y
+
+@pytest.fixture()
+def ft_q():
+    """
+    Test update q
+    """
+    def ft_(theta, T):
+        F = np.array([[1, 0, 0, 0, 0]] * 5)
+        Ft = [F.copy() for _ in range(T)]
+        Q = np.eye(5)
+        Qt = [Q.copy() for _ in range(T)]
+        R = np.eye(2)
+        Rt = [R.copy() for _ in range(T)]
+        H = np.array([[2, 0, 0, 0, 0], [1, 0, 0, 0, 0]])
+        Ht = [H.copy() for _ in range(T)]
+
+
+        Bt = [np.zeros([5, 1]) for _ in range(T)]
+        Dt = [np.zeros([2, 1]) for _ in range(T)]
+        xi_1_0 = np.zeros([5, 1])
+        P_1_0 = np.diag([np.nan] * 5)
+
+        Mt = {'Ft': Ft, 'Qt': Qt, 'Bt': Bt, 'Ht': Ht, 'Dt': Dt, 
+                'Rt': Rt, 'xi_1_0': xi_1_0, 'P_1_0': P_1_0} 
+        return Mt
+    return ft_
+
+
+@pytest.fixture()
+def Yt_q():
+    y = [np.array([[2], [1.1]]),
+         np.array([[2.2], [1.14]])]
     return y
