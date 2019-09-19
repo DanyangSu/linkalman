@@ -279,7 +279,7 @@ class Smoother(object):
                     Mt['Bt'][t-1].dot(self.Xt[t-1])
             FPcov = Mt['Ft'][t-1].dot(self.Pcov_t_t1[t-1])  # Pcov_t_t1 starts at t=1
             delta2 = delta.dot(delta.T) + self.P_t_T[t] - FPcov - FPcov.T + \
-                    Mt['Ft'][t-1].dot(self.P_t_T[t-1]).dot(Mt['Ft'][t-1])
+                    Mt['Ft'][t-1].dot(self.P_t_T[t-1]).dot(Mt['Ft'][t-1].T)
 
         return delta2
 
@@ -299,13 +299,13 @@ class Smoother(object):
         """
         n_t = self.n_t[t]
 
-        if self.n_t == self.y_length:
+        if n_t == self.y_length:
             chi = self.Yt[t] - Mt['Ht'][t].dot(self.xi_t_T[t]) - \
                     Mt['Dt'][t].dot(self.Xt[t])
             chi2 = chi.dot(chi.T) + Mt['Ht'][t].dot(self.P_t_T[t]).dot(
                     Mt['Ht'][t].T)
 
-        elif self.n_t == 0:  # no sorting when all missing
+        elif n_t == 0:  # no sorting when all missing
             delta_H = self.Ht[t] - Mt['Ht'][t]
             chi = (delta_H).dot(self.xi_t_T[t]) + \
                     (self.Dt[t] - Mt['Dt'][t]).dot(self.Xt[t])
@@ -318,6 +318,7 @@ class Smoother(object):
             part_index = self.partition_index[t]
             R_t = self.Rt_tilde[t]
             y_t = self.Yt_tilde[t]
+            l_t = self.l_t[t]
 
             # Ht and Dt from Mt that is parameterized by theta
             H_t_M = self.l_t_inv[t].dot(permute(Mt['Ht'][t], 
@@ -333,10 +334,10 @@ class Smoother(object):
             chi_0 = delta_H[n_t:].dot(self.xi_t_T[t]) + \
                     delta_D[n_t:].dot(self.Xt[t])
             chi2_11 = chi_1.dot(chi_1.T) + H_t_M[0:n_t].dot(
-                self.P_t_T).dot(H_t_M[0:n_t].T)
+                self.P_t_T[t]).dot(H_t_M[0:n_t].T)
             chi2_01 = chi_0.dot(chi_1.T)
             chi2_00 = chi_0.dot(chi_0.T) + delta_H[n_t:].dot(
-                self.P_t_T).dot(delta_H[n_t:].T) + R_t[n_t:, n_t:]
+                self.P_t_T[t]).dot(delta_H[n_t:].T) + R_t[n_t:, n_t:]
 
             # Build and de-orthogonalize chi2_tilde
             chi2_tilde = l_t.dot(np.block([[chi2_11, chi2_01.T],
@@ -345,7 +346,7 @@ class Smoother(object):
             # Restore the original index of chi2
             original_index = revert_permute(part_index)
             chi2 = permute(chi2_tilde, original_index, axis='both')
-
+        raise
         return chi2
 
 

@@ -422,9 +422,12 @@ def test_sequential_smooth_diffuse_vec(ft_ll_mvar_diffuse,
     e_P_t_T = P_star_t - P_star_t.dot(N_star_1t).dot(P_star_t) - \
             P_star_t.dot(N_1_1t).dot(P_inf_t) - P_inf_t.dot(N_1_1t).dot(
             P_star_t) - P_inf_t.dot(N_2_1t).dot(P_inf_t)
+    e_Pcov = (P_star_t.dot(L_star.T) + P_inf_t.dot(L_inf.T)).dot(ks.I - \
+            N_star_t.dot(ks.P_star_t[t+1][0]))
 
     np.testing.assert_array_almost_equal(e_xi_t_T, ks.xi_t_T[t])
     np.testing.assert_array_almost_equal(e_P_t_T, ks.P_t_T[t])
+    np.testing.assert_array_almost_equal(e_Pcov, ks.Pcov_t_t1[t])
    
 
 # Test get_smoothed_y

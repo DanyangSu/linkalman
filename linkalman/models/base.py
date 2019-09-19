@@ -60,7 +60,7 @@ class BaseOpt(object):
         solver(theta, obj, **kwargs) where theta is the paramter,
         obj is the objective function (e.g. likelihood), and **kwargs
         are kwargs for the solver object. The solver should return 
-        optimal theta
+        optimal theta and optimal LL evaluation
 
         Parameters:
         ----------
