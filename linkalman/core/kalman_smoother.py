@@ -2,8 +2,10 @@ import numpy as np
 from typing import List, Any, Callable, Tuple
 from copy import deepcopy
 from scipy import linalg
+import scipy
 from .utils import inv, get_nearest_PSD, min_val, permute, \
-        revert_permute, partition_index, preallocate
+        revert_permute, partition_index, preallocate, \
+        get_init_mat, pdet, LL_correct
 from . import Filter
 
 __all__ = ['Smoother']
@@ -298,55 +300,17 @@ class Smoother(object):
         chi2 : expectation term for y in G
         """
         n_t = self.n_t[t]
+        part_index = self.partition_index[t]
+        R_t = self.Rt[t]
+        y_t = self.Yt[t]
 
-        if n_t == self.y_length:
-            chi = self.Yt[t] - Mt['Ht'][t].dot(self.xi_t_T[t]) - \
-                    Mt['Dt'][t].dot(self.Xt[t])
-            chi2 = chi.dot(chi.T) + Mt['Ht'][t].dot(self.P_t_T[t]).dot(
-                    Mt['Ht'][t].T)
-
-        elif n_t == 0:  # no sorting when all missing
-            delta_H = self.Ht[t] - Mt['Ht'][t]
-            chi = (delta_H).dot(self.xi_t_T[t]) + \
-                    (self.Dt[t] - Mt['Dt'][t]).dot(self.Xt[t])
-            chi2 = chi.dot(chi.T) + delta_H.dot(self.P_t_T[t]).dot(
-                    delta_H.T) + self.Rt[t]
-
-        else:
-            H_t = self.Ht_tilde[t]
-            D_t = self.Dt_tilde[t]
-            part_index = self.partition_index[t]
-            R_t = self.Rt_tilde[t]
-            y_t = self.Yt_tilde[t]
-            l_t = self.l_t[t]
-
-            # Ht and Dt from Mt that is parameterized by theta
-            H_t_M = self.l_t_inv[t].dot(permute(Mt['Ht'][t], 
-                part_index, axis='row'))
-            D_t_M = self.l_t_inv[t].dot(permute(Mt['Dt'][t], 
-                part_index, axis='row'))
-            delta_H = H_t - H_t_M
-            delta_D = D_t - D_t_M
-
-            # Get chi for observed and unobserved partitions
-            chi_1 = y_t[0:n_t] - H_t_M[0:n_t].dot(self.xi_t_T[t]) - \
-                    D_t_M[0:n_t].dot(self.Xt[t])
-            chi_0 = delta_H[n_t:].dot(self.xi_t_T[t]) + \
-                    delta_D[n_t:].dot(self.Xt[t])
-            chi2_11 = chi_1.dot(chi_1.T) + H_t_M[0:n_t].dot(
+        # Ht and Dt from Mt that is parameterized by theta
+        H_t_M = permute(Mt['Ht'][t], part_index, axis='row')
+        D_t_M = permute(Mt['Dt'][t], part_index, axis='row')
+        chi = y_t[0:n_t] - H_t_M[0:n_t].dot(self.xi_t_T[t]) - \
+                D_t_M[0:n_t].dot(self.Xt[t])
+        chi2 = chi.dot(chi.T) + H_t_M[0:n_t].dot(
                 self.P_t_T[t]).dot(H_t_M[0:n_t].T)
-            chi2_01 = chi_0.dot(chi_1.T)
-            chi2_00 = chi_0.dot(chi_0.T) + delta_H[n_t:].dot(
-                self.P_t_T[t]).dot(delta_H[n_t:].T) + R_t[n_t:, n_t:]
-
-            # Build and de-orthogonalize chi2_tilde
-            chi2_tilde = l_t.dot(np.block([[chi2_11, chi2_01.T],
-                [chi2_01, chi2_00]])).dot(l_t.T) 
-
-            # Restore the original index of chi2
-            original_index = revert_permute(part_index)
-            chi2 = permute(chi2_tilde, original_index, axis='both')
-        raise
         return chi2
 
 
@@ -361,7 +325,7 @@ class Smoother(object):
         Returns:
         G : objective value for EM algorithms
         """
-        Mt = self.ft(theta, self.T)
+        Mt = self.ft(theta, self.T, **self.ft_kwargs)
         G1 = 0
         G2 = 0
        
@@ -369,52 +333,59 @@ class Smoother(object):
         if not self.is_smoothed:
             raise ValueError('Smoother is not fitted.')
 
-        for t in self.T:
+        for t in range(self.T):
             if t == 0:
                 _, A, Pi, P_star_1 = get_init_mat(Mt['P_1_0'])
-                G1 += np.log(pdet(P_star_1)) + np.trace(inv(
+                G1 += np.log(pdet(P_star_1)) + scipy.trace(inv(
                     P_star_1).dot(self._E_delta2(Mt, t))) 
             else:
-                G1 += np.log(pdet(Mt['Qt'][t-1])) + np.trace(inv(
+                G1 += np.log(pdet(Mt['Qt'][t-1])) + scipy.trace(inv(
                     Mt['Qt'][t-1]).dot(self._E_delta2(Mt, t)))
-                
-            G2 += np.log(pdet(Mt['Rt'][t])) + np.trace(inv(
-                Mt['Rt'][t]).dot(self._E_chi2(Mt, t)))
+            
+            if self.n_t[t] > 0:    
+                # Sort Rt index
+                R_t = permute(Mt['Rt'][t], self.partition_index[t], 
+                        axis='both')[0:self.n_t[t], 0:self.n_t[t]]
+                G2 += np.log(pdet(R_t)) + scipy.trace(inv(
+                        R_t).dot(self._E_chi2(Mt, t)))
         
         G = G1 + G2 - np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'], \
-                self.n_t, A, index=self.part_index)))
+                self.n_t, A, index=self.partition_index)))
 
-        return -G.asscalar(G)
+        return -G.item()
 
 
-    def get_smoothed_y(self) -> List[np.ndarray]:
+    def get_smoothed_val(self, xi_col: List[int]=None) \
+            -> List[np.ndarray]:
         """
-        Generated smoothed Yt. It will also generate
-        smoothed values for missing measurements.
+        Generated smoothed xi. If state is diffusal, 
+        no covariance for Yt. Use xi_col to include 
+        only the important xi. 
+
+        Parameters:
+        ----------
+        xi_col : column index of xi to be included. 
 
         Returns:
         ----------
-        Yt_smoothed : smoothed Yt
-        Yt_smoothed_cov : standard error of smoothed Yt
+        xi_t_T : smoothed state means
+        P_t_T : smoothed state covariances
         """
         # Raise error if not fitted yet
         if not self.is_smoothed:
             raise TypeError('The Kalman smoother object is not fitted yet')
+
+        # If xi_col is not specified, use all columns
+        if xi_col is None:
+            xi_col = list(range(self.xi_length))
         
-        Mt = self.ft(self.theta, self.T)
-        Yt_smoothed = preallocate(self.T)
-        Yt_smoothed_cov = preallocate(self.T)
-        
+        xi_t_T = preallocate(self.T)
+        P_t_T = preallocate(self.T)
+
         for t in range(self.T):
-            # Get smoothed y_t
-            yt_s = Mt['Ht'][t].dot(self.xi_t_T[t]) + \
-                    Mt['Dt'][t].dot(self.Xt[t])
-            Yt_smoothed[t] = yt_s
+            xi_t_T[t] = self.xi_t_T[t][xi_col]
+            P_t_T[t] = self.P_t_T[t][xi_col][:, xi_col]
+            
+        return xi_t_T, P_t_T
 
-            # Get standard error of smoothed y_t
-            yt_error_var = Mt['Ht'][t].dot(self.P_t_T[t]).dot(
-                    Mt['Ht'][t].T) + Mt['Rt'][t]
-            Yt_smoothed_cov[t] = yt_error_var
-
-        return Yt_smoothed, Yt_smoothed_cov
 

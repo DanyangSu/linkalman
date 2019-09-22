@@ -428,32 +428,48 @@ def test_sequential_smooth_diffuse_vec(ft_ll_mvar_diffuse,
     np.testing.assert_array_almost_equal(e_xi_t_T, ks.xi_t_T[t])
     np.testing.assert_array_almost_equal(e_P_t_T, ks.P_t_T[t])
     np.testing.assert_array_almost_equal(e_Pcov, ks.Pcov_t_t1[t])
-   
 
-# Test get_smoothed_y
-def test_get_smoothed_y_not_fitted(ft_ll_mvar_1d):
+
+# Test get_smoothed_val
+def test_get_smoothed_val_not_smoothed(ft_ll_mvar_1d):
     """
     Test error message when fit is not run
     """
+    kf = Filter(ft_ll_mvar_1d, for_smoother=True)
     ks = Smoother()
     with pytest.raises(TypeError) as error:
-        ks.get_smoothed_y()
+        ks.get_smoothed_val()
     expected_result = 'The Kalman smoother object is not fitted yet'
     result = str(error.value)
     assert result == expected_result
 
 
-def test_get_smoothed_y_missing(ft_ll_mvar_diffuse, Yt_mvar_diffuse_smooth, 
+def test_get_smoothed_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
         theta_ll_mvar_diffuse):
     """
-    Test missing measurements handling
+    Test df with all xi
     """
     kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
     ks = Smoother()
     ks.fit(kf)
 
-    Yt_smoothed, Yt_smoothed_cov = ks.get_smoothed_y()
-    original_index = revert_permute(ks.partition_index[2])
-    Ht = permute(ks.Ht[2], original_index)
-    np.testing.assert_array_equal(Ht.dot(ks.xi_t_T[2]), Yt_smoothed[2])
+    xi_T, P_T = ks.get_smoothed_val()
+    np.testing.assert_array_equal(xi_T[2], ks.xi_t_T[2])
+    np.testing.assert_array_equal(P_T[2], ks.P_t_T[2])
+    np.testing.assert_array_equal(P_T[3], ks.P_t_T[3])
+
+
+def test_get_smoothed_y_selected_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    """
+    Test df with selected xi
+    """
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    ks = Smoother()
+    ks.fit(kf)
+
+    xi_T, P_T = ks.get_smoothed_val(xi_col=[1])
+    np.testing.assert_array_equal(xi_T[2], ks.xi_t_T[2][[1]])
+    np.testing.assert_array_equal(P_T[2], ks.P_t_T[2][[1]][:,[1]])

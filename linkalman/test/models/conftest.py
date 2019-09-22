@@ -8,7 +8,7 @@ def ft_ll_mvar_diffuse():
     """
     Local linear model with 2 measurements
     """
-    def ft_(theta, T):
+    def ft_(theta, T, **kwargs):
         def f(theta):
             F = np.array([[1, 1], [0, 1]])
             Q = np.array([[theta[0], 0], [0, theta[1]]])
@@ -17,7 +17,7 @@ def ft_ll_mvar_diffuse():
             D = np.array([[2, 0], [1, 0]])
             M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'D': D} 
             return M
-        Mt = ft(theta, f, T)
+        Mt = ft(theta, f, T, **kwargs)
         return Mt
     return ft_
 

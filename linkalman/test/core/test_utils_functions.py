@@ -113,7 +113,7 @@ def test_ft():
 
     theta = [0.1]
     T = 2
-    Mt = ft(theta, f, T)
+    Mt = ft(theta, f, T, None)
     assert(np.array_equal(Mt['Bt'][1], np.array([[theta[0]]])))
    
 
@@ -126,7 +126,7 @@ def test_ft_missing_keys():
     T = 2
 
     with pytest.raises(ValueError):
-        Mt = ft(theta, f, T)
+        Mt = ft(theta, f, T, None)
 
 
 def test_ft_auto_complete():
@@ -143,7 +143,7 @@ def test_ft_auto_complete():
 
     theta = [2]
     T = 2
-    Mt = ft(theta, f, T)
+    Mt = ft(theta, f, T, np.array([[1]]))
     np.testing.assert_equal(Mt['Dt'][0], np.zeros((1, 1)))
 
 
@@ -187,7 +187,7 @@ def test_ft_Q_symmetric():
     T = 2
 
     with pytest.raises(ValueError) as error:
-        Mt = ft(theta, f, T)
+        Mt = ft(theta, f, T, None)
     expected_result = 'Q is not semi-PSD'
     result = str(error.value)
     assert result == expected_result

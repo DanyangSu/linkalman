@@ -31,7 +31,7 @@ class Filter(object):
     distribution of the BSTS model. Refer to doc/theory.pdf for details.
     """
 
-    def __init__(self, ft: Callable, for_smoother: bool=False) -> None:
+    def __init__(self, ft: Callable, for_smoother: bool=False, **kwargs) -> None:
         """
         Initialize a Kalman Filter. Filter take system matrices 
         Mt returns characteristics of the BSTS model. Note that self.Qt
@@ -41,10 +41,12 @@ class Filter(object):
         ----------
         ft : function that generate Mt
         for_smoother : whether to store extra information for Kalman smoothers
+        kwargs : kwargs for ft
         """
         self.ft = ft
         self.for_smoother = for_smoother
         self.is_filtered = False  # determine if the filter object has been fitted
+        self.ft_kwargs = kwargs
 
         # Create placeholders for other class attributes
         self.theta = None
@@ -106,10 +108,11 @@ class Filter(object):
         self.T = len(self.Yt)
 
         # Generate Mt and Xt, and populate system matrices of the BSTS model
-        Mt = self.ft(self.theta, self.T)
-        self.Xt = gen_Xt(Xt=Xt, B=Mt['Bt'][0], T=self.T)
+        M_ = self.ft(self.theta, 1, **self.ft_kwargs)
+        self.Xt = gen_Xt(Xt=Xt, B=M_['Bt'][0], T=self.T)
 
         # Check consistence
+        Mt = self.ft(self.theta, self.T, **self.ft_kwargs)
         check_consistence(Mt, self.Yt[0], self.Xt[0])
 
         self.Ft = M_wrap(Mt['Ft'])
@@ -415,41 +418,6 @@ class Filter(object):
         return n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, partitioned_index
 
 
-    def get_filtered_y(self) -> List[np.ndarray]:
-        """
-        Generated filtered Yt. It will also generate
-        filtered values for missing measurements. If
-        state is diffusal, no covariance for Yt
-
-        Returns:
-        ----------
-        Yt_filtered : filtered Yt
-        Yt_filtered_cov : standard error of filtered Yt
-        """
-        # Raise error if not fitted yet
-        if not self.is_filtered:
-            raise TypeError('The Kalman filter object is not fitted yet')
-        
-        Mt = self.ft(self.theta, self.T)
-
-        Yt_filtered = preallocate(self.T)
-        Yt_filtered_cov = preallocate(self.T)
-
-        for t in range(self.T):
-            # Get filtered y_t
-            yt_f = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
-                    Mt['Dt'][t].dot(self.Xt[t])
-            Yt_filtered[t] = yt_f
-
-            # Get standard error of filtered y_t
-            if t >= self.t_q:
-                yt_error_var = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
-                        Mt['Ht'][t].T) + Mt['Rt'][t]
-                Yt_filtered_cov[t] = yt_error_var
-            
-        return Yt_filtered, Yt_filtered_cov
-
-
     def get_LL(self) -> float:
         """
         Calculate the marginal likelihood of Yt for a BSTS model.
@@ -482,4 +450,64 @@ class Filter(object):
         
         # Add marginal correction term
         LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.n_t, self.A)))
-        return -np.asscalar(LL)
+        return -LL.item()
+
+
+    def get_filtered_val(self, is_xi: bool=True, xi_col: List[int]=None) \
+            -> List[np.ndarray]:
+        """
+        Generated filtered Yt. It will also generate
+        filtered values for missing measurements. If
+        state is diffusal, no covariance for Yt. Use 
+        xi_col to include only the important xi. For 
+        example, we don't need all xi in models that
+        have weekly effects.
+
+        Parameters:
+        ----------
+        is_xi : whether returns xi values
+        xi_col : column index of xi to be included. 
+
+        Returns:
+        ----------
+        Yt_filtered : filtered Yt
+        Yt_filtered_cov : covariance of filtered Yt
+        xi_t : selected xi_t
+        P_t : selected P_t
+        """
+        # Raise error if not fitted yet
+        if not self.is_filtered:
+            raise TypeError('The Kalman filter object is not fitted yet')
+
+        # If xi_col is not specified, use all columns
+        if xi_col is None:
+            xi_col = list(range(self.xi_length))
+        
+        Mt = self.ft(self.theta, self.T, **self.ft_kwargs)
+
+        Yt_filtered = preallocate(self.T)
+        Yt_filtered_cov = preallocate(self.T)
+        xi_t = preallocate(self.T)
+        P_t = preallocate(self.T)
+
+        for t in range(self.T):
+            # Get filtered y_t
+            yt_f = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
+                    Mt['Dt'][t].dot(self.Xt[t])
+            Yt_filtered[t] = yt_f
+
+            # Get standard error of filtered y_t
+            if t >= self.t_q:
+                yt_error_var = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
+                        Mt['Ht'][t].T) + Mt['Rt'][t]
+                Yt_filtered_cov[t] = yt_error_var
+
+            # Get xi if needed
+            if is_xi:
+                xi_t[t] = self.xi_t[t][0][xi_col]
+                if t >= self.t_q:
+                    P_t[t] = self.P_star_t[t][0][xi_col][:, xi_col]
+            
+        return Yt_filtered, Yt_filtered_cov, xi_t, P_t
+
+

@@ -392,8 +392,8 @@ def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray) -> None:
         raise ValueError('x_t must be a vector')
 
 
-def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None, 
-        T: int=None) -> \
+def simulated_data(Ft: Callable, theta: np.ndarray, 
+        Xt: pd.DataFrame=None, T: int=None, **kwargs) -> \
         Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Generate simulated data from a given BSTS system. Xt and T
@@ -406,6 +406,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None,
     theta : argument of ft
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
+    kwargs : kwargs for Ft
 
     Returns:
     ----------
@@ -414,7 +415,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None,
     xi_col : column names of xi_t
     """
     # Get dimensional information
-    M_ = Ft(theta, 1)
+    M_ = Ft(theta, 1, **kwargs)
     xi_dim = M_['Ft'][0].shape[0]
     y_dim = M_['Ht'][0].shape[0]
     x_dim = M_['Dt'][0].shape[1]
@@ -434,7 +435,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray, Xt: pd.DataFrame=None,
     x_sample = np.ones([x_dim, 1])
     check_consistence(M_, y_sample, x_sample)
     
-    Mt = Ft(theta, T)
+    Mt = Ft(theta, T, **kwargs)
     
     # Generate initial values
     xi_1_0 = deepcopy(Mt['xi_1_0'])
@@ -727,7 +728,7 @@ def partition_index(is_missing: np.ndarray) -> np.ndarray:
     return partitioned_index
 
 
-def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None,
+def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None, 
         xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
         force_diffuse: List[bool]=None) -> Dict:
     """
@@ -740,8 +741,8 @@ def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None,
     f : obtained from get_f. Mapping theta to M
     T : length of Mt. "Duplicate" M for T times
     x_0 : establish initial state mean
-    xi_1_0: initial state mean
-    P_1_0: initial state cov
+    xi_1_0 : specify initial state mean. override calculated mean
+    P_1_0 : initial state cov
     force_diffuse : use-defined diffuse state
 
     Returns:

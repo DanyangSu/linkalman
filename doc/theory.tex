@@ -420,7 +420,7 @@ This section follows closely (\cite{durbin_koopman_2001}) with marginal likeliho
 Note that equation (\ref{eq:NM_likelihood}) only requires Kalman filters, so it avoids costly Kalman smoothers and is faster to evaluate. In the univariate case, $H_t$ is $\tilde{H}_t$, and if the $i$-th measurement is missing, the $i$-th row of $H_t$ is $0$.  In practice, we can use popular numerical optimization packages such as \texttt{scipy} and \texttt{nlopt} to solve it numerically.
 
 \subsection{EM Algorithm} \label{subsec:EM}
-One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. In addition, we need to run the Kalman filter for every parameter evaluation. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) has a better early-stage performance. The EM algorithm converges to a local optimum iteratively, and in particular, within each iteration, the Kalman smoother is evaluated only once. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. So in practice, I use EM algorithm to start the optimization, then switch to numerical optimization to fine-tune the estimates. In what follows, I will provide details of implementing the EM algorithm\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}.}.  
+One disadvantage of numerical maximization is the speed of the convergence is slow at the beginning. In addition, we need to run the Kalman filter for every parameter evaluation. As an alternative, EM algorithm proposed by (\cite{shumway_stoffer_1982}) has a better early-stage performance\footnote{Given that the intended purpose of \texttt{linkalman} is solving BSTS models with sophisticated model structures, I use non-gradient-based methods. As a result, the primary advantage of EM algorithm (i.e. ease to compute derivatives) is not utilized, and the performance of EM algorithm is inferior to numerical methods.}. The EM algorithm converges to a local optimum iteratively, and in particular, within each iteration, the Kalman smoother is evaluated only once. Its rate of convergence is substantially slower than numerical optimization in the neighborhood of the true parameters. One may use EM algorithm to cold start the optimization, then switch to numerical optimization to fine-tune the estimates. Note that equations used by EM algorithms are closely related to score functions, which can be used by gradient-based algorithms for fast optimization. In what follows, I will provide details of implementing the EM algorithm\footnote{For technical details, refer to Appendix \ref{ap:EM_proof}.}.  
 
 The log likelihood function for a BSTS model is:
 \begin{align*}
@@ -444,7 +444,7 @@ EM algorithm proceeds as follows:
     \item Start with initial parameter value $\theta_0$
     \item \label{step:EM_E} For iteration $i$, compute the conditional distribution of $(\Xi_T|Y_T,X_T,\theta_{i-1})$
     \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in Appendix \ref{ap:log} 
-    \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal
+    \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal\footnote{In practice, if one is using numerical optimization within each iteration, it is important to fine-tune the optimizer's tolerance parameters so that function evaluation is always improving with each iteration.}
 \end{boenumerate}
 
 \section{Examples} \label{sec:apply}
@@ -456,6 +456,8 @@ In this subsection, I use the state-space model to solve the classic ARMA(p,q) p
 \subsection{Random Walk}
 
 \subsection{Local Level Model}
+
+\subsection{Cyclical Model}
 
 \subsection{Measuring Treatment Effects}
 

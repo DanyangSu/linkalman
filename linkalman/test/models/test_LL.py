@@ -31,28 +31,28 @@ def test_E_delta2(ft_ll_mvar_diffuse,
     np.testing.assert_array_almost_equal(e_delta2, delta2)
 
     
-# Test _E_chi2
-def test_E_chi2(ft_ll_mvar_diffuse,
-        theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth):
-    """
-    Test normal run 
-    """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
-    ks = Smoother()
-    ks.fit(kf)
+# # Test _E_chi2
+# def test_E_chi2(ft_ll_mvar_diffuse,
+#         theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth):
+#     """
+#     Test normal run 
+#     """
+#     kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+#     kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
+#     ks = Smoother()
+#     ks.fit(kf)
 
-    theta_test = [i + 0.1 for i in theta_ll_mvar_diffuse]
-    Mt = ft_ll_mvar_diffuse(theta_test, ks.T)
+#     theta_test = [i + 0.1 for i in theta_ll_mvar_diffuse]
+#     Mt = ft_ll_mvar_diffuse(theta_test, ks.T)
 
-    # Test all missing
-    t = 1
+#     # Test all missing
+#     t = 1
 
-    # Test first missing
-    t = 2
-    chi2 = ks._E_chi2(Mt, t)
+#     # Test first missing
+#     t = 2
+#     chi2 = ks._E_chi2(Mt, t)
 
-    # Test all present
-    t = 3
-    et = Yt_mvar_diffuse_smooth[t] - ks.Ht
+#     # Test all present
+#     t = 3
+#     et = Yt_mvar_diffuse_smooth[t] - ks.Ht
 

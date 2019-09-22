@@ -213,6 +213,30 @@ def ft_ar2_mvar():
 
 
 @pytest.fixture()
+def ft_ar2_mvar_kw():
+    """
+    ft for ar2 process with special x_0 through kwargs
+    """
+    def ft_(theta, T, **kwargs):
+        def f(theta):
+            F = np.array([[theta[0], theta[1]], [1, 0]])
+            B = np.array([[0.2], [0]])
+            Q = np.array([[theta[2], 0], [0, 0]])
+            H = np.array([[2, 0], [3, 0], [4, 1]])
+            D = np.array([[0.1], [2], [3]])
+            R = np.array([[4, 2, 1], 
+                          [2, 5, 3],
+                          [1, 3, 6]])
+            M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'B': B, 'D': D} 
+            return M
+        x_0 = np.array([[1]])
+        Mt = ft(theta, f, T, **kwargs)
+        return Mt
+
+    return ft_
+
+
+@pytest.fixture()
 def Yt_ar2_mvar():
     Yt = [np.array([1, 2, 3]).reshape(-1, 1),
           np.array([2, np.nan, 4]).reshape(-1, 1),

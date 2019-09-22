@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
-from typing import List, Any, Callable, Dict
+from typing import List, Any, Callable, Dict, Tuple
 from collections.abc import Sequence
 from ..core import Filter, Smoother
 from ..core.utils import df_to_list, list_to_df, simulated_data, \
         get_diag, ft, Constant_M, create_col
 from copy import deepcopy
 from numpy.random import multivariate_normal
-from inspect import signature
+import warnings
+warnings.simplefilter('default')
 
 __all__ = ['BaseOpt', 'BaseConstantModel']
 
@@ -19,25 +20,21 @@ class BaseOpt(object):
     both constant M models and more complicated nonconstant Mt models.
     """
     
-    def __init__(self, method: str='mix') -> None:
+    def __init__(self) -> None:
         """
         Initialize base model. 
-
-        Parameters:
-        ----------
-        method : method to fit. Default "mix" if not specified
         """
         self.ft = None
+        self.ft_kwargs = None
+        self.solver_kwargs = None
         self.theta_opt = None
+        self.fval_opt = None
         self.x_col = None
         self.y_col = None
         self.solver = None
-        self.method = method
-        if self.method not in ['mix','EM','LLY']:
-            raise ValueError('method must be "mix", "EM", or "LLY".')
 
 
-    def set_f(self, Ft: Callable) -> None:
+    def set_f(self, Ft: Callable, **ft_kwargs) -> None:
         """
         Mapping from theta to M. Ft must be the form: 
         f: Ft(theta, T) -> [M_1, M_2,...,M_T]. 
@@ -45,16 +42,13 @@ class BaseOpt(object):
         Parameters:
         ----------
         Ft : theta -> Mt
+        ft_kwargs : kwargs for ft
         """
-        # Check Ft
-        sig = signature(Ft)
-        if len(sig.parameters) != 2:
-            raise TypeError('Ft must have two positional arguments')
-
         self.ft = Ft
+        self.ft_kwargs = ft_kwargs
 
 
-    def set_solver(self, solver: Any) -> None:
+    def set_solver(self, solver: Any, **solver_kwargs) -> None:
         """
         Get solver object for the model. The solver must be 
         solver(theta, obj, **kwargs) where theta is the paramter,
@@ -65,31 +59,17 @@ class BaseOpt(object):
         Parameters:
         ----------
         solver : a solver object
+        kwargs : kwargs for solver
         """
         self.solver = solver
-
-
-    def get_opt_filter(self, for_smoother: bool=True) -> Filter:
-        """
-        Get optimized filter.
-        
-        Parameters:
-        ----------
-        for_smoother : whether filter contains additional attributes
-
-        Returns:
-        ----------
-        opt_kf : Kalman filter object with optimal theta
-        """
-        if self.opt_theta is None:
-            raise TypeError('Model is not optimized')
-        
-        opt_kf = Filter(self.ft, for_smoother=for_smoother)
-        return opt_kf
+        self.solver_kwargs = solver_kwargs
 
 
     def fit(self, df: pd.DataFrame, theta_init: np.ndarray,
-            y_col: List[str], x_col: List[str]=None, **kwarg) -> None:
+            y_col: List[str], x_col: List[str]=None, 
+            method: str='LLY', EM_threshold: float=1e-3, 
+            num_EM_iter: int=np.inf, post_min_iter: int=100, 
+            EM_stopping_rate: float=0.01) -> None:
         """
         Fit the model and returns optimal theta. 
 
@@ -100,8 +80,23 @@ class BaseOpt(object):
             Mt for first iteration of EM algorithm.
         y_col : list of columns in df that belong to Yt
         x_col : list of columns in df that belong to Xt. May be None
-        kwarg : options for optimizers
+        method : EM or LLY
+        EM_threshold : stopping criteria
+        num_EM_iter : number of iterations for EM algorithms
+        post_min_iter : after a new minimum is set, terminate iteration 
+            after the number of runs determined by this argument
+        EM_stopping_rate : weight placed on counter, higher rate means 
+            update theta_opt slower. EM_stopping_rate = 0 means full 
+            weight on theta_opt after each iteration
         """
+        # Raise exception if method is not correctly specified
+        if method not in ['EM','LLY']:
+            raise ValueError('method must be "EM", or "LLY".')
+
+        # Raise exception if EM_stopping_rate is negative
+        if EM_stopping_rate < 0:
+            raise ValueError('EM_stopping_rate must be non-negative')
+
         # Raise exception if x_col or y_col is not list
         if x_col is not None:
             if not isinstance(x_col, list):
@@ -129,39 +124,45 @@ class BaseOpt(object):
         Yt = df_to_list(df, y_col)
 
         # Run solver
-        if self.method == 'LLY': 
+        if method == 'LLY': 
             obj = lambda theta: self.get_LLY(theta, Yt, Xt)
-            self.theta_opt = self.solver(theta_init, obj, **kwarg)
+            self.theta_opt, self.fval_opt = self.solver(
+                    theta_init, obj, **self.solver_kwargs)
 
-        elif self.method == 'EM':
-            dist = 1
-            self.theta_i = deepcopy(theta_init)
-            self.G_i = np.inf
-            while dist > self.EM_threshold:
-                obj = lambda theta: self.get_LLEM(theta, Yt, Xt)
-                theta_opt, G_opt = self.solver(self.theta_i, obj, **kwarg)
-                dist = np.abs(self.G_i - G_opt)
-                self.G_i = G_opt
-                self.theta_i = deepcopy(theta_opt)
-            self.theta_opt = deepcopy(theta_opt)
+        # Note that fval_opt in EM and in LLY are not comparable
+        elif method == 'EM':
+            dist = np.inf
+            theta_i = theta_init
+            counter = 0
+            max_G = -np.inf
 
-        else:
+            while (dist > EM_threshold) and (counter < num_EM_iter):
+                kf = Filter(self.ft, for_smoother=True, **self.ft_kwargs)
+                kf.fit(theta_i, Yt, Xt)
+                ks = Smoother()
+                ks.fit(kf)
+                obj = ks.G
+                theta_opt, G_opt = self.solver(theta_i, obj, 
+                        **self.solver_kwargs)
+                dist = np.abs(max_G - G_opt)
+                
+                # Record minimal G and reset clock
+                if max_G < G_opt:
+                    max_G = G_opt
+                    clock = 0
 
-            # Cold start with EM
-            for EM_iter in range(self.num_iter):
-                obj = lambda theta: self.get_LLEM(theta, Yt, Xt)
-                theta_opt, G_opt = self.solver(self.theta_i, obj, **kwarg)
-                self.G_i = G_opt
-                self.theta_i = deepcopy(theta_opt)
+                # Giving increasingly more weight on theta_i
+                alpha = 1 / (1 + counter * EM_stopping_rate)
+                theta_i = alpha * theta_opt + (1 - alpha) * theta_i
+                counter += 1
+                clock += 1
 
-            # Warm start with LLY
-            obj = lambda theta: self.get_LLY(theta, Yt, Xt)
-            self.theta_opt = self.solver(theta_i, obj, **kwarg)
+                if clock > post_min_iter:
+                    warnings.warn('Premature termination of EM')
+                    break
 
-
-    def get_LLEM(self, theta: List[float], Yt: List[np.ndarray],
-            Xt: List[np.ndarray]=None) -> float:
-        raise ValueError('need add')
+            self.theta_opt = theta_i
+            self.fval_opt = ks.G(theta_i)
 
 
     def get_LLY(self, theta: List[float], Yt: List[np.ndarray], 
@@ -180,12 +181,13 @@ class BaseOpt(object):
         ----------
         lly : log likelihood from Kalman filters
         """
-        kf = Filter(self.ft)
-        kf(theta, Yt, Xt)
+        kf = Filter(self.ft, **self.ft_kwargs)
+        kf.fit(theta, Yt, Xt)
         return kf.get_LL()
 
 
-    def predict(self, df: pd.DataFrame, theta: np.ndarray=None) -> pd.DataFrame: 
+    def predict(self, df: pd.DataFrame, theta: np.ndarray=None, 
+            is_xi: bool=True, xi_col: List[int]=None) -> pd.DataFrame: 
         """
         Predict time series. df should contain both training and 
         test data. If Yt is not available for some or all test data,
@@ -195,45 +197,105 @@ class BaseOpt(object):
         ----------
         df : df to be predicted. Use np.nan for missing Yt
         theta : override theta_opt using user-supplied theta
+        is_xi : whether output xi
+        xi_col : index of xi to be included
 
         Returns:
         ----------
-        df_fs : Contains filtered/smoothed y_t, xi_t, and P_t
+        df_fitted : Contains filtered/smoothed y_t, xi_t, and P_t
         """
         # Generate system matrices for prediction
         Xt = df_to_list(df, self.x_col)
         Yt = df_to_list(df, self.y_col)
         
         # Generate filtered predictions
-        kf = Filter(self.ft)
+        kf = Filter(self.ft, for_smoother=True, **self.ft_kwargs)
 
         # Override theta_opt if theta is not None
         if theta is not None:
-            kf(theta, Yt, Xt)
+            kf.fit(theta, Yt, Xt)
+        elif self.theta_opt is not None:
+            kf.fit(self.theta_opt, Yt, Xt)
         else:
-            kf(self.theta_opt, Yt, Xt)
+            raise ValueError('Model is not fitted')
+        
+        # Fit smoother
+        ks = Smoother()
+        ks.fit(kf)
 
         y_col_filter = create_col(self.y_col, suffix='_filtered')
         y_filter_var = create_col(self.y_col, suffix='_fvar')
-        Yt_filtered, Yt_P = kf.get_filtered_y()
+        Yt_filtered, Yt_P, xi_t, P_t = kf.get_filtered_val(
+                is_xi=is_xi, xi_col=xi_col)
         Yt_P_diag = get_diag(Yt_P)
         df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
         df_Yt_fvar = list_to_df(Yt_P_diag, y_filter_var)
 
-        # Generate smoothed predictions
-        ks = Smoother()
-        ks(kf)
-        y_col_smooth = create_col(self.y_col, suffix='_smoothed')
-        y_smooth_var = create_col(self.y_col, suffix='_svar')
-        Yt_smoothed, Yt_P_smooth = ks.get_smoothed_y()
-        Yt_P_smooth_diag = get_diag(Yt_P_smooth)
-        df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smooth)
-        df_Yt_svar = list_to_df(Yt_P_smooth_diag, y_smooth_var)
-        df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar,
-            df_Yt_smoothed, df_Yt_svar], axis=1)
+        # Generate xi values if needed
+        if is_xi:
+            if xi_col is None:
+                xi_col = list(range(kf.xi_length))
 
-        return df_fs
+            xi_col_f = ['xi{}_filtered'.format(i) for i in xi_col]
+            P_col_f = ['P{}_filtered'.format(i) for i in xi_col]
+            xi_col_s = ['xi{}_smoothed'.format(i) for i in xi_col]
+            P_col_s = ['P{}_smoothed'.format(i) for i in xi_col]
+
+            df_xi_t = list_to_df(xi_t, xi_col_f)
+            P_t_diag = get_diag(P_t)
+            df_P_t = list_to_df(P_t_diag, P_col_f)
+
+            xi_T, P_T = ks.get_smoothed_val(xi_col)
+            P_T_diag = get_diag(P_T)
+            df_xi_T = list_to_df(xi_T, xi_col_s)
+            df_P_T = list_to_df(P_T_diag, P_col_s)
+
+        # Attach index
+        if not is_xi:
+            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar], axis=1)
+        else:
+            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar, 
+                    df_xi_t, df_P_t, df_xi_T, df_P_T], axis=1)
+        df_fs.set_index(df.index, inplace=True)
+
+        # Warning if new columns are in the original df.col
+        if len(set(df_fs.columns).intersection(set(df.columns))) > 0:
+            warnings.warn('df.col contains new column names')
+
+        df_fitted = pd.concat([df, df_fs], axis=1)
+        return df_fitted
+
+
+    def simulated_data(self, input_theta: List[float]=None, 
+            Xt: pd.DataFrame=None, T: int=None) -> \
+            Tuple[pd.DataFrame, List[str], List[str]]:
+        """
+        Calls utils.simulated_data
+
+        Parameters:
+        ----------
+        input_theta : parameters of ft, if None, use self.theta_opt
+        Xt : optional input deterministic values
+        T : length of the dataframe
+
+        Returns:
+        ----------
+        df : output dataframe
+        y_col : column names of y_t
+        xi_col : column names of xi_t
+        """
+        if input_theta is None:
+            theta_ = self.theta_opt
+        else:
+            theta_ = input_theta
         
+        if self.ft is None:
+            raise ValueError('Model needs ft')
+
+        df, y_col, xi_col = simulated_data(self.ft, theta_, Xt=Xt, 
+                T=T, **self.ft_kwargs)
+        return df, y_col, xi_col
+
 
 class BaseConstantModel(BaseOpt):
     """
@@ -241,7 +303,7 @@ class BaseConstantModel(BaseOpt):
     The child class should provide get_f function. It inherits from BaseOpt
     and has a customized get_f
     """
-    def get_f(self, f: Callable) -> None:
+    def set_f(self, f: Callable, **ft_kwargs) -> None:
         """
         Mapping from theta to M. Provided by children classes.
         Must be the form of get_f(theta). If defined, it should
@@ -250,8 +312,10 @@ class BaseConstantModel(BaseOpt):
         Parameters:
         ----------
         f : theta -> M
+        ft_kwargs : arguments for ft
         """
-        # Raise exception if Ft no callable
-        self.ft = lambda theta, T: ft(theta, f, T)
+        self.ft = lambda theta, T, **ft_kwargs: \
+                ft(theta, f, T, **ft_kwargs)
+        self.ft_kwargs = ft_kwargs
 
 
