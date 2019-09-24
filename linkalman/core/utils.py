@@ -15,7 +15,8 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
-        'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse']
+        'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse',
+        'get_nearest_PSD', 'Constant_M']
 
 
 max_val = 1e8  # detect infinity
@@ -204,9 +205,9 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
                 raise TypeError('Input dataframe must be numeric')
 
         # Convert df to list row-wise
-        L = [None] * df.shape[0]
+        L = preallocate(df.shape[0])
         for i in range(df.shape[0]):
-            L[i] = np.array([df[col_list].loc[i,:]]).T
+            L[i] = np.array([df[col_list].iloc[i, :]]).T
         return L
 
 
@@ -302,7 +303,8 @@ def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
     return epsilon
 
 
-def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray) -> None:
+def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray, 
+        init_state: Dict=None) -> None:
     """
     Check consistence of matrix dimensions. Ensure
     all matrix operations are properly done. The
@@ -315,6 +317,7 @@ def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray) -> None:
     Mt : Dict of system matrices
     y_t : measurement vector
     x_t : regressor vector
+    init_state : user-specified initial state values
     """
     # Check whether Mt contains all elements
     keys = set(['Ft', 'Bt', 'Qt', 'Ht', 'Dt', 'Rt', 
@@ -391,10 +394,33 @@ def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray) -> None:
     if dim['x_t'][1] != 1:
         raise ValueError('x_t must be a vector')
 
+    # If init_state is provided, check consistency
+    if init_state is not None:
+        check_name = set(['xi_t','P_star_t', 'P_inf_t']).intersection(
+                init_state.keys())
+        for name in check_name:
+
+            # Check number of dimensions
+            if len(init_state[name].shape) != 2:
+                raise ValueError('User-specified {} '.format(name) + \
+                        'does not have 2 dimensions')
+            
+            # Check if match sizes
+            if name == 'xi_t':
+                dim_check = dim['xi_t']
+            else:
+                dim_check = dim['Qt']
+            if init_state[name].shape != dim_check:
+                raise ValueError('User-specified {} has'.format(name) + \
+                        ' wrong dimensions')
+
+        if init_state.get('q', 0) < 0:
+            raise ValueError('User-specified q must be non-negative')
+
 
 def simulated_data(Ft: Callable, theta: np.ndarray, 
-        Xt: pd.DataFrame=None, T: int=None, **kwargs) -> \
-        Tuple[pd.DataFrame, List[str], List[str]]:
+        Xt: pd.DataFrame=None, T: int=None, init_state: Dict=None, 
+        **kwargs) -> Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Generate simulated data from a given BSTS system. Xt and T
     cannot be both set to None. If P_1_0 and xi_1_0  are 
@@ -406,6 +432,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     theta : argument of ft
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
+    init_state : user-specified initial state values
     kwargs : kwargs for Ft
 
     Returns:
@@ -433,15 +460,21 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     x_dim = X_t[0].shape[0]
     y_sample = np.ones([y_dim, 1])
     x_sample = np.ones([x_dim, 1])
-    check_consistence(M_, y_sample, x_sample)
+    check_consistence(M_, y_sample, x_sample, init_state=init_state)
     
     Mt = Ft(theta, T, **kwargs)
     
     # Generate initial values
     xi_1_0 = deepcopy(Mt['xi_1_0'])
     P_1_0 = deepcopy(Mt['P_1_0'])
+
+    # Override if init_state is provided
+    if init_state is not None:
+        xi_1_0 = init_state.get('xi_t', xi_1_0)
+        P_1_0 = init_state.get('P_star_t', P_1_0)
+
     P_1_0[np.isnan(P_1_0)] = 1  # give an arbitrary value to diffuse priors
-    Xi_t = [None] * T
+    Xi_t = preallocate(T)
     Xi_t[0] = xi_1_0 + noise(xi_dim, P_1_0)
 
     # Iterate through time steps
@@ -465,7 +498,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     return df, y_col, xi_col
 
 
-def gen_PSD(theta: List[float], dim: int) -> np.ndarray:
+def gen_PSD(theta: np.ndarray, dim: int) -> np.ndarray:
     """
     Generate covariance matrix from theta. Requirement:
     len(theta) = (dim**2 + dim) / 2
@@ -728,7 +761,7 @@ def partition_index(is_missing: np.ndarray) -> np.ndarray:
     return partitioned_index
 
 
-def ft(theta: List[float], f: Callable, T: int, x_0: np.ndarray=None, 
+def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None, 
         xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
         force_diffuse: List[bool]=None) -> Dict:
     """
@@ -866,13 +899,15 @@ def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray],
     MLL_correct = np.zeros(Ft[0].shape)
     if index is None:
         for t in range(len(Ht)):
-            Zt = Ht[t][0:n_t[t]].dot(psi)
-            MLL_correct += (Zt.T).dot(Zt)
+            if n_t[t] > 0:
+                Zt = Ht[t][0:n_t[t]].dot(psi)
+                MLL_correct += (Zt.T).dot(Zt)
             psi = Ft[t].dot(psi)
     else:
         for t in range(len(Ht)):
-            Zt = Ht[t][index[t]][0:n_t[t]].dot(psi)
-            MLL_correct += (Zt.T).dot(Zt)
+            if n_t[t] > 0:
+                Zt = Ht[t][index[t]][0:n_t[t]].dot(psi)
+                MLL_correct += (Zt.T).dot(Zt)
             psi = Ft[t].dot(psi)
 
     return MLL_correct

@@ -30,7 +30,7 @@ def test_init_attr_input(ft_mvar, theta_mvar, Yt_mvar, Xt_mvar):
     """
     kf = Filter(ft_mvar, for_smoother=True)
     kf.init_attr(theta_mvar, Yt_mvar, Xt_mvar)
-    assert len(kf.l_t) == len(Yt_mvar) and \
+    assert len(kf.L_star_t) == len(Yt_mvar) and \
             len(kf.L_star_t[0]) == Yt_mvar[0].shape[0]
 
 
@@ -463,7 +463,8 @@ def test_sequential_update_diffuse_ll_Upsilon_inf0(ft_ll_mvar_diffuse,
     index = 2
     ob = index - 1
     t = 0
-    l_inv = kf.l_t_inv[0]
+    l_t, _, _ = linalg.ldl(kf.Rt[t])
+    l_inv, _ = linalg.lapack.dtrtri(l_t, lower=True)
     R_t = l_inv.dot(kf.Rt[t])
     H_t = (l_inv.dot(kf.Ht[t]))[ob:index]
     D_t = (l_inv.dot(kf.Dt[t]))[ob:index]
@@ -587,3 +588,113 @@ def test_get_filtered_y_no_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     assert P_t[-1] == None
 
 
+# Test get_filtered_state
+def test_get_filtered_state_t(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    """
+    get values at t < self.T
+    """
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    
+    t = kf.T - 1
+    result = kf.get_filtered_state(t)
+    expected_result = {'P_star_t': kf.P_star_t[t][0],
+            'P_inf_t': kf.P_inf_t[t][0],
+            'xi_t': kf.xi_t[t][0],
+            'q': 0}
+    for i in ['P_star_t', 'P_inf_t', 'xi_t']:
+        np.testing.assert_array_equal(result[i], expected_result[i])
+    assert result['q'] == expected_result['q']
+
+
+def test_get_filtered_state_T(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    
+    t = kf.T
+    result = kf.get_filtered_state(t)
+    expected_result = {'P_star_t': kf.P_T1,
+            'P_inf_t':  np.zeros([2, 2]),
+            'xi_t': kf.xi_T1,
+            'q': 0}
+    for i in ['P_star_t', 'P_inf_t', 'xi_t']:
+        np.testing.assert_array_equal(result[i], expected_result[i])
+    assert result['q'] == expected_result['q']
+
+
+def test_get_filtered_state_diffuse(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    
+    t = 1
+    with pytest.raises(ValueError) as error:
+        result = kf.get_filtered_state(t)
+    expected_result = 'Diffuse state at time 1'
+    result = str(error.value)
+    assert expected_result == result
+
+
+def test_get_filtered_state_max(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    
+    t = 6
+    with pytest.raises(ValueError) as error:
+        result = kf.get_filtered_state(t)
+    expected_result = 'Maximum t allowed is 4'
+    result = str(error.value)
+    assert expected_result == result
+
+
+def test_get_filtered_state_not_fitted(ft_ll_mvar_diffuse, 
+        Yt_mvar_diffuse_missing, theta_ll_mvar_diffuse):
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    
+    t = 6
+    with pytest.raises(ValueError) as error:
+        result = kf.get_filtered_state(t)
+    expected_result = 'Kalman filter is not fitted yet'
+    result = str(error.value)
+    assert expected_result == result
+
+
+# Test override from init_state
+def test_over_ride(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    """
+    Force a diffuse kalman filter to become regular filter
+    """
+    init_val = {'P_star_t': np.zeros([2, 2]), 
+            'xi_t': 100 * np.ones([2, 1]), 'q': 0}
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing, init_state=init_val)
+    
+    t = 0
+    result = kf.get_filtered_state(t)
+    expected_result = {'P_star_t': np.zeros([2, 2]),
+            'P_inf_t':  np.zeros([2, 2]),
+            'xi_t': 100 * np.ones([2, 1]),
+            'q': 0}
+    for i in ['P_star_t', 'P_inf_t', 'xi_t']:
+        np.testing.assert_array_equal(result[i], expected_result[i])
+    assert result['q'] == expected_result['q']
+
+
+def test_over_ride_error_input(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
+        theta_ll_mvar_diffuse):
+    """
+    Raises exception when init_state wrong input
+    """
+    init_val = {'P_star_t': np.zeros([2]), 
+            'xi_t': 100 * np.ones([2, 1]), 'q': 0}
+    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
+    with pytest.raises(ValueError) as error:
+        kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing, 
+                init_state=init_val)
+    expected_result = 'User-specified P_star_t does not have 2 dimensions'
+    result = str(error.value)
+    assert expected_result == result

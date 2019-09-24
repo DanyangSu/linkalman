@@ -140,3 +140,44 @@ def test_ckeck_consistence_y_vector(Mt, Yt, Xt):
     expected_result = 'y_t must be a vector'
     result = str(error.value)
     assert result == expected_result
+
+
+# Test init_state 
+def test_check_consistence_init_state_xi_dim(Mt, Yt, Xt):
+    init_state = {'xi_t': np.array([2])}
+    with pytest.raises(ValueError) as error:
+        check_consistence(Mt, Yt[0], Xt[0], init_state)
+    result = str(error.value)
+    expected_result = 'User-specified xi_t does not have 2 dimensions'
+    assert result == expected_result
+
+
+def test_check_consistence_init_state_xi_dim_match(Mt, Yt, Xt):
+    init_state = {'xi_t': np.zeros([3, 2])}
+    with pytest.raises(ValueError) as error:
+        check_consistence(Mt, Yt[0], Xt[0], init_state)
+    result = str(error.value)
+    expected_result = 'User-specified xi_t has wrong dimensions'
+    assert result == expected_result
+
+
+def test_check_consistence_init_state_P_dim_match(Mt, Yt, Xt):
+    init_state = {'xi_t': np.zeros([3, 1]), 
+            'P_star_t': np.zeros([3, 2])}
+    with pytest.raises(ValueError) as error:
+        check_consistence(Mt, Yt[0], Xt[0], init_state)
+    result = str(error.value)
+    expected_result = 'User-specified P_star_t has wrong dimensions'
+    assert result == expected_result
+
+
+def test_check_consistence_init_state_q_leq_0(Mt, Yt, Xt):
+    init_state = {'xi_t': np.zeros([3, 1]), 
+            'P_star_t': np.zeros([3, 3]), 'q': -2}
+    with pytest.raises(ValueError) as error:
+        check_consistence(Mt, Yt[0], Xt[0], init_state)
+    result = str(error.value)
+    expected_result = 'User-specified q must be non-negative'
+    assert result == expected_result
+
+

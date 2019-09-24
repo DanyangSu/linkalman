@@ -394,10 +394,10 @@ def test_simulated_data_type_error():
     with pytest.raises(ValueError):
         df = simulated_data(ft, theta)
 
-# Test simulated_data run through with diffuse prior
-def test_simulated_data_data_output():
+
+def test_simulated_data_init_state_wrong_dim():
     """
-    Test if raise exception when both Xt and T are None
+    Test if init_value is properly checked
     """
     def ft(theta, T):
         Mt = {'Ft': [np.array([[theta]])],
@@ -411,9 +411,41 @@ def test_simulated_data_data_output():
         return Mt
 
     theta = 1.0
+    T = 4
+    # init_state = {'xi_t': np.zeros([3, 1]),
+    #         'P_star_t': np.zeros([3, 2])}
+    init_state = {'xi_t': np.zeros([1, 1]),
+            'P_star_t': np.zeros([3, 2])}
+    with pytest.raises(ValueError) as error:
+        df = simulated_data(ft, theta, T=T, init_state=init_state)
+    result = str(error.value)
+    expected_result = 'User-specified P_star_t has wrong dimensions'
+    assert result == expected_result
 
-    with pytest.raises(ValueError):
-        df = simulated_data(ft, theta)
+
+def test_simulated_data_init_state_value():
+    """
+    Test if init_value overrides
+    """
+    def ft(theta, T):
+        Mt = {'Ft': [np.array([[theta]])],
+                'Ht': [np.array([[theta]])],
+                'Qt': [np.array([[theta]])],
+                'Bt': [np.array([[theta]])],
+                'Rt': [np.array([[theta]])],
+                'Dt': [np.array([[theta]])],
+                'xi_1_0': np.array([[theta]]),
+                'P_1_0': np.array([[theta]])}
+        return Mt
+
+    theta = 1.0
+    T = 1
+    init_state = {'xi_t': 100 * np.ones([1, 1]),
+            'P_star_t': np.zeros([1, 1])}
+    df, _, _ = simulated_data(ft, theta, T=T, init_state=init_state)
+    result = np.array([df.loc[0, ['xi_0']]]).T
+    expected_result = 100 * np.ones([1, 1])
+    np.testing.assert_array_equal(result, expected_result)
 
 
 # Test clean_matrix
@@ -797,3 +829,24 @@ def test_get_explosive_diffuse3():
     result = get_explosive_diffuse(test_F)
     expected_result = [True, True, True, True, True, True, False, False]
     assert result == expected_result
+
+
+# Test get_nearest_PSD
+def test_get_nearest_PSD_PSD():
+    """
+    Test result when input is PSD
+    """
+    X = np.array([[3, 2], [2, 4]])
+    X_PSD = get_nearest_PSD(X)
+    
+    np.testing.assert_array_almost_equal(X, X_PSD)
+
+
+def test_get_nearest_PSD_not_PSD():
+    """
+    Test result when input is not PSD
+    """
+    X = np.array([[-2]])
+    X_PSD = get_nearest_PSD(X)
+    expected_X = np.zeros([1, 1])
+    np.testing.assert_array_equal(expected_X, X_PSD)

@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Any, Callable, Tuple
+from typing import List, Any, Callable, Tuple, Dict
 from copy import deepcopy
 from scipy import linalg
 import scipy
@@ -300,17 +300,18 @@ class Smoother(object):
         chi2 : expectation term for y in G
         """
         n_t = self.n_t[t]
-        part_index = self.partition_index[t]
         R_t = self.Rt[t]
         y_t = self.Yt[t]
 
         # Ht and Dt from Mt that is parameterized by theta
-        H_t_M = permute(Mt['Ht'][t], part_index, axis='row')
-        D_t_M = permute(Mt['Dt'][t], part_index, axis='row')
-        chi = y_t[0:n_t] - H_t_M[0:n_t].dot(self.xi_t_T[t]) - \
-                D_t_M[0:n_t].dot(self.Xt[t])
-        chi2 = chi.dot(chi.T) + H_t_M[0:n_t].dot(
-                self.P_t_T[t]).dot(H_t_M[0:n_t].T)
+        H_t_M = permute(Mt['Ht'][t], self.partition_index[t], 
+                axis='row')[0:n_t]
+        D_t_M = permute(Mt['Dt'][t], self.partition_index[t], 
+                axis='row')[0:n_t]
+        chi = y_t[0:n_t] - H_t_M.dot(self.xi_t_T[t]) - \
+                D_t_M.dot(self.Xt[t])
+        chi2 = chi.dot(chi.T) + H_t_M.dot(
+                self.P_t_T[t]).dot(H_t_M.T)
         return chi2
 
 
@@ -388,4 +389,19 @@ class Smoother(object):
             
         return xi_t_T, P_t_T
 
+    
+    def get_filtered_state(self, t: int) -> Dict:
+        """
+        Call Filter.get_filtered_state
+
+        Parameters:
+        ----------
+        t : time index
+
+        Returns:
+        ----------
+        state_val : state info at time t
+        """
+        state_val = Filter.get_filtered_state(self, t)
+        return state_val
 

@@ -46,7 +46,9 @@
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section (\ref{sec:model_setup}) lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section (\ref{sec:filter}) and (\ref{sec:smoother}) provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section (\ref{sec:param}) presents the numerical and EM algorithms to estimate underlying parameters of a BSTS model, Section (\ref{sec:apply}) presents a representative example, and Section (\ref{sec:codebase}) discusses the package design of \texttt{linkalman}.
+It is noteworthy that \texttt{linkalman} is designed for linear state space problems with Gaussian errors. Therefore, it is not suitable for generalized non-linear state space problem, nor does it directly solve problems with unpredictable shifting in system dynamics (e.g. vehicle maneuver). The suitable solutions are particle filters and adaptive Kalman filters, respectively.
+
+This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section \ref{sec:model_setup} lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section \ref{sec:apply} presents some common time series examples. Section \ref{sec:codebase} discusses the package design of \texttt{linkalman}. The rest of the document provides the technical details of algorithms related to \texttt{linkalman}. Section \ref{sec:filter} and \ref{sec:smoother} provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section \ref{sec:param} concludes with a discussion of numerical methods and EM algorithms to estimate underlying parameters of a BSTS model. 
 
 \section{Model Setup} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -61,6 +63,171 @@ Equation (\ref{eq:measure}) is the measurement specification. $y_t$ $(n\times 1)
 Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a BSTS model, with system matrices $\{F_t, B_t, H_t, D_t, Q_t, R_t\}$ parameterized by $\theta$. System matrices may vary over time. For example cyclical pattern can be modeled by using Trigonometric Cycles (\cite{harvey_1985}). 
 
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$.
+
+\section{Examples} \label{sec:apply}
+\subsection{AR(p)}
+Note that in order to get the state space equivalence of AR(1) model, one should set $H_t=1$ and $R_t=0$
+
+\subsection{ARMA(p,q)}
+In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem. 
+
+\subsection{Random Walk}
+
+\subsection{Local Level Model}
+
+\subsection{Cyclical Model}
+Talk about using sin and use discrete state variables for cyclical models
+
+\subsection{Measuring Treatment Effects}
+
+\subsection{A Comprehensive BSTS Model}
+In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
+\begin{align}
+    \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}
+\end{align}
+where $\varepsilon_t\sim\mathcal{N}(0,\sigma_{\varepsilon}^2)$. The state variable $\alpha_t$ is the latent state variable of interest. For example, $\alpha_t$ may be the economic vitality. I assume that $\alpha_t$ can be additively decomposed into five components: the local linear trend component ($\mu_t$), the seasonal component ($\gamma_t$), and the cyclical component ($\psi_t$). In what follows, I define each of the three components:
+
+First, consider $\mu_t$:
+\begin{align}
+    \mu_{t+1} &= \mu_t+Bx_{t,1}+\delta_t+\eta_{\mu,t} \label{eq:trend_start} \\
+    x_{t,1} &= \mathbbm{1}_{t=t^{*}} \\
+    \delta_{t+1} &= \Delta_{\delta} + \rho_{\delta}(\delta_t-\Delta_{\delta}) + \eta_{\delta,t} \label{eq:trend_end} 
+\end{align}
+where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$. Equation (\ref{eq:trend_start}) through (\ref{eq:trend_end}) define a generalized local linear trend model with stationary slope\footnote{See (\cite{brodersen_etal_2015}) for details.} and permanent intervention effect (e.g. technology breakthrough at time $t^*)$. Here, the slope of the time trend has AR(1) variation around long-term slop of $\Delta_{\delta}$ with $|\rho_{\delta}|<1$. 
+
+Next, consider $\gamma_t$:
+\begin{align}
+    \gamma_{t+1}&= -\sum_{j=0}^{5}\gamma_{t-j} + \eta_{\gamma,t} \label{eq:season}
+\end{align}
+where $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$. Equation (\ref{eq:season}) models weekly effects, where the sum of the weekly effects is a white noise\footnote{The sum should be a stationary process, otherwise we don't identification.}.
+
+Finally, $\psi_t$ is defined as\footnote{For details, refer to (\cite{harvey_1985}) and (\cite{harvey2007trends}).}:
+\begin{align}
+    \begin{pmatrix}
+        \psi_{t+1} \\
+        \psi_{t+1}^{*}
+    \end{pmatrix}
+    =\rho\begin{pmatrix}
+        \cos(\lambda) & \sin(\lambda) \\
+        -\sin(\lambda) & \cos(\lambda)
+    \end{pmatrix}
+    \begin{pmatrix}
+        \psi_{t} \\
+        \psi_{t}^{*}
+    \end{pmatrix}
+    +\begin{pmatrix}
+        \eta_{\psi,t} \\
+        \eta_{\psi,t}^{*}
+    \end{pmatrix} \label{eq:cycle}
+\end{align}
+where $\eta_{\psi,t}\sim\mathcal{N}(0,\sigma_{\psi}^2)$, $\eta_{\psi,t}^{*}\sim\mathcal{N}(0,\sigma_{\psi,*}^2)$, and $\psi_{t}^{*}$ is an auxiliary variable. In addition, following the argument by (\cite{harvey_1985}), I impose $\sigma_{\psi}^2=\sigma_{\psi,*}^2$.
+
+Now I specify measurement equations: 
+\begin{align}
+    y_{t,1} &= \alpha_t+D_1x_{t,2}+w_{t,1} \ , \ t\in\{7,14,21,...\} \\
+    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,13,15...\} \label{eq:y2}
+\end{align}
+where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. every sixth and seventh days). Note that I do not use conventional weekdays availability for $y_{t,2}$ because otherwise we have a fully diffuse time series (e.g. We will never get the weekly effect due to missing measurements for Saturdays).
+
+To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS framework, I make the following definitions:
+\begin{align*}
+    \xi_{t+1} = \begin{pmatrix}
+        \mu_{t+1} \\
+        \delta_{t+1} \\
+        \gamma_{t+1} \\
+        \gamma_t \\
+        \gamma_{t-1} \\
+        \gamma_{t-2} \\
+        \gamma_{t-3} \\
+        \gamma_{t-4} \\
+        \psi_{t+1} \\
+        \psi_{t+1}^{*}
+    \end{pmatrix}, 
+    &\ 
+    F_t = F = \begin{pmatrix}
+        1 & 1  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & \rho_{\delta}  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 & 0 \\
+        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \rho \cos(\lambda) & \rho \sin(\lambda) \\
+        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & -\rho \sin(\lambda) & \rho \cos(\lambda)
+    \end{pmatrix} \\
+    v_t = \begin{pmatrix}
+        \eta_{\mu,t} \\
+        \eta_{\delta,t} \\
+        \eta_{\gamma,t} \\
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+        \eta_{\psi,t} \\
+        \eta_{\psi,t}^*
+    \end{pmatrix} 
+    , & v_t\sim\mathcal{N}(0,Q),
+    \ 
+    B_t = B = \begin{pmatrix}
+        0 & B & 0 \\
+        (1-\rho_{\delta})\Delta_{\delta} & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0 \\
+        0 & 0 & 0
+    \end{pmatrix},
+    \ 
+    x_t = \begin{pmatrix}
+        1 \\
+        x_{t,1} \\
+        x_{t,2}
+    \end{pmatrix} \\
+    y_t = \begin{pmatrix}
+        y_{t,1} \\
+        y_{t,2} 
+    \end{pmatrix},
+    &\ 
+    D_t = D = \begin{pmatrix}
+        0 & 0 & D_1 \\
+        d & 0 & D_2
+    \end{pmatrix},
+    \ 
+    w_t = \begin{pmatrix}
+        w_{t,1} \\
+        w_{t,2}
+    \end{pmatrix} 
+    , \ w_t\sim\mathcal{N}(0,R) \\
+    & H_t = H = \begin{pmatrix}
+        1 & 0 &1 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+        \pi & 0 & \pi & 0 & 0 & 0 & 0 & 0 & \pi & 0  
+    \end{pmatrix}
+    \\
+    & Q_t = Q = \begin{pmatrix}
+        \sigma_{\mu}^2 & 0 & 0 & \cdots & \cdots & \cdots & \cdots & 0 \\
+        0 & \sigma_{\delta}^2 & 0 & & & & & \vdots \\
+        0 & 0 & \sigma_{\gamma}^2 & & & & & \vdots \\
+        \vdots & & & 0 & & & & \vdots \\
+        \vdots & & & & \ddots & & & \vdots \\
+        \vdots & & & & & 0 & & \vdots \\
+        \vdots & & & & & & \sigma_{\psi}^2 & 0 \\
+        0 & \cdots & \cdots & \cdots & \cdots & \cdots & 0 & \sigma_{\psi}^2
+    \end{pmatrix}
+    ,\ 
+    R_t = R= \begin{pmatrix}
+        \sigma_{w,1} & \sigma_{w,1,2} \\
+        \sigma_{w,1,2} & \sigma_{w,2}
+    \end{pmatrix}
+\end{align*}
+The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
+
+\section{\texttt{linkalman} Design} \label{sec:codebase}
+Interested readers may refer to Section \ref{sec:filter} through \ref{sec:param} for technical foundataions of each component. 
 
 \section{Kalman Filter} \label{sec:filter}
 \subsection{Filtering with Known Initial Conditions}
@@ -447,167 +614,6 @@ EM algorithm proceeds as follows:
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal\footnote{In practice, if one is using numerical optimization within each iteration, it is important to fine-tune the optimizer's tolerance parameters so that function evaluation is always improving with each iteration.}
 \end{boenumerate}
 
-\section{Examples} \label{sec:apply}
-\subsection{AR(2)}
-
-\subsection{ARMA(p,q)}
-In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem.
-
-\subsection{Random Walk}
-
-\subsection{Local Level Model}
-
-\subsection{Cyclical Model}
-
-\subsection{Measuring Treatment Effects}
-
-\subsection{A Comprehensive BSTS Model}
-In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
-\begin{align}
-    \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}
-\end{align}
-where $\varepsilon_t\sim\mathcal{N}(0,\sigma_{\varepsilon}^2)$. The state variable $\alpha_t$ is the latent state variable of interest. For example, $\alpha_t$ may be the economic vitality. I assume that $\alpha_t$ can be additively decomposed into five components: the local linear trend component ($\mu_t$), the seasonal component ($\gamma_t$), and the cyclical component ($\psi_t$). In what follows, I define each of the three components:
-
-First, consider $\mu_t$:
-\begin{align}
-    \mu_{t+1} &= \mu_t+Bx_{t,1}+\delta_t+\eta_{\mu,t} \label{eq:trend_start} \\
-    x_{t,1} &= \mathbbm{1}_{t=t^{*}} \\
-    \delta_{t+1} &= \Delta_{\delta} + \rho_{\delta}(\delta_t-\Delta_{\delta}) + \eta_{\delta,t} \label{eq:trend_end} 
-\end{align}
-where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$. Equation (\ref{eq:trend_start}) through (\ref{eq:trend_end}) define a generalized local linear trend model with stationary slope\footnote{See (\cite{brodersen_etal_2015}) for details.} and permanent intervention effect (e.g. technology breakthrough at time $t^*)$. Here, the slope of the time trend has AR(1) variation around long-term slop of $\Delta_{\delta}$ with $|\rho_{\delta}|<1$. 
-
-Next, consider $\gamma_t$:
-\begin{align}
-    \gamma_{t+1}&= -\sum_{j=0}^{5}\gamma_{t-j} + \eta_{\gamma,t} \label{eq:season}
-\end{align}
-where $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$. Equation (\ref{eq:season}) models weekly effects, where the sum of the weekly effects is a white noise\footnote{The sum should be a stationary process, otherwise we don't identification.}.
-
-Finally, $\psi_t$ is defined as\footnote{For details, refer to (\cite{harvey_1985}) and (\cite{harvey2007trends}).}:
-\begin{align}
-    \begin{pmatrix}
-        \psi_{t+1} \\
-        \psi_{t+1}^{*}
-    \end{pmatrix}
-    =\rho\begin{pmatrix}
-        \cos(\lambda) & \sin(\lambda) \\
-        -\sin(\lambda) & \cos(\lambda)
-    \end{pmatrix}
-    \begin{pmatrix}
-        \psi_{t} \\
-        \psi_{t}^{*}
-    \end{pmatrix}
-    +\begin{pmatrix}
-        \eta_{\psi,t} \\
-        \eta_{\psi,t}^{*}
-    \end{pmatrix} \label{eq:cycle}
-\end{align}
-where $\eta_{\psi,t}\sim\mathcal{N}(0,\sigma_{\psi}^2)$, $\eta_{\psi,t}^{*}\sim\mathcal{N}(0,\sigma_{\psi,*}^2)$, and $\psi_{t}^{*}$ is an auxiliary variable. In addition, following the argument by (\cite{harvey_1985}), I impose $\sigma_{\psi}^2=\sigma_{\psi,*}^2$.
-
-Now I specify measurement equations: 
-\begin{align}
-    y_{t,1} &= \alpha_t+D_1x_{t,2}+w_{t,1} \ , \ t\in\{7,14,21,...\} \\
-    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,13,15...\} \label{eq:y2}
-\end{align}
-where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. every sixth and seventh days). Note that I do not use conventional weekdays availability for $y_{t,2}$ because otherwise we have a fully diffuse time series (e.g. We will never get the weekly effect due to missing measurements for Saturdays).
-
-To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS framework, I make the following definitions:
-\begin{align*}
-    \xi_{t+1} = \begin{pmatrix}
-        \mu_{t+1} \\
-        \delta_{t+1} \\
-        \gamma_{t+1} \\
-        \gamma_t \\
-        \gamma_{t-1} \\
-        \gamma_{t-2} \\
-        \gamma_{t-3} \\
-        \gamma_{t-4} \\
-        \psi_{t+1} \\
-        \psi_{t+1}^{*}
-    \end{pmatrix}, 
-    &\ 
-    F_t = F = \begin{pmatrix}
-        1 & 1  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & \rho_{\delta}  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 & 0 \\
-        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \rho \cos(\lambda) & \rho \sin(\lambda) \\
-        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & -\rho \sin(\lambda) & \rho \cos(\lambda)
-    \end{pmatrix} \\
-    v_t = \begin{pmatrix}
-        \eta_{\mu,t} \\
-        \eta_{\delta,t} \\
-        \eta_{\gamma,t} \\
-        0 \\
-        0 \\
-        0 \\
-        0 \\
-        0 \\
-        \eta_{\psi,t} \\
-        \eta_{\psi,t}^*
-    \end{pmatrix} 
-    , & v_t\sim\mathcal{N}(0,Q),
-    \ 
-    B_t = B = \begin{pmatrix}
-        0 & B & 0 \\
-        (1-\rho_{\delta})\Delta_{\delta} & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0
-    \end{pmatrix},
-    \ 
-    x_t = \begin{pmatrix}
-        1 \\
-        x_{t,1} \\
-        x_{t,2}
-    \end{pmatrix} \\
-    y_t = \begin{pmatrix}
-        y_{t,1} \\
-        y_{t,2} 
-    \end{pmatrix},
-    &\ 
-    D_t = D = \begin{pmatrix}
-        0 & 0 & D_1 \\
-        d & 0 & D_2
-    \end{pmatrix},
-    \ 
-    w_t = \begin{pmatrix}
-        w_{t,1} \\
-        w_{t,2}
-    \end{pmatrix} 
-    , \ w_t\sim\mathcal{N}(0,R) \\
-    & H_t = H = \begin{pmatrix}
-        1 & 0 &1 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
-        \pi & 0 & \pi & 0 & 0 & 0 & 0 & 0 & \pi & 0  
-    \end{pmatrix}
-    \\
-    & Q_t = Q = \begin{pmatrix}
-        \sigma_{\mu}^2 & 0 & 0 & \cdots & \cdots & \cdots & \cdots & 0 \\
-        0 & \sigma_{\delta}^2 & 0 & & & & & \vdots \\
-        0 & 0 & \sigma_{\gamma}^2 & & & & & \vdots \\
-        \vdots & & & 0 & & & & \vdots \\
-        \vdots & & & & \ddots & & & \vdots \\
-        \vdots & & & & & 0 & & \vdots \\
-        \vdots & & & & & & \sigma_{\psi}^2 & 0 \\
-        0 & \cdots & \cdots & \cdots & \cdots & \cdots & 0 & \sigma_{\psi}^2
-    \end{pmatrix}
-    ,\ 
-    R_t = R= \begin{pmatrix}
-        \sigma_{w,1} & \sigma_{w,1,2} \\
-        \sigma_{w,1,2} & \sigma_{w,2}
-    \end{pmatrix}
-\end{align*}
-The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
-
-\section{\texttt{linkalman} Design} \label{sec:codebase}
 
 
 
@@ -1247,63 +1253,12 @@ Denote $\Theta_i\equiv (Y_T,X_T;\theta_i)$, I now derive expressions for $E(\del
     E(\xi_t\xi_t^{'}|\Theta_i) =& \hat{\xi}_{t|T}\hat{\xi}_{t|T}^{'} + P_{t|T} \nonumber \\
     E(\xi_{t-1}\xi_t^{'}|\Theta_i) =& \hat{\xi}_{t-1|T}\hat{\xi}_{t|T}^{'} + P_{t-1,t|T} \nonumber
 \end{align}
-where $(\mathbb{Q}_t, \mathbb{R}_t, \mathbb{F}_t, \mathbb{H}_t, \mathbb{B}_t, \mathbb{D}_t, \mathbb{P}_{*}, \mathbb{A})$ are the system matrices parameterized by $\theta$. Now $G(\theta,\theta_{i})$ is:
+where $\mathbb{M}_t \equiv (\mathbb{Q}_t, \mathbb{R}_t, \mathbb{F}_t, \mathbb{H}_t, \mathbb{B}_t, \mathbb{D}_t, \mathbb{P}_{*}, \mathbb{A})$ are the system matrices parameterized by $\theta$. Now $G(\theta,\theta_{i})$ is:
 \begin{align*}
     G(\theta,\theta_{i}) &= G_0(\theta,\theta_i) + \sum_{t=2}^{T}G_1^t(\theta,\theta_{i}) + \sum_{t=1}^{T}G_2^t(\theta,\theta_{i}) + \frac{1}{2}log\left|\sum_{t=1}^{T}(\mathbb{Z}_t^{'}\mathbb{Z}_t)\right| 
 \end{align*}
 where $\mathbb{Z}_t=\mathbb{H}_t\phi_t$ and $\phi_1=\mathbb{S}$, with $\mathbb{S}$ as the parameterized counterpart of selection matrix $A$ in equation (\ref{eq:init}). Using equation (\ref{eq:log1_trace}) through (\ref{eq:delta_0}), we have an expression for $G(\theta,\theta_i)$. We can then use numerical methods\footnote{If system matrices are constant, we have a closed form solution. But I decide to use numerical optimizations so that the EM is also able to solve a BSTS model with complex system matrices.} to find $\theta_{i+1}$ that maximizes $G(\theta,\theta_{i})$.
 
-For systems with missing measurements, the univariate smoothing technique remains valid for calculating state estimates and $E(\delta_t\delta_t^{'}|\Theta_i)$, but we need to pay special attention to $E(\chi_t\chi_t^{'}|\Theta_i)$. I generalize the result in (\cite{shumway_stoffer_1982}), (\cite{shumway_2000}), and (\cite{shumway2017time}) to allow for flexible forms of system matrices\footnote{For example, we may result impose on certain restrictions on $H_t$ or $F_t$. The derivations in the papers I refer to do not account for these scenario.}. First I assume $y_t$ is already partitioned and diagonalized, using $1$ to denote indices related to the observed measurements, and $0$ to the unobserved measurements. I define $E(\chi_{t}\chi_{t}^{'}|\Theta_i)$ as:
-\begin{align*}
-    E(\chi_{t}\chi_{t}^{'}|\Theta_i) = \begin{pmatrix}
-        E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i) & E(\chi_{t,1}\chi_{t,0}^{'}|\Theta_i) \\
-        E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i) & E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)
-    \end{pmatrix}
-\end{align*}
-with $E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i)$ defined as:
-\begin{align}
-    E(\chi_{t,1}\chi_{t,1}^{'}|\Theta_i) &= (y_{t,1} - \mathbb{H}_{t,1}\hat{\xi}_{t|T} - \mathbb{D}_{t,1}x_t)(y_{t,1} - \mathbb{H}_{t,1}\hat{\xi}_{t|T} 
-        - \mathbb{D}_{t,1}x_t)^{'} + \mathbb{H}_{t,1}P_{t|T}\mathbb{H}_{t,1}^{'} \label{eq:chi2_start} 
-\end{align}
+For systems with missing measurements, the univariate smoothing technique remains valid for calculating state estimates and $E(\delta_t\delta_t^{'}|\Theta_i)$, but we need to pay special attention to $E(\chi_t\chi_t^{'}|\Theta_i)$. Here $y_t$ are observed measurements at time $t$. Therefore, it is important in practice to align the measurement index of $y_t$ and $\mathbb{M}_t$\footnote{(\cite{shumway_stoffer_1982}), (\cite{shumway_2000}), and (\cite{shumway2017time}) offers alternative derivations without changing the size of $\mathbb{M}_t$. The primary advantage is to computing score function more easily, but as I am using non-gradient based algorithms for \texttt{linkalman}, I opt for calculating $\chi_t$ only for observed measurements, which is computationally more efficient.}.
 
-Now consider $E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i)$ and $E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)$. For $E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i)$, we have:
-\begin{align*}
-    E(\chi_{t,0}\chi_{t,1}^{'}|y_{t,1},\xi_t,\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\xi_t+(D_{t,0}-\mathbb{D}_{t,0})x_t]
-        (y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'} \\
-    &+E(w_{t,0}|y_{t,1},\xi_t,\Theta_i)(y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'} \\
-    =& [(H_{t,0}-\mathbb{H}_{t,0})\xi_t+(D_{t,0}-\mathbb{D}_{t,0})x_t]
-        (y_{t,1}-\mathbb{H}_{t,1}\xi_t-\mathbb{D}_{t,1})^{'}
-\end{align*}
-
-The second equality holds because we assume independence between measurements (or preprocessed by orthogonalization). After some algebra, we have:
-\begin{align}
-    E(\chi_{t,0}\chi_{t,1}^{'}|\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t]
-        (y_{t,1}-\mathbb{H}_{t,1}\hat{\xi}_{t|T}-\mathbb{D}_{t,1})^{'} \\
-        &- (H_{t,0}-\mathbb{H}_{t,0})P_{t|T}\mathbb{H}_{t,1}^{'} \nonumber
-\end{align}
-
-Similarly, we may derive $E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i)$ as:
-\begin{align}
-    E(\chi_{t,0}\chi_{t,0}^{'}|\Theta_i) =& [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t]
-        [(H_{t,0}-\mathbb{H}_{t,0})\hat{\xi}_{t|T}+(D_{t,0}-\mathbb{D}_{t,0})x_t] \label{eq:chi2_end} \\
-    &+ (H_{t,0}-\mathbb{H}_{t,0})P_{t|T}(H_{t,0}-\mathbb{H}_{t,0})^{'} + R_{t,00} \nonumber
-\end{align}
-where $R_t$ is defined as\footnote{Here $R_t$ is parameterized by $\theta_i$, and is permuted and orthogonalized.}:
-\begin{align*}
-    R_t = \begin{pmatrix}
-        R_{t,11} & 0 \\
-        0 & R_{t,00}
-    \end{pmatrix}
-\end{align*}
-
-In practice, we need to re-arrange and partition the measurements to use equations (\ref{eq:chi2_start}) through (\ref{eq:chi2_end}). Define $J_t$ as the row permutation matrix that partitioned $y_t$ into the observed group and the unobserved group. In addition, I compute $l_t$ and $\Lambda_t$ from:
-\begin{align*}
-    J_tR_tJ_t^{'} = l_t\Lambda_tl_t^{'}
-\end{align*}
-
-Note that $R_{t,00} \equiv \Lambda_{t,00}$. Now I can calculate $G_2^{t}(\theta,\theta_i)$ as: 
-\begin{align}
-    G_2^{t}(\theta, \theta_i) &= const - \frac{1}{2}log(|\mathbb{R}_t|)-\frac{1}{2}Tr[\mathbb{R}_t^{-1}J_t^{'}l_tE(\tilde{\chi}_t\tilde{\chi}_t^{'}|\Theta_{i})l_t^{'}J_t] 
-\end{align}
-where $\tilde{(\cdot)}_t \equiv l_t^{-1}J_t(\cdot)_t$. We can proceed to calculate $G(\theta,\theta_i)$. Note that If $y_t$ is fully observed or fully missing, we do not need to permute the matrix. We should also note that when permutation is involved, the marginal likelihood correction term in equation (\ref{eq:marginal_correct}) does not have to be permuted because $J_t^{'}J_t=I$. In addition, since we revert the orthogonalization in computing $G_2^{t}(\theta,\theta_i)$, variables of the marginal likelihood correction term are in their original forms.
 \end{document}

@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Any, Callable, Tuple
+from typing import List, Any, Callable, Tuple, Dict
 import scipy
 from copy import deepcopy 
 from .utils import mask_nan, LL_correct, M_wrap, Constant_M, \
@@ -64,6 +64,8 @@ class Filter(object):
         self.I = None
         self.P_star = None
         self.n_t = None
+        self.xi_T1 = None
+        self.P_T1 = None
 
         # Create output matrices
         self.xi_1_0 = None
@@ -79,20 +81,15 @@ class Filter(object):
 
         # Create output matrices for smoothers
         if self.for_smoother:
-            self.l_t = None  # l from ldl
-            self.l_t_inv = None
             self.partition_index = None
             self.L0_t = None
             self.L1_t = None
             self.L_star_t = None
             self.Ht_tilde = None
-            self.Rt_tilde = None
-            self.Yt_tilde = None
-            self.Dt_tilde = None
 
 
-    def init_attr(self, theta: List, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None) -> None:
+    def init_attr(self, theta: np.ndarray, Yt: List[np.ndarray], 
+            Xt: List[np.ndarray]=None, init_state: Dict=None) -> None:
         """
         Initialize inputs to the Kalman filter. 
     
@@ -101,6 +98,7 @@ class Filter(object):
         theta : input parameters
         Yt : input Yt from self.fit()
         Xt : input Xt from self.fit()
+        init_state : user-specified initial state 
         """
         # Initialize data inputs
         self.theta = theta
@@ -113,7 +111,8 @@ class Filter(object):
 
         # Check consistence
         Mt = self.ft(self.theta, self.T, **self.ft_kwargs)
-        check_consistence(Mt, self.Yt[0], self.Xt[0])
+        check_consistence(Mt, self.Yt[0], self.Xt[0], 
+                init_state=init_state)
 
         self.Ft = M_wrap(Mt['Ft'])
         self.Bt = M_wrap(Mt['Bt'])
@@ -132,6 +131,13 @@ class Filter(object):
         # Collect initialization information
         self.q, self.A, self.Pi, self.P_star = get_init_mat(self.P_1_0)
 
+        # If init_state is provided, override
+        if init_state is not None:
+            self.q = init_state.get('q', self.q)
+            self.A = init_state.get('P_inf_t', self.A)
+            self.P_star = init_state.get('P_star_t')
+            self.xi_1_0 = init_state.get('xi_t', self.xi_1_0)
+
         # Initialize xi_1_0 and  P_1_0
         self.xi_t = preallocate(self.T, self.y_length + 1)
         self.xi_t[0][0] = self.xi_1_0
@@ -148,12 +154,7 @@ class Filter(object):
             self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length)
 
         if self.for_smoother:
-            self.l_t = preallocate(self.T)
-            self.l_t_inv = preallocate(self.T)
             self.Ht_tilde = preallocate(self.T)
-            self.Dt_tilde = preallocate(self.T)
-            self.Rt_tilde = preallocate(self.T)
-            self.Yt_tilde = preallocate(self.T)
             self.partition_index = preallocate(self.T)
             self.L_star_t = preallocate(self.T, self.y_length)
 
@@ -163,7 +164,7 @@ class Filter(object):
 
 
     def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None) -> None:
+            Xt: List[np.ndarray]=None, init_state: Dict=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
 
@@ -173,9 +174,10 @@ class Filter(object):
         Yt : measurements, may contain missing values
         Xt : regressors, must be deterministic and has no missing values.
             If set as None, will generate zero vectors
+        init_state : user-specified initial state values
         """
         # Initialize input data
-        self.init_attr(theta, Yt, Xt)
+        self.init_attr(theta, Yt, Xt, init_state=init_state)
 
         # Filter
         for t in range(self.T):
@@ -236,14 +238,12 @@ class Filter(object):
         if t < self.T - 1:
             self.xi_t[t+1][0] = xi_t1_1
             self.P_star_t[t+1][0] = P_t1_1
+        else:
+            self.xi_T1 = xi_t1_1
+            self.P_T1 = P_t1_1
 
         if self.for_smoother:
-            self.l_t[t] = l_t  # l from ldl
-            self.l_t_inv[t] = l_inv
             self.Ht_tilde[t] = H_t
-            self.Dt_tilde[t] = D_t
-            self.Rt_tilde[t] = R_t
-            self.Yt_tilde[t] = Y_t
             self.partition_index[t] = partitioned_index
 
 
@@ -339,12 +339,7 @@ class Filter(object):
             self.P_star_t[t+1][0] = P_star_t1_1 
 
         if self.for_smoother:
-            self.l_t[t] = l_t  # l from ldl
-            self.l_t_inv[t] = l_inv
             self.Ht_tilde[t] = H_t
-            self.Dt_tilde[t] = D_t
-            self.Rt_tilde[t] = R_t
-            self.Yt_tilde[t] = Y_t
             self.partition_index[t] = partitioned_index
 
 
@@ -510,4 +505,40 @@ class Filter(object):
             
         return Yt_filtered, Yt_filtered_cov, xi_t, P_t
 
+    
+    def get_filtered_state(self, t: int) -> Dict:
+        """
+        Get xi_t[t][0] and P_star_t[t][0]
 
+        Parameters:
+        ----------
+        t : time index
+
+        Returns:
+        ----------
+        state_val : state info at time t
+        """
+        if not self.is_filtered:
+            raise ValueError('Kalman filter is not fitted yet')
+
+        if (t >= self.t_q) and (t < self.T):
+            xi_t = deepcopy(self.xi_t[t][0])
+            P_star_t = deepcopy(self.P_star_t[t][0])
+            P_inf_t = np.zeros(P_star_t.shape)
+            q = 0
+        
+        # Successful training always ends with regular Kalman filters
+        elif t == self.T:
+            xi_t = deepcopy(self.xi_T1)
+            P_star_t = deepcopy(self.P_T1)
+            P_inf_t = np.zeros(P_star_t.shape)
+            q = 0
+        elif t > self.T:
+            raise ValueError('Maximum t allowed is {}'.format(self.T))
+        else:
+            raise ValueError('Diffuse state at ' + \
+                    'time {}'.format(t))
+        
+        state_val = {'xi_t': xi_t, 'P_star_t': P_star_t, 
+                'P_inf_t': P_inf_t, 'q': q}
+        return state_val

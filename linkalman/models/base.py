@@ -33,8 +33,12 @@ class BaseOpt(object):
         self.y_col = None
         self.solver = None
 
+        # Store fitted Kalman smoother 
+        self.ks_fitted = None
 
-    def set_f(self, Ft: Callable, **ft_kwargs) -> None:
+
+    def set_f(self, Ft: Callable, reset: bool=True, 
+            **ft_kwargs) -> None:
         """
         Mapping from theta to M. Ft must be the form: 
         f: Ft(theta, T) -> [M_1, M_2,...,M_T]. 
@@ -43,9 +47,14 @@ class BaseOpt(object):
         ----------
         Ft : theta -> Mt
         ft_kwargs : kwargs for ft
+        reset : if true, reset fitted values
         """
         self.ft = Ft
         self.ft_kwargs = ft_kwargs
+        if reset:
+            self.theta_opt = None
+            self.fval_opt = None
+            self.ks_fitted = None
 
 
     def set_solver(self, solver: Any, **solver_kwargs) -> None:
@@ -69,7 +78,7 @@ class BaseOpt(object):
             y_col: List[str], x_col: List[str]=None, 
             method: str='LLY', EM_threshold: float=1e-3, 
             num_EM_iter: int=np.inf, post_min_iter: int=100, 
-            EM_stopping_rate: float=0.01) -> None:
+            EM_stopping_rate: float=0.01, init_state: Dict=None) -> None:
         """
         Fit the model and returns optimal theta. 
 
@@ -88,6 +97,7 @@ class BaseOpt(object):
         EM_stopping_rate : weight placed on counter, higher rate means 
             update theta_opt slower. EM_stopping_rate = 0 means full 
             weight on theta_opt after each iteration
+        init_state : user-specified initial state values
         """
         # Raise exception if method is not correctly specified
         if method not in ['EM','LLY']:
@@ -164,8 +174,15 @@ class BaseOpt(object):
             self.theta_opt = theta_i
             self.fval_opt = ks.G(theta_i)
 
+        # Generate fitted smoother
+        kf = Filter(self.ft, **self.ft_kwargs, for_smoother=True)
+        kf.fit(self.theta_opt, Yt, Xt, init_state=init_state)
+        ks = Smoother()
+        ks.fit(kf)
+        self.ks_fitted = ks
 
-    def get_LLY(self, theta: List[float], Yt: List[np.ndarray], 
+
+    def get_LLY(self, theta: np.ndarray, Yt: List[np.ndarray], 
             Xt: List[np.ndarray]=None) -> float:
         """
         Wrapper for calculating LLY. Used as the objective 
@@ -186,8 +203,42 @@ class BaseOpt(object):
         return kf.get_LL()
 
 
+    def predict_t(self, df: pd.DataFrame, theta: np.ndarray=None, 
+            is_xi: bool=True, xi_col: List[int]=None, 
+            init_state: Dict=None, t_index: int=0) -> \
+            Tuple[pd.DataFrame, Smoother]: 
+        """
+        Wrapper for BaseOpt.predict. It set the index to t_index. The 
+        value of t_index must be between BaseOpt.ks_fitted.t_q and 
+        BaseOpt.ks_fitted.T
+
+        Parameters:
+        ----------
+        df : df to be predicted. Use np.nan for missing Yt
+        theta : override theta_opt using user-supplied theta
+        is_xi : whether output xi
+        xi_col : index of xi to be included
+        init_state : user-specified initial state values
+        t_index : starting time index of df related to training set.
+            t_index == -1 refers to the BaseOpt.ks_fitted.T
+
+        Returns:
+        ----------
+        df_fitted : Contains filtered/smoothed y_t, xi_t, and P_t
+        """
+        if init_state is None:
+            t = self.ks_fitted.T if t_index == -1 else t_index
+            init_state = self.ks_fitted.get_filtered_state(t)
+        
+        df_fitted = self.predict(df, theta=theta, is_xi=is_xi, 
+                xi_col=xi_col, init_state=init_state)
+        
+        return df_fitted
+
+
     def predict(self, df: pd.DataFrame, theta: np.ndarray=None, 
-            is_xi: bool=True, xi_col: List[int]=None) -> pd.DataFrame: 
+            is_xi: bool=True, xi_col: List[int]=None, 
+            init_state: Dict=None) -> Tuple[pd.DataFrame, Smoother]: 
         """
         Predict time series. df should contain both training and 
         test data. If Yt is not available for some or all test data,
@@ -199,6 +250,7 @@ class BaseOpt(object):
         theta : override theta_opt using user-supplied theta
         is_xi : whether output xi
         xi_col : index of xi to be included
+        init_state : user-specified initial state values
 
         Returns:
         ----------
@@ -213,9 +265,9 @@ class BaseOpt(object):
 
         # Override theta_opt if theta is not None
         if theta is not None:
-            kf.fit(theta, Yt, Xt)
+            kf.fit(theta, Yt, Xt, init_state=init_state)
         elif self.theta_opt is not None:
-            kf.fit(self.theta_opt, Yt, Xt)
+            kf.fit(self.theta_opt, Yt, Xt, init_state=init_state)
         else:
             raise ValueError('Model is not fitted')
         
@@ -266,9 +318,9 @@ class BaseOpt(object):
         return df_fitted
 
 
-    def simulated_data(self, input_theta: List[float]=None, 
-            Xt: pd.DataFrame=None, T: int=None) -> \
-            Tuple[pd.DataFrame, List[str], List[str]]:
+    def simulated_data(self, input_theta: np.ndarray=None, 
+            Xt: pd.DataFrame=None, T: int=None, init_state: Dict=None) \
+            -> Tuple[pd.DataFrame, List[str], List[str]]:
         """
         Calls utils.simulated_data
 
@@ -277,6 +329,7 @@ class BaseOpt(object):
         input_theta : parameters of ft, if None, use self.theta_opt
         Xt : optional input deterministic values
         T : length of the dataframe
+        init_state : user-specified initial state values
 
         Returns:
         ----------
@@ -284,16 +337,18 @@ class BaseOpt(object):
         y_col : column names of y_t
         xi_col : column names of xi_t
         """
-        if input_theta is None:
+        if input_theta is not None:
+            theta_ = input_theta
+        elif self.theta_opt is not None:
             theta_ = self.theta_opt
         else:
-            theta_ = input_theta
+            raise ValueError('Model needs theta')
         
         if self.ft is None:
             raise ValueError('Model needs ft')
 
         df, y_col, xi_col = simulated_data(self.ft, theta_, Xt=Xt, 
-                T=T, **self.ft_kwargs)
+                T=T, init_state=init_state, **self.ft_kwargs)
         return df, y_col, xi_col
 
 
@@ -314,8 +369,8 @@ class BaseConstantModel(BaseOpt):
         f : theta -> M
         ft_kwargs : arguments for ft
         """
-        self.ft = lambda theta, T, **ft_kwargs: \
+        ft_ = lambda theta, T, **ft_kwargs: \
                 ft(theta, f, T, **ft_kwargs)
-        self.ft_kwargs = ft_kwargs
+        super().set_f(ft_, **ft_kwargs)
 
 
