@@ -552,6 +552,22 @@ If $t \geq t_q$, we have:
 
 Recall that the state estimates are the same between $t:(i)$ and $t:(i+1)$ for any given time, so we may choose any measurement index $(i)$. Equation (\ref{eq:diff_smooth_start}) and (\ref{eq:diff_smooth_end}) are preferred here because their indexing are consistent with those in Kalman filters and smoothers, and are capable of handling fully missing measurements.
 
+\subsection{Interpolating Missing Measurements}
+Quite often we would like to know the smoothed value of missing measurements (e.g. counterfactuals for studying treatment effects), this subsection provides formula for smoothed means and variances of $y_t$ (interested readers may refer to Appendix \ref{ap:interp} for details):
+\begin{align}
+    E(y_t^{(1)}|Y_t^{(1)}) &= y_t^{(1)} \label{eq:smoothed_y1_mean} \\
+    Var(y_t^{(1)}|Y_t^{(1)}) &= 0 \\
+    E(y_t^{(2)}|Y_t^{(1)}) &= H_t^{(2)}\hat{\xi}_{t|T} + D_t^{(2)}x_t + \mathcal{B}_t\epsilon_t \label{eq:smoothed_y2_mean} \\
+    Var(y_t^{(2)}|Y_t^{(1)}) &= R_t^{(2, 2)} - R_t^{(2, 1)}\left(R_t^{(1, 1)}\right)^{-1}R_t^{(1, 2)} + 
+        \left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)P_{t|T}\left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)^{'} \label{eq:smoothed_y2_cov}
+\end{align}
+
+Using equation (\ref{eq:smoothed_y1_mean}) through (\ref{eq:smoothed_y2_cov}). We have the smoothed distribution of missing measurements. It is worth noting that when all measurements at time $t$ are missing, equation (\ref{eq:smoothed_y2_mean}) and (\ref{eq:smoothed_y2_cov}) becomes:
+\begin{align*}
+    E(y_t^{(2)}|Y_t^{(1)}) &= H_t^{(2)}\hat{\xi}_{t|T} + D_t^{(2)}x_t \\
+    Var(y_t^{(2)}|Y_t^{(1)}) &= R_t^{(2, 2)} + H_t^{(2)}P_{t|T}H_t^{(2)'} 
+\end{align*}
+
 \section{Parameter Estimation} \label{sec:param}
 Up to this point, we have assumed that system matrices of a BSTS model is known. In practice, such conditions are rarely met. In this section, I will present two methods: numerical maximization and EM algorithm. Direct numerical maximization has the advantage of faster convergence close to true values, and it does not requires Kalman smoothers, which requires vast computational costs. On the other hand, the EM algorithm converges faster at the beginning, and has a cleaner derivation. It is important to note, however, that the two approaches are consistent, but not unbiased. Therefore, users should practice with caution when using likelihood based models for parameter estimation. In what follows, I provide more details about the two algorithms in the case of diffuse priors.
 
@@ -613,20 +629,6 @@ EM algorithm proceeds as follows:
     \item \label{step:EM_M} Find $\theta_{i}$ that maximizes $G(\theta,\theta_{i-1})$ as specified in Appendix \ref{ap:log} 
     \item Repeat step \ref{step:EM_E} and \ref{step:EM_M} until $\{G(Y_T,X_T,\theta_i)\}_i$ converges to a local optimal\footnote{In practice, if one is using numerical optimization within each iteration, it is important to fine-tune the optimizer's tolerance parameters so that function evaluation is always improving with each iteration.}
 \end{boenumerate}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 \pagebreak
 \printbibliography
@@ -1111,6 +1113,88 @@ By similar argument, we can simplify the recursive formula for $N_{t-1}$ as:
 \end{align}
 
 Here I use a less simplified expressions for $N_{t-1}^{(1)}$ than provided in (\cite{durbin_koopman_2003}) to maintain numerical PSD of $N_{t-1}^{(1)}$. It is important to keep in mind that recursion for $N_{t-1}^{(2)}$ involves $N_{t-1}^{(1)}$ as well, we need to make sure dropping terms in $N_{t-1}^{(1)}$ does not affect recursion for $N_{t-1}^{(2)}$. 
+
+\subsection{Smoothed Distribution of Missing Measurements} \label{ap:interp}
+Suppose at time $t$, we only partially observe $y_t$. Denote $y_t^{(1)}$ as the observed part with size $n_t$, and $y_t^{(2)}$ the unobserved part. I assume $y_t$ are nicely partitioned\footnote{In practice, we can always permute $y_t$ to achieve the same effect.}, then we have:
+\begin{align*}
+    y_t^{(1)} &= H_t^{(1)}\xi_t + D_t^{(1)}x_t + w_t^{(1)} \\
+    y_t^{(2)} &= H_t^{(2)}\xi_t + D_t^{(2)}x_t + w_t^{(2)} 
+\end{align*}
+where $(D_t^{(1)}, H_t^{(1)})$ and $(D_t^{(2)}, H_t^{(2)})$ are the corresponding part of $H_t$ and $D_t$ for $y_t^{(1)}$ and $y_t^{(2)}$, respectively. Similarly, we can rewrite $R_t$ as:
+\begin{align*}
+    R_t = \begin{pmatrix}
+        R_t^{(1, 1)} & R_t^{(1, 2)} \\
+        R_t^{(2, 1)} & R_t^{(2, 2)}
+    \end{pmatrix}
+\end{align*}
+
+Next, I define $Y_t^{(1)}$ as the observed part of the measurement sequence $Y_t$. It is straight-forward to obtain: 
+\begin{align}
+    E(y_t^{(1)}|Y_t^{(1)}) &= y_t^{(1)} \\
+    Var(y_t^{(1)}|Y_t^{(1)}) &= 0 
+\end{align}
+
+For simplicity, I omit $X_t$ and $\theta$, and use $E(*|Y_t^{(1)})$ to denote smoothed values. To obtain $E(y_t^{(2)}|Y_t^{(1)})$, consider the following:
+\begin{align*}
+    E(y_t^{(2)}|Y_t^{(1)}) &= E(H_t^{(2)}\xi_t + D_t^{(2)}x_t + w_t^{(2)}|Y_t^{(1)}) \\
+    &= H_t^{(2)}\hat{\xi}_{t|T} + D_t^{(2)}x_t + E(w_t^{(2)}|Y_t^{(1)})
+\end{align*}
+
+To derive an expression for $E(w_t^{(2)}|Y_t^{(1)})$, consider the following:
+\begin{align*}
+    E(w_t^{(2)}|Y_t^{(1)}) &= E[E(w_t^{(2)}|\Xi_t,Y_t^{(1)})|Y_t^{(1)}] \\
+    &= E[E(w_t^{(2)}|\Xi_t, W_t^{(1)})|Y_t^{(1)}] \\
+    &= E[E(w_t^{(2)}|\xi_t, w_t^{(1)})|Y_t^{(1)}] \\
+    &= E[\mathcal{B}_t(y_t^{(1)} - H_t^{(1)}\xi_t - D_t^{(1)}x_t)|Y_t^{(1)}] \\
+    &= \mathcal{B}_t\epsilon_t \\
+    \mathcal{B}_t &\equiv R_t^{(2, 1)}\left(R_t^{(1, 1)}\right)^{-1} \\
+    \epsilon_t &\equiv y_t^{(1)} - H_t^{(1)}\hat{\xi}_{t|T} - D_t^{(1)}x_t
+\end{align*}
+where $W_t^{(1)}\equiv \{w_1^{(1)},...,w_T^{(1)}\}$. The second equality follows because knowing $(\Xi_t, X_t, Y_t^{(1)})$ is the same as knowing $(\Xi_t, X_t, W_t^{(1)})$. The third equality follows from the fact that conditioned on $(\xi_t, x_t, w_t^{(1)})$, $w_t^{(2)}$ is independent of measurements and state values in other periods. The fourth equality holds by applying Lemma \ref{lem:1}:
+\begin{align*}
+    E(w_t^{(2)}|\xi_t, w_t^{(1)}) &= E(w_t^{(2)}|\xi_t) + \mathcal{B}_t[w_t^{(1)} - E(w_t^{(1)}|\xi_t)] \\
+    &= \mathcal{B}_t(y_t^{(1)} - H_t^{(1)}\xi_t - D_t^{(1)}x_t)
+\end{align*}
+
+Now we have expression for $\hat{y}_{t|T}^{(2)} \equiv E(y_t^{(2)}|Y_t^{(1)})$:
+\begin{align}
+    E(y_t^{(2)}|Y_t^{(1)}) = H_t^{(2)}\hat{\xi}_{t|T} + D_t^{(2)}x_t + \mathcal{B}_t\epsilon_t
+\end{align}
+
+To derive $Var(y_t^{(2)}|Y_t^{(1)})\equiv E[(y_t^{(2)}-\hat{y}_{t|T}^{(2)})(y_t^{(2)}-\hat{y}_{t|T}^{(2)})^{'}|Y_t^{(1)}]$, consider the following:
+\begin{align*}
+    Var(y_t^{(2)}|Y_t^{(1)}) =& E\{[H_t^{(2)}(\xi_t - \hat{\xi}_{t|T}) + w_t^{(2)} - \mathcal{B}_t\epsilon_t]
+        [H_t^{(2)}(\xi_t - \hat{\xi}_{t|T}) + w_t^{(2)} - \mathcal{B}_t\epsilon_t]^{'}|Y_t^{(1)}\} \\
+    =& H_t^{(2)}P_{t|T}H_t^{(2)'} + \langle H_t^{(2)}E[(\xi_t - \hat{\xi}_{t|T})w_t^{(2)'}|Y_t^{(1)}]\rangle 
+        + Var(w_t^{(2)}|Y_t^{(1)}) \\
+    Var(w_t^{(2)}|Y_t^{(1)}) =& E(w_t^{(2)}w_t^{(2)'}|Y_t^{(1)}) - \mathcal{B}_t\epsilon_t\epsilon_t^{'}\mathcal{B}_t^{'}
+\end{align*}
+
+We need to find expressions for $E(\xi_tw_t^{(2)'}|Y_t^{(1)})$ and $Var(w_t^{(2)}|Y_t^{(1)})$. The derivation follows closely from (\cite{shumway_2000}). First consider $E(\xi_tw_t^{(2)'}|Y_t^{(1)})$:
+\begin{align*}
+    E(\xi_tw_t^{(2)'}|Y_t^{(1)}) &= E\left[\xi_tE\left(w_t^{(2)'}|\xi_t, w_t^{(1)}\right)|Y_t^{(1)}\right] \\
+    &= \hat{\xi}_{t|T}\epsilon_t^{'}\mathcal{B}_t^{'} - P_{t|T}H_t^{(1)'}\mathcal{B}_t^{'}
+\end{align*}
+
+Next, by Lemma \ref{lem:1}, we have:
+\begin{align*}
+    Var(w_t^{(2)}|w_t^{(1)}, \xi_t) &= Var(w_t^{(2)}|\xi_t) - Cov(w_t^{(2)}, w_t^{(1)}|\xi_t)Var(w_t^{(1)}|\xi_t)^{-1}
+        Cov(w_t^{(2)}, w_t^{(1)}|\xi_t)^{'} \\
+    &= R_t^{(2, 2)} - R_t^{(2, 1)}\left(R_t^{(1, 1)}\right)^{-1}R_t^{(1, 2)}
+\end{align*}
+
+Since we have already known $E(w_t^{(2)}|\Xi_t, W_t^{(1)})=\mathcal{B}_tw_t^{(1)}$, we have:
+\begin{align*}
+    Var(w_t^{(2)}|Y_t^{(1)}) &= E\left[E\left(w_t^{(2)}w_t^{(2)'}|\xi_t,w_t^{(1)}\right)|Y_t^{(1)}\right] - \mathcal{B}_t\epsilon_t
+        \epsilon_t^{'}\mathcal{B}_t^{'} \\
+    &= R_t^{(2, 2)} - R_t^{(2, 1)}\left(R_t^{(1, 1)}\right)^{-1}R_t^{(1, 2)} + \mathcal{B}_tH_t^{(1)}P_{t|T}H_t^{(1)'}\mathcal{B}_t^{'}
+\end{align*}
+
+Now we have all the elements, and $Var(y_t^{(2)}|Y_t^{(1)})$ is:
+\begin{align}
+    Var(y_t^{(2)}|Y_t^{(1)}) = R_t^{(2, 2)} - R_t^{(2, 1)}\left(R_t^{(1, 1)}\right)^{-1}R_t^{(1, 2)} + 
+        \left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)P_{t|T}\left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)^{'} 
+\end{align}
 
 \section{Parameter Estimation}
 \subsection{Derivation of Marginal Likelihood} \label{ap:NL}
