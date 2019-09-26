@@ -454,10 +454,40 @@ def test_get_smoothed_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     ks = Smoother()
     ks.fit(kf)
 
-    xi_T, P_T = ks.get_smoothed_val()
+    y_t_T, yP_t_T, xi_T, P_T = ks.get_smoothed_val()
     np.testing.assert_array_equal(xi_T[2], ks.xi_t_T[2])
     np.testing.assert_array_equal(P_T[2], ks.P_t_T[2])
     np.testing.assert_array_equal(P_T[3], ks.P_t_T[3])
+   
+    Mt = ft_ll_mvar_diffuse(theta_ll_mvar_diffuse, 4)
+    Rt = Mt['Rt'][0]
+    Dt = Mt['Dt'][0]
+    Ht = Mt['Ht'][0]
+    # Test smoothed y
+    R2_0 = np.array([[0.5 - 0.4 / 0.6 * 0.4]])
+    B0 = 0.4 / 0.6
+    delta_H0 = Ht[0:1] - B0 * Ht[1:]
+    eps0 = B0 * (Yt_mvar_diffuse_missing[0][1] - 
+            Dt[1:].dot(ks.Xt[0]) - Ht[1:].dot(ks.xi_t_T[0]))
+    yP_0 = (delta_H0.dot(ks.P_t_T[0]).dot(delta_H0.T) + R2_0).item()
+
+    R2_2 = np.array([[0.6 - 0.4 / 0.5 * 0.4]])
+    B2 = 0.4 / 0.5
+    delta_H2 = Ht[1] - B2 * Ht[0]
+    eps2 = B2 * (Yt_mvar_diffuse_missing[2][0] - 
+            Dt[:1].dot(ks.Xt[2]) - Ht[:1].dot(ks.xi_t_T[2]))
+    yP_2 = (delta_H2.dot(ks.P_t_T[2]).dot(delta_H2.T) + R2_2).item()
+    expected_y_t_T = [np.array([[eps0], [2]]),
+            Ht.dot(ks.xi_t_T[1] + Dt.dot(ks.Xt[1])),
+            np.array([[2.5], [eps2]]), 
+            np.array([[3], [5]])]
+    expected_Pcov_T = [np.array([[yP_0, 0], [0, 0]]),
+            ks.Ht[1].dot(ks.P_t_T[1]).dot(ks.Ht[1].T) + ks.Rt[1],
+            np.array([[0, 0], [0, yP_2]]),
+            np.zeros([2, 2])]
+    for t in range(4):
+        np.testing.assert_array_almost_equal(yP_t_T[t], expected_Pcov_T[t])
+        np.testing.assert_array_almost_equal(y_t_T[t], expected_y_t_T[t])
 
 
 def test_get_smoothed_y_selected_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
@@ -470,6 +500,6 @@ def test_get_smoothed_y_selected_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     ks = Smoother()
     ks.fit(kf)
 
-    xi_T, P_T = ks.get_smoothed_val(xi_col=[1])
+    _, _, xi_T, P_T = ks.get_smoothed_val(xi_col=[1])
     np.testing.assert_array_equal(xi_T[2], ks.xi_t_T[2][[1]])
     np.testing.assert_array_equal(P_T[2], ks.P_t_T[2][[1]][:,[1]])

@@ -238,7 +238,9 @@ class BaseOpt(object):
 
     def predict(self, df: pd.DataFrame, theta: np.ndarray=None, 
             is_xi: bool=True, xi_col: List[int]=None, 
-            init_state: Dict=None) -> Tuple[pd.DataFrame, Smoother]: 
+            init_state: Dict=None, fmean_suffix: str='_filtered',
+            fvar_suffix: str='_fvar', smean_suffix: str='_smoothed',
+            svar_suffix: str='_svar') -> pd.DataFrame: 
         """
         Predict time series. df should contain both training and 
         test data. If Yt is not available for some or all test data,
@@ -251,6 +253,10 @@ class BaseOpt(object):
         is_xi : whether output xi
         xi_col : index of xi to be included
         init_state : user-specified initial state values
+        fmean_suffix : suffix to filtered mean variable
+        fvar_suffix : suffix to filtered var variable
+        smean_suffix : suffix to smoothed mean variable
+        svar_suffix : suffix to smoothed var variable
 
         Returns:
         ----------
@@ -274,45 +280,57 @@ class BaseOpt(object):
         # Fit smoother
         ks = Smoother()
         ks.fit(kf)
-
-        y_col_filter = create_col(self.y_col, suffix='_filtered')
-        y_filter_var = create_col(self.y_col, suffix='_fvar')
+        
+        # Get filtered Yt
+        y_col_filter = create_col(self.y_col, suffix=fmean_suffix)
+        y_filter_var = create_col(self.y_col, suffix=fvar_suffix)
         Yt_filtered, Yt_P, xi_t, P_t = kf.get_filtered_val(
                 is_xi=is_xi, xi_col=xi_col)
         Yt_P_diag = get_diag(Yt_P)
         df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
         df_Yt_fvar = list_to_df(Yt_P_diag, y_filter_var)
+            
+        # Get smoothed Yt
+        y_col_smoother = create_col(self.y_col, suffix=smean_suffix)
+        y_smoother_var = create_col(self.y_col, suffix=svar_suffix)
+        Yt_smoothed, Yt_S, xi_T, P_T = ks.get_smoothed_val(
+                is_xi=is_xi, xi_col=xi_col)
+        Yt_S_diag = get_diag(Yt_S)
+        df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
+        df_Yt_svar = list_to_df(Yt_S_diag, y_smoother_var)
 
         # Generate xi values if needed
         if is_xi:
             if xi_col is None:
                 xi_col = list(range(kf.xi_length))
 
-            xi_col_f = ['xi{}_filtered'.format(i) for i in xi_col]
-            P_col_f = ['P{}_filtered'.format(i) for i in xi_col]
-            xi_col_s = ['xi{}_smoothed'.format(i) for i in xi_col]
-            P_col_s = ['P{}_smoothed'.format(i) for i in xi_col]
+            xi_col_f = ['xi_{}_filtered'.format(i) for i in xi_col]
+            P_col_f = ['P_{}_filtered'.format(i) for i in xi_col]
+            xi_col_s = ['xi_{}_smoothed'.format(i) for i in xi_col]
+            P_col_s = ['P_{}_smoothed'.format(i) for i in xi_col]
 
             df_xi_t = list_to_df(xi_t, xi_col_f)
             P_t_diag = get_diag(P_t)
             df_P_t = list_to_df(P_t_diag, P_col_f)
 
-            xi_T, P_T = ks.get_smoothed_val(xi_col)
             P_T_diag = get_diag(P_T)
             df_xi_T = list_to_df(xi_T, xi_col_s)
             df_P_T = list_to_df(P_T_diag, P_col_s)
 
         # Attach index
         if not is_xi:
-            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar], axis=1)
+            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar, 
+                    df_Yt_smoothed, df_Yt_svar], axis=1)
         else:
             df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar, 
-                    df_xi_t, df_P_t, df_xi_T, df_P_T], axis=1)
+                    df_Yt_smoothed, df_Yt_svar, df_xi_t, 
+                    df_P_t, df_xi_T, df_P_T], axis=1)
         df_fs.set_index(df.index, inplace=True)
 
         # Warning if new columns are in the original df.col
         if len(set(df_fs.columns).intersection(set(df.columns))) > 0:
-            warnings.warn('df.col contains new column names')
+            warnings.warn('Input df and predicted df contain ' + \
+                    'overlapping column names')
 
         df_fitted = pd.concat([df, df_fs], axis=1)
         return df_fitted
@@ -358,7 +376,8 @@ class BaseConstantModel(BaseOpt):
     The child class should provide get_f function. It inherits from BaseOpt
     and has a customized get_f
     """
-    def set_f(self, f: Callable, **ft_kwargs) -> None:
+
+    def set_f(self, f: Callable, reset: bool=True, **ft_kwargs) -> None:
         """
         Mapping from theta to M. Provided by children classes.
         Must be the form of get_f(theta). If defined, it should
@@ -368,9 +387,10 @@ class BaseConstantModel(BaseOpt):
         ----------
         f : theta -> M
         ft_kwargs : arguments for ft
+        reset : if true, reset fitted values
         """
         ft_ = lambda theta, T, **ft_kwargs: \
                 ft(theta, f, T, **ft_kwargs)
-        super().set_f(ft_, **ft_kwargs)
+        super().set_f(ft_, reset=reset, **ft_kwargs)
 
 

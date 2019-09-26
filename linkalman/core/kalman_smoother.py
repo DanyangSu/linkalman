@@ -4,8 +4,7 @@ from copy import deepcopy
 from scipy import linalg
 import scipy
 from .utils import inv, get_nearest_PSD, min_val, permute, \
-        revert_permute, partition_index, preallocate, \
-        get_init_mat, pdet, LL_correct
+        revert_permute, preallocate, get_init_mat, pdet, LL_correct
 from . import Filter
 
 __all__ = ['Smoother']
@@ -356,7 +355,7 @@ class Smoother(object):
         return -G.item()
 
 
-    def get_smoothed_val(self, xi_col: List[int]=None) \
+    def get_smoothed_val(self, is_xi: bool=True, xi_col: List[int]=None) \
             -> List[np.ndarray]:
         """
         Generated smoothed xi. If state is diffusal, 
@@ -365,6 +364,7 @@ class Smoother(object):
 
         Parameters:
         ----------
+        is_xi : whether returns xi values
         xi_col : column index of xi to be included. 
 
         Returns:
@@ -379,17 +379,85 @@ class Smoother(object):
         # If xi_col is not specified, use all columns
         if xi_col is None:
             xi_col = list(range(self.xi_length))
-        
+
+        Yt_smoothed = preallocate(self.T)
+        Yt_smoothed_cov = preallocate(self.T)
         xi_t_T = preallocate(self.T)
         P_t_T = preallocate(self.T)
 
         for t in range(self.T):
-            xi_t_T[t] = self.xi_t_T[t][xi_col]
-            P_t_T[t] = self.P_t_T[t][xi_col][:, xi_col]
+            # Get smoothed mean and cov of y_t
+            Yt_smoothed[t], Yt_smoothed_cov[t] = \
+                    self.get_smoothed_y(t)
+
+            # Get xi if needed
+            if is_xi:
+                xi_t_T[t] = self.xi_t_T[t][xi_col]
+                P_t_T[t] = self.P_t_T[t][xi_col][:, xi_col]
             
-        return xi_t_T, P_t_T
+        return Yt_smoothed, Yt_smoothed_cov, xi_t_T, P_t_T
 
     
+    def get_smoothed_y(self, t: int) -> Tuple[np.ndarray]:
+        """
+        Get smoothed mean and variance for y_t
+
+        Parameters:
+        ----------
+        t : time index
+
+        Returns:
+        ----------
+        y_t_T : smoothed y_t
+        y_cov_T : covariance matrix for smoothed y_t
+        """
+        # If no missing, use y_t and 0
+        if self.n_t[t] == self.y_length:
+            y_t_T = self.Yt[t]
+            y_cov_T = np.zeros([self.y_length, self.y_length])
+ 
+        # if all missing, simple calculation from xi_t_T and P_t_T
+        elif self.n_t[t] == 0: 
+            y_t_T = self.Ht[t].dot(self.xi_t_T[t]) + \
+                    self.Dt[t].dot(self.Xt[t])
+            y_cov_T = self.Ht[t].dot(self.P_t_T[t]).dot(
+                    self.Ht[t].T) + self.Rt[t]
+
+        # If partially missing, need to rearrange the measurements
+        else: 
+            n_t = self.n_t[t]
+            y1_t_T = self.Yt[t][0:n_t].copy()
+            y_cov_T_permute = np.zeros([self.y_length, self.y_length])
+
+            R_22 = self.Rt[t][n_t:][:, n_t:]
+            R_21 = self.Rt[t][n_t:][:, :n_t]
+            R_11 = self.Rt[t][:n_t][:, :n_t]
+            B = R_21.dot(inv(R_11))
+            H1 = self.Ht[t][:n_t]
+            H2 = self.Ht[t][n_t:]
+            D1 = self.Dt[t][:n_t]
+
+            # Get mean
+            epsilon = y1_t_T - H1.dot(self.xi_t_T[t]) - D1.dot(self.Xt[t])
+            y2_t_T = B.dot(epsilon)
+            y_t_T_permute = np.concatenate((y1_t_T, y2_t_T), axis=0) 
+
+            # Get covariance
+            R22_1 = R_22 - R_21.dot(inv(R_11)).dot(R_21.T)
+            diff_H2 = H2 - B.dot(H1)
+            y2_cov_T = diff_H2.dot(self.P_t_T[t]).dot(diff_H2.T) + \
+                    R22_1
+            y_cov_T_permute[n_t:][:, n_t:] = y2_cov_T
+
+            # Restore to the original index
+            original_index = revert_permute(self.partition_index[t])
+            y_t_T = permute(y_t_T_permute, original_index)
+            y_cov_T = permute(y_cov_T_permute, original_index, 
+                    axis='both')
+        
+        return y_t_T, y_cov_T
+
+
     def get_filtered_state(self, t: int) -> Dict:
         """
         Call Filter.get_filtered_state

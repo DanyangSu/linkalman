@@ -21,6 +21,23 @@
     linkcolor=blue,
     linktoc=all
 }
+\usepackage[latin1]{inputenc}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows}
+
+% Define block styles
+\tikzstyle{io} = [rectangle, draw, fill=green!20,
+	minimum width=5em, text centered, rounded corners,
+	minimum height=3em, node distance=3cm]
+\tikzstyle{module} = [rectangle, draw, fill=blue!20,
+	minimum width=5em, text centered, rounded corners,
+	minimum height=3em,node distance=3cm]
+\tikzstyle{line} = [draw, -latex']
+\tikzstyle{algo} = [draw, ellipse, fill=red!20, node distance=3cm,
+	minimum height=2em]
+
+% \counterwithin{figure}{section}
+
 
 \title{User's Manual of \texttt{linkalman}}
 \author{Su, Danyang}
@@ -32,7 +49,7 @@
 \pagenumbering{arabic}
 \tableofcontents
 \newpage
-\section{Introduction:}
+\section{Introduction}
 \texttt{linkalman} is a python package that solves linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, \texttt{linkalman} has a combination of several advantages:
 \begin{boenumerate}
     \item Account for partially and fully incomplete measurements 
@@ -42,7 +59,7 @@
     \item Built-in numerical and EM algorithms
     \item Open-source with a comprehensive user manual 
     \item Modular design with intuitive model specification
-    \item Pure python implementation 
+    \item Pure \texttt{Python} implementation 
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
@@ -227,7 +244,78 @@ To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS fr
 The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
 
 \section{\texttt{linkalman} Design} \label{sec:codebase}
-Interested readers may refer to Section \ref{sec:filter} through \ref{sec:param} for technical foundataions of each component. 
+\subsection{Codebase Design}
+The first principle of \texttt{linkalman} is flexibility. I design \texttt{linkalman} such that it may be used for a wide variety of BSTS models. With minimal I/O restriction, users may write their customized system dynamics function, as well as plug-in solver function for additional flexibility. \texttt{linkalman} also features flexibility in data inputs. It is capable of handling both completely and partially missing measurements, which are common for real world data. In addition, whereas many other packages use approximation approach to handle unknown initial values, \texttt{linkalman} provides the rigorous diffuse filter/smoother techniques, but also gives users the option to feed in customized initial state values. 
+
+The second principle of \texttt{linkalman} is modularity. At the fundamental level, this user's manual documents all the technical details that other people may refer to in building their own customized systems, for example, in \texttt{C++} for better performance. The structure of the package also makes it easier to invoke part of the modules without relying on others. The building blocks are \texttt{Filter}, which produces states estimates of a time series given system matrices. It is used by the direct likelihood methods (LLY) for parameter estimation. The \texttt{Smoother} module takes a fitted \texttt{Filter} object as an argument and produces smoothed estimates and the objective function used by EM algorithm (EM). For \texttt{linkalman} to handle flexible system dynamics and missing data, I limit the solver choices to non-gradient based algorithms, which inevitably slow down the optimization in cases where gradients can be easily computed (e.g. AR(1) processes). Therefore, users may only use the \texttt{Filter} or \texttt{Smoother} modules without invoking the entire \text{BaseOpt} module, the primary model solver of \texttt{linkalman}. For example, if we have fully observed data and models with only unknown variances in noises, we are able to derive analytical score matrices from smoother outputs to greatly boost performance of EM algorithm as well as direct likelihood methods. Figure (\ref{fig:design}) shows the architecture of \texttt{linkalman}, which shows separability between the \texttt{BaseOpt} module and \texttt{Filter}/\texttt{Smoother} modules it calls. 
+
+\begin{figure}
+\centering
+\begin{tikzpicture}[node distance = 2cm, auto]
+
+	% Place nodes
+	\node [module] (BaseOpt) {BaseOpt};
+	\node [io, left of=BaseOpt, text width = 1cm] (BaseOptInit) {ft, \\ solver};
+	\node [module, right of=BaseOpt, node distance=4cm] (simulate) {BaseOpt.simulated\_data};
+	\node [io, right of=simulate, node distance=4.5cm] (simdata) {simulated data};
+	\node [module, below of=BaseOpt, node distance=4cm] (fit) {BaseOpt.fit};
+    \node [algo, right of=fit] (LLY) {LLY};
+    \node [algo, below of=LLY, node distance=2cm] (EM) {EM};
+    \node [module, right of=LLY] (filter) {Filter};
+    \node [module, above of=filter, node distance=2cm] (filterlly) {Filter.get\_LL};
+    \node [module, below of=filter, node distance=2cm] (smoother) {Smoother};
+    \node [module, below of=smoother, node distance=2cm] (G) {Smoother.G};
+	\node [module, below of=fit, node distance=7cm] (predict) {BaseOpt.predict};
+	\node [io, left of=predict, text width = 1cm] (testDf) {test \\ data};
+	\node [io, left of=fit, text width = 1.5cm] (trainDf) {training \\ data};
+	\node [io, right of=predict, node distance=4cm] (predDf) {predicted data};
+
+	% Draw edges
+	\path [line] (BaseOptInit) -- (BaseOpt);
+	\path [line] (BaseOpt) -- (simulate);
+	\path [line] (simulate) -- (simdata);
+	\path [line] (BaseOpt) -- (fit);
+	\path [line] (fit) -- (LLY);
+	\path [line] (fit) -- (EM);
+	\path [line, dashed] (LLY) -- (filter);
+	\path [line, dashed] (filter) -- (filterlly);
+	\path [line, dashed] (filterlly) -- (LLY);
+	\path [line] (EM) -- (filter);
+	\path [line] (filter) -- (smoother);
+	\path [line] (smoother) -- (G);
+	\path [line, dashed, transform canvas={xshift=4pt}] (G) -- (EM);
+    \path [line, dashed, transform canvas={xshift=-2pt}] (EM) -- (G);
+	\path [line] (fit) -- (predict);
+	\path [line] (testDf) -- (predict);
+	\path [line] (trainDf) -- (fit);
+	\path [line] (predict) -- (predDf);
+\end{tikzpicture}
+    \caption{High level design of \texttt{linkalman}. Green blocks are I/O components, purple blocks are modules and methods, and red circles are optimizer options. Solid lines indicate the order of model execution. Dotted lines indicate the modules/functions directly involved in numerical optimization.} 
+    \label{fig:design}
+\end{figure}
+
+The third principle of \texttt{linkalman} is numerical performance. Although \texttt{linkalman} is not designed to be the fastest solver for any specific type of problems, it nevertheless strives to achieve numerical robustness and computational efficiency\footnote{The effort in boosting performance is mostly algorithmic, so there is still room for improvement from the programming perspective.}. First of all, I use both Joseph Representation and nearest positive semi-definite matrix technique to ensure positive semi-definiteness of covariance matrices. Secondly, I use sequential filtering and smoothing to further reduce the computational burden from matrix inverse.  
+
+\subsection{Key Modules and Functions}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \section{Kalman Filter} \label{sec:filter}
 \subsection{Filtering with Known Initial Conditions}
@@ -562,10 +650,10 @@ Quite often we would like to know the smoothed value of missing measurements (e.
         \left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)P_{t|T}\left(H_t^{(2)}-\mathcal{B}_tH_t^{(1)}\right)^{'} \label{eq:smoothed_y2_cov}
 \end{align}
 
-Using equation (\ref{eq:smoothed_y1_mean}) through (\ref{eq:smoothed_y2_cov}). We have the smoothed distribution of missing measurements. It is worth noting that when all measurements at time $t$ are missing, equation (\ref{eq:smoothed_y2_mean}) and (\ref{eq:smoothed_y2_cov}) becomes:
+Using equation (\ref{eq:smoothed_y1_mean}) through (\ref{eq:smoothed_y2_cov}). We have the smoothed distribution of missing measurements. Note that in practice, I restore the index of smoothed estimates of $y_t$ to their original order. It is also worth noting that when all measurements at time $t$ are missing, equation (\ref{eq:smoothed_y2_mean}) and (\ref{eq:smoothed_y2_cov}) becomes:
 \begin{align*}
-    E(y_t^{(2)}|Y_t^{(1)}) &= H_t^{(2)}\hat{\xi}_{t|T} + D_t^{(2)}x_t \\
-    Var(y_t^{(2)}|Y_t^{(1)}) &= R_t^{(2, 2)} + H_t^{(2)}P_{t|T}H_t^{(2)'} 
+    E(y_t^{(2)}|Y_t^{(1)}) &= H_t\hat{\xi}_{t|T} + D_tx_t \\
+    Var(y_t^{(2)}|Y_t^{(1)}) &= R_t + H_tP_{t|T}H_t^{'} 
 \end{align*}
 
 \section{Parameter Estimation} \label{sec:param}

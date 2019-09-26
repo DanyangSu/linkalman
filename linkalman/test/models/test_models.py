@@ -24,8 +24,8 @@ def test_ft_kwargs_flow(scipy_solver, f_ar1, df_Y):
     expected_xi_1_0 = 10
     expected_P_1_0 = 4
     
-    assert expected_xi_1_0 == df_out.loc[0, 'xi0_filtered'] 
-    assert expected_P_1_0 == df_out.loc[0, 'P0_filtered']
+    assert expected_xi_1_0 == df_out.loc[0, 'xi_0_filtered'] 
+    assert expected_P_1_0 == df_out.loc[0, 'P_0_filtered']
 
 
 # Test model.simulated_data
@@ -145,8 +145,8 @@ def test_init_override(scipy_solver, f_ar1, df_Y):
     # Test predict values
     expected_xi_1_0 = 60
     expected_P_1_0 = 9
-    assert expected_xi_1_0 == df_out.loc[0, 'xi0_filtered'] 
-    assert expected_P_1_0 == df_out.loc[0, 'P0_filtered']
+    assert expected_xi_1_0 == df_out.loc[0, 'xi_0_filtered'] 
+    assert expected_P_1_0 == df_out.loc[0, 'P_0_filtered']
 
 
 # Test if breakppoint mechanism works
@@ -171,8 +171,8 @@ def test_break_point(scipy_solver, f_ar1, df_Y):
     df_out1 = model.predict(df_Y)
     df_out2 = model.predict_t(df_test, t_index=-1)
 
-    result1 = df_out1.loc[len_df - 1, 'xi0_filtered']
-    result2 = df_out2.loc[len_df - 1, 'xi0_filtered']
+    result1 = df_out1.loc[len_df - 1, 'xi_0_filtered']
+    result2 = df_out2.loc[len_df - 1, 'xi_0_filtered']
     
     assert result1 == result2
     

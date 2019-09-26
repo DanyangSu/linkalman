@@ -487,21 +487,21 @@ class Filter(object):
 
         for t in range(self.T):
             # Get filtered y_t
-            yt_f = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
+            Yt_filtered[t] = Mt['Ht'][t].dot(self.xi_t[t][0]) + \
                     Mt['Dt'][t].dot(self.Xt[t])
-            Yt_filtered[t] = yt_f
 
-            # Get standard error of filtered y_t
+            # Get variance of filtered y_t
             if t >= self.t_q:
-                yt_error_var = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
+                Yt_filtered_cov[t] = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
                         Mt['Ht'][t].T) + Mt['Rt'][t]
-                Yt_filtered_cov[t] = yt_error_var
 
             # Get xi if needed
             if is_xi:
                 xi_t[t] = self.xi_t[t][0][xi_col]
                 if t >= self.t_q:
                     P_t[t] = self.P_star_t[t][0][xi_col][:, xi_col]
+                else:
+                    P_t[t] = np.nan * np.ones(self.P_star_t[t][0].shape)
             
         return Yt_filtered, Yt_filtered_cov, xi_t, P_t
 

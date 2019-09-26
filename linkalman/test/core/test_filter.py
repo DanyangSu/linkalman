@@ -557,7 +557,7 @@ def test_get_filtered_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
 
     Yt_filtered, Yt_filtered_cov, xi_t, P_t = kf.get_filtered_val()
     np.testing.assert_array_equal(xi_t[2], kf.xi_t[2][0])
-    np.testing.assert_array_equal(P_t[2], [None])
+    np.testing.assert_array_equal(P_t[2], np.nan * np.ones(P_t[2].shape))
     np.testing.assert_array_equal(P_t[3], kf.P_star_t[3][0])
 
 
@@ -571,7 +571,7 @@ def test_get_filtered_y_selected_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
 
     Yt_filtered, Yt_filtered_cov, xi_t, P_t = kf.get_filtered_val(xi_col=[1])
     np.testing.assert_array_equal(xi_t[2], kf.xi_t[2][0][[1]])
-    np.testing.assert_array_equal(P_t[2], [None])
+    np.testing.assert_array_equal(P_t[2], np.nan * np.ones(P_t[2].shape))
     np.testing.assert_array_equal(P_t[3], kf.P_star_t[3][0][[1]][:,[1]])
 
 

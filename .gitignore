@@ -7,3 +7,4 @@ linkalman.egg-info
 
 !theory.tex
 !ref.bib
+.ipynb*
