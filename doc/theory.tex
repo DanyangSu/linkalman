@@ -29,14 +29,15 @@
 \tikzstyle{io} = [rectangle, draw, fill=green!20,
 	minimum width=5em, text centered, rounded corners,
 	minimum height=3em, node distance=3cm]
-\tikzstyle{module} = [rectangle, draw, fill=blue!20,
+\tikzstyle{method} = [rectangle, draw, fill=blue!20,
+	minimum width=5em, text centered, rounded corners,
+	minimum height=3em,node distance=3cm]
+\tikzstyle{module} = [rectangle, draw, fill=darkgray!20,
 	minimum width=5em, text centered, rounded corners,
 	minimum height=3em,node distance=3cm]
 \tikzstyle{line} = [draw, -latex']
 \tikzstyle{algo} = [draw, ellipse, fill=red!20, node distance=3cm,
 	minimum height=2em]
-
-% \counterwithin{figure}{section}
 
 
 \title{User's Manual of \texttt{linkalman}}
@@ -45,6 +46,10 @@
 \pagenumbering{gobble}
 \maketitle
 \thispagestyle{empty}
+\newpage
+\pagenumbering{roman}
+\thispagestyle{empty}
+\centerline{To my family}
 \clearpage
 \pagenumbering{arabic}
 \tableofcontents
@@ -63,9 +68,9 @@
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-It is noteworthy that \texttt{linkalman} is designed for linear state space problems with Gaussian errors. Therefore, it is not suitable for generalized non-linear state space problem, nor does it directly solve problems with unpredictable shifting in system dynamics (e.g. vehicle maneuver). The suitable solutions are particle filters and adaptive Kalman filters, respectively.
+It is noteworthy that \texttt{linkalman} is designed for linear state space problems with Gaussian errors and predetermined system dynamics. Therefore, it is not suitable for generalized non-linear state space problem, nor does it directly solve problems with unpredictable shifting in system dynamics (e.g. vehicle maneuver). The suitable solutions are particle filters and adaptive Kalman filters, respectively. In addition, \texttt{linkalman} is not optimized for any particular type of problems that are more easily solved with specialized algorithms. As a result, \texttt{linkalman} is most suitable for problems with moderate-sized data but complex problems. 
 
-This document is a product of my learning on Kalman filter\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section \ref{sec:model_setup} lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section \ref{sec:apply} presents some common time series examples. Section \ref{sec:codebase} discusses the package design of \texttt{linkalman}. The rest of the document provides the technical details of algorithms related to \texttt{linkalman}. Section \ref{sec:filter} and \ref{sec:smoother} provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section \ref{sec:param} concludes with a discussion of numerical methods and EM algorithms to estimate underlying parameters of a BSTS model. 
+This user manual is a product of my learning on Kalman filters\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section \ref{sec:model_setup} lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section \ref{sec:apply} presents some common time series examples. Section \ref{sec:codebase} discusses the package design of \texttt{linkalman}. The rest of the document provides the technical details of algorithms related to \texttt{linkalman}. Section \ref{sec:filter} and \ref{sec:smoother} provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section \ref{sec:param} concludes with a discussion of numerical methods and EM algorithms to estimate underlying parameters of a BSTS model. 
 
 \section{Model Setup} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -82,20 +87,92 @@ Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a BSTS mod
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$.
 
 \section{Examples} \label{sec:apply}
+In this section, I discuss some popular models in time series analysis. It is noteworthy that while a model may be defined in many ways, estimation of a model converges faster when the model is identifiable (i.e. there is no flat regions in likelihood functions near true parameters). In addition, one can also boost the model performance by imposing the correct specification. For example, if we know a process is AR(1), we may impose the transition parameter to take values between $0$ and $1$. Another technique to reduce the number of parameters is to use concentrated likelihood functions, but that generally involves calculating first order conditions. Alternatively, we may use sample statistics to directly infer system dynamics. For ARMA(p, q) process, we may use observed sample average to estimate population mean ($D$) directly, without having to reply on optimizers to estimate the value. Finally, it is always a good idea to add more data to the model so that the objective function is smoother; on-gradient optimizers are very slow if there are many parameters with little data. To achieve better performance, one should carefully design their model and refer to literatures when necessary.
+
 \subsection{AR(p)}
-Note that in order to get the state space equivalence of AR(1) model, one should set $H_t=1$ and $R_t=0$
+An AR(p) process is defined as:
+\begin{align*}
+    y_t-\mu = \phi_1(y_{t-1}-\mu) + \phi_2(y_{t-2}-\mu) + ... + \phi_p(y_{t-p}-\mu) + \varepsilon_t
+\end{align*}
 
-\subsection{ARMA(p,q)}
-In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem. 
+Writing it as a state space model, we have:
+\begin{align*}
+    F = \begin{pmatrix}
+        \phi_1 & \phi_2 & \cdots & \phi_{p-1} & \phi_p \\
+        1 & 0 & \cdots & 0 & 0 \\
+        0 & 1 & \cdots & 0 & 0 \\
+        0 & 0 & \cdots & 0 & 0 \\
+        \vdots & \vdots & \vdots & \vdots & \vdots \\
+        0 & 0 & \cdots & 1 & 0
+    \end{pmatrix}, 
+    &\ 
+    Q = \begin{pmatrix}
+        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        0 & 0 & \cdots & 0 \\
+        \vdots & \ddots & \ddots & \vdots \\ 
+        0 & \cdots & \cdots & 0
+    \end{pmatrix} \\ \\
+    H = \begin{pmatrix}
+        1 & 0 & \cdots & 0
+    \end{pmatrix}, 
+    &\ 
+    D = \mu, \ B = 0, \ R = 0
+\end{align*}
 
-\subsection{Random Walk}
+If initial state values are not provided, \texttt{linkalman} is able to calculate the ergodic mean and covariance. In practice, $y_t$ may not accurately measure $\xi_t$ (e.g. sample averages of sales to measure expected sales). We can also add measurement noise to the process (i.e. $R>0$). 
+
+\subsection{ARMA(p, q)}
+ARMA(p, q) is generalizes AR(p) and MA(q). Define $r \equiv max(p, q+1)$, then ARMA(p, q) is of the form:
+\begin{align*}
+    y_t-\mu =& \phi_1(y_{t-1}-\mu) + \phi_2(y_{t-2}-\mu) + ... + \phi_p(y_{t-r}-\mu) \\
+    &+ \varepsilon_{t-1} + \theta_1\varepsilon_{t-2} + ... + \theta_{r-1}\varepsilon_{t-r}
+\end{align*}
+
+Let $\phi_j=0$ for $j>p$ and $\theta_i=0$ for $i>q$, then we have a state space representation of ARMA(p, q) processes. There are multiple ways of writing an ARMA(p, q) process in to state space forms. I follow the form proposed by (\cite{hamilton_1994}) and rewrite ARMS(p, q) as:
+\begin{align*}
+    F = \begin{pmatrix}
+        \phi_1 & \phi_2 & \cdots & \phi_{r-1} & \phi_r \\
+        1 & 0 & \cdots & 0 & 0 \\
+        0 & 1 & \cdots & 0 & 0 \\
+        0 & 0 & \cdots & 0 & 0 \\
+        \vdots & \vdots & \vdots & \vdots & \vdots \\
+        0 & 0 & \cdots & 1 & 0
+    \end{pmatrix}, 
+    &\ 
+    Q = \begin{pmatrix}
+        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        0 & 0 & \cdots & 0 \\
+        \vdots & \ddots & \ddots & \vdots \\ 
+        0 & \cdots & \cdots & 0
+    \end{pmatrix} \\ \\
+    H = \begin{pmatrix}
+        1 & \theta_1 & \theta_2 & \cdots & \theta_{r-1}
+    \end{pmatrix}, 
+    &\ 
+    D = \mu, \ B = 0, \ R = 0
+\end{align*}
+
+Effectively, $F$ and $Q$ define the following process:
+\begin{align*}
+    (1-\phi_1L - \phi_2L^2 - ... - \phi_rL^r)\xi_{t,1} = \varepsilon_{t-1}
+\end{align*}
+where $\xi_{t, 1}$ is the first element of $\xi_{t}$. $H$ defines the following process:
+\begin{align*}
+    y_t - \mu = (1+\theta_1L+\theta_2L^2 + ... + \theta_{r-1}L^{r-1})\xi_{t}
+\end{align*}
+
+Combining the two together, we have the conventional representation of ARMA(p, q):
+\begin{align*}
+    &(1-\phi_1L - \phi_2L^2 - ... - \phi_rL^r)(y_t - \mu) \\
+    =&(1+\theta_1L+\theta_2L^2 + ... + \theta_{r-1}L^{r-1})\varepsilon_{t-1}
+\end{align*}
 
 \subsection{Local Level Model}
 
 \subsection{Cyclical Model}
 Talk about using sin and use discrete state variables for cyclical models
 
-\subsection{Measuring Treatment Effects}
+\subsection{Counterfactuals}
 
 \subsection{A Comprehensive BSTS Model}
 In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
@@ -244,7 +321,6 @@ To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS fr
 The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
 
 \section{\texttt{linkalman} Design} \label{sec:codebase}
-\subsection{Codebase Design}
 The first principle of \texttt{linkalman} is flexibility. I design \texttt{linkalman} such that it may be used for a wide variety of BSTS models. With minimal I/O restriction, users may write their customized system dynamics function, as well as plug-in solver function for additional flexibility. \texttt{linkalman} also features flexibility in data inputs. It is capable of handling both completely and partially missing measurements, which are common for real world data. In addition, whereas many other packages use approximation approach to handle unknown initial values, \texttt{linkalman} provides the rigorous diffuse filter/smoother techniques, but also gives users the option to feed in customized initial state values. 
 
 The second principle of \texttt{linkalman} is modularity. At the fundamental level, this user's manual documents all the technical details that other people may refer to in building their own customized systems, for example, in \texttt{C++} for better performance. The structure of the package also makes it easier to invoke part of the modules without relying on others. The building blocks are \texttt{Filter}, which produces states estimates of a time series given system matrices. It is used by the direct likelihood methods (LLY) for parameter estimation. The \texttt{Smoother} module takes a fitted \texttt{Filter} object as an argument and produces smoothed estimates and the objective function used by EM algorithm (EM). For \texttt{linkalman} to handle flexible system dynamics and missing data, I limit the solver choices to non-gradient based algorithms, which inevitably slow down the optimization in cases where gradients can be easily computed (e.g. AR(1) processes). Therefore, users may only use the \texttt{Filter} or \texttt{Smoother} modules without invoking the entire \text{BaseOpt} module, the primary model solver of \texttt{linkalman}. For example, if we have fully observed data and models with only unknown variances in noises, we are able to derive analytical score matrices from smoother outputs to greatly boost performance of EM algorithm as well as direct likelihood methods. Figure (\ref{fig:design}) shows the architecture of \texttt{linkalman}, which shows separability between the \texttt{BaseOpt} module and \texttt{Filter}/\texttt{Smoother} modules it calls. 
@@ -256,16 +332,18 @@ The second principle of \texttt{linkalman} is modularity. At the fundamental lev
 	% Place nodes
 	\node [module] (BaseOpt) {BaseOpt};
 	\node [io, left of=BaseOpt, text width = 1cm] (BaseOptInit) {ft, \\ solver};
-	\node [module, right of=BaseOpt, node distance=4cm] (simulate) {BaseOpt.simulated\_data};
+	\node [method, right of=BaseOpt, node distance=4cm] (simulate) {BaseOpt.simulated\_data};
 	\node [io, right of=simulate, node distance=4.5cm] (simdata) {simulated data};
-	\node [module, below of=BaseOpt, node distance=4cm] (fit) {BaseOpt.fit};
+	\node [method, below of=BaseOpt, node distance=4cm] (fit) {BaseOpt.fit};
     \node [algo, right of=fit] (LLY) {LLY};
     \node [algo, below of=LLY, node distance=2cm] (EM) {EM};
     \node [module, right of=LLY] (filter) {Filter};
-    \node [module, above of=filter, node distance=2cm] (filterlly) {Filter.get\_LL};
+    \node [method, above of=filter, node distance=2cm] (filterlly) {Filter.get\_LL};
+    \node [method, right of=filter, node distance=3cm] (filterfit) {Filter.fit};
     \node [module, below of=filter, node distance=2cm] (smoother) {Smoother};
-    \node [module, below of=smoother, node distance=2cm] (G) {Smoother.G};
-	\node [module, below of=fit, node distance=7cm] (predict) {BaseOpt.predict};
+    \node [method, right of=smoother, node distance=3cm] (smootherfit) {Smoother.fit};
+    \node [method, below of=smoother, node distance=2cm] (G) {Smoother.G};
+	\node [method, below of=fit, node distance=6cm] (predict) {BaseOpt.predict};
 	\node [io, left of=predict, text width = 1cm] (testDf) {test \\ data};
 	\node [io, left of=fit, text width = 1.5cm] (trainDf) {training \\ data};
 	\node [io, right of=predict, node distance=4cm] (predDf) {predicted data};
@@ -281,8 +359,10 @@ The second principle of \texttt{linkalman} is modularity. At the fundamental lev
 	\path [line, dashed] (filter) -- (filterlly);
 	\path [line, dashed] (filterlly) -- (LLY);
 	\path [line] (EM) -- (filter);
-	\path [line] (filter) -- (smoother);
-	\path [line] (smoother) -- (G);
+	\path [line] (filter) -- (filterfit);
+	\path [line] (filterfit) -- (smoother);
+	\path [line] (smoother) -- (smootherfit);
+	\path [line] (smootherfit) -- (G);
 	\path [line, dashed, transform canvas={xshift=4pt}] (G) -- (EM);
     \path [line, dashed, transform canvas={xshift=-2pt}] (EM) -- (G);
 	\path [line] (fit) -- (predict);
@@ -290,32 +370,11 @@ The second principle of \texttt{linkalman} is modularity. At the fundamental lev
 	\path [line] (trainDf) -- (fit);
 	\path [line] (predict) -- (predDf);
 \end{tikzpicture}
-    \caption{High level design of \texttt{linkalman}. Green blocks are I/O components, purple blocks are modules and methods, and red circles are optimizer options. Solid lines indicate the order of model execution. Dotted lines indicate the modules/functions directly involved in numerical optimization.} 
+    \caption{High level design of \texttt{linkalman}. Green blocks are I/O components, gray blocks are modules, purple blocks are class methods, and red circles are optimizer options. Solid lines indicate the order of model execution. Dotted lines indicate the modules/functions directly involved in numerical optimization.} 
     \label{fig:design}
 \end{figure}
 
-The third principle of \texttt{linkalman} is numerical performance. Although \texttt{linkalman} is not designed to be the fastest solver for any specific type of problems, it nevertheless strives to achieve numerical robustness and computational efficiency\footnote{The effort in boosting performance is mostly algorithmic, so there is still room for improvement from the programming perspective.}. First of all, I use both Joseph Representation and nearest positive semi-definite matrix technique to ensure positive semi-definiteness of covariance matrices. Secondly, I use sequential filtering and smoothing to further reduce the computational burden from matrix inverse.  
-
-\subsection{Key Modules and Functions}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+The third principle of \texttt{linkalman} is numerical performance. Although \texttt{linkalman} is not designed to be the fastest solver for any specific type of problems, it nevertheless strives to achieve numerical robustness and computational efficiency\footnote{The effort in boosting performance is mostly algorithmic, so there is still ample room for improvement from the programming perspective. For example, the computationally heavy filter updating methods can be written in \texttt{Cython}.}. First of all, I use both Joseph Representation and nearest positive semi-definite matrix technique to ensure positive semi-definiteness of covariance matrices. Secondly, I use sequential filtering and smoothing to further reduce the computational burden from matrix inverse.  
 
 \section{Kalman Filter} \label{sec:filter}
 \subsection{Filtering with Known Initial Conditions}
@@ -664,9 +723,9 @@ If we are dealing with a BSTS model with constant system matrices, and $P_{1|0}$
 \begin{align}
     FP_{1|0}F^{'} + Q = P_{1|0} \label{eq:lyap}
 \end{align}
-where $F$ is $F_t$ without the time subscript $t$. I use \texttt{scipy.linalg.solve\_discrete\_lyapunov} function to find $P_{1|0}$. If there is at least one unit root for $F$, the resulting $P_{1|0}$ will have very large values along the diagonal axis at indices that we may treat as diffuse states. 
+where $F$ is $F_t$ without the time subscript $t$. I use \texttt{scipy.linalg.solve\_discrete\_lyapunov} function to find $P_{1|0}$. If there is at least one unit root for $F$, the resulting $P_{1|0}$ will have very large values along the diagonal axis at indices that we may treat as diffuse states. $Q$ is the assumed to be common error covariance matrix for state transition errors up to$t=0$\footnote{If $Q_t$ or any system matrix related to state transitioning is not constant or unknown, we should use diffuse initialization for these states.}. It is important to keep $Q$ a positive semi-definite\footnote{There are several techniques to ensure both uniqueness and unboundedness in parametrizing $Q$. \texttt{linkalman} uses the Cholesky decomposition technique described in (\cite{pinheiro1996unconstrained}), which also outlines several alternative approaches.}, or we have pathological systems. 
 
-In addition, we may run into BSTS models with explosive roots (i.e. eigenvalues of $F$ are greater than one), equation (\ref{eq:lyap}) still generate a finite (but unstable) $P_{1|0}$ and fails to detect the diffuse state. In such cases, I use techniques in graph theory and first partition $F$ into several strongly connected components\footnote{I use the \texttt{networkx} package to find such components.}. I then calculate the largest eigenvalue in each component, and label these states as diffuse by setting a very large value on the corresponding diagonal values of $F$. Now the explosive states are properly marked, so solving a Lyapunov Equation will produce the correction partition between the diffuse component and the ergodic component of $P_{1|0}$.
+In addition, we may run into BSTS models with explosive roots (i.e. eigenvalues of $F$ are greater than one), equation (\ref{eq:lyap}) still generate a finite (but unstable) $P_{1|0}$ and fails to detect the diffuse state. In such cases, I use techniques in graph theory and first partition $F$ into several strongly connected components\footnote{I use the \texttt{networkx} package to find such components.}. I then calculate the largest eigenvalue in each component, and label these states as diffuse by setting a very large value on the corresponding diagonal values of $F$. Now the explosive states are properly marked, so solving a Lyapunov Equation will produce the correction partition between the diffuse component and the ergodic component of $P_{1|0}$. Note, however, that the assumption of marginal likelihood correction may be violated\footnote{See (\cite{francke_etal_2010}) for details.}. It is advised that users provide sensible estimates for the initial state.
 
 The solution for $\hat{\xi}_{1|0}$ is easier to obtain. Consider the following:
 \begin{align*}

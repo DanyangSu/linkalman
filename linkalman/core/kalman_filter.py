@@ -1,10 +1,11 @@
 import numpy as np
 from typing import List, Any, Callable, Tuple, Dict
 import scipy
+import scipy.linalg as linalg
 from copy import deepcopy 
 from .utils import mask_nan, LL_correct, M_wrap, Constant_M, \
-        min_val, pdet, check_consistence, get_init_mat, permute, \
-        partition_index, gen_Xt, preallocate
+        min_val, max_val, pdet, check_consistence, get_init_mat, \
+        permute, partition_index, gen_Xt, preallocate
 
 __all__ = ['Filter']
 
@@ -66,6 +67,7 @@ class Filter(object):
         self.n_t = None
         self.xi_T1 = None
         self.P_T1 = None
+        self.explosive = False  # default to be non-explosive
 
         # Create output matrices
         self.xi_1_0 = None
@@ -128,8 +130,13 @@ class Filter(object):
         self.xi_1_0 = Mt['xi_1_0']
         self.P_1_0 = Mt['P_1_0']
 
+        # Check whether BSTS has explosive states
+        eig = linalg.eigvals(self.Ft[0])
+        self.explosive = np.any(np.abs(eig) > 1 + min_val)
+
         # Collect initialization information
-        self.q, self.A, self.Pi, self.P_star = get_init_mat(self.P_1_0)
+        self.q, self.A, self.Pi, self.P_star = \
+                get_init_mat(self.P_1_0)
 
         # If init_state is provided, override
         if init_state is not None:
@@ -137,6 +144,8 @@ class Filter(object):
             self.A = init_state.get('P_inf_t', self.A)
             self.P_star = init_state.get('P_star_t')
             self.xi_1_0 = init_state.get('xi_t', self.xi_1_0)
+            self.explosive = init_state.get('explosive', 
+                    self.explosive)
 
         # Initialize xi_1_0 and  P_1_0
         self.xi_t = preallocate(self.T, self.y_length + 1)
@@ -442,9 +451,12 @@ class Filter(object):
                 for i in range(self.n_t[t]):
                     LL += np.log(Upsilon_star[i]) + (
                             d_t[i].T).dot(d_t[i]) / Upsilon_star[i]
+
+        # Add marginal correction term if not explosive
+        if (not self.explosive) and self.t_q > 0:
+            LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, 
+                self.n_t, self.A)))
         
-        # Add marginal correction term
-        LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, self.n_t, self.A)))
         return -LL.item()
 
 
@@ -494,6 +506,8 @@ class Filter(object):
             if t >= self.t_q:
                 Yt_filtered_cov[t] = Mt['Ht'][t].dot(self.P_star_t[t][0]).dot(
                         Mt['Ht'][t].T) + Mt['Rt'][t]
+            else:
+                Yt_filtered_cov[t] = np.nan * np.ones([self.y_length, self.y_length])
 
             # Get xi if needed
             if is_xi:

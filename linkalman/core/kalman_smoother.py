@@ -349,8 +349,12 @@ class Smoother(object):
                 G2 += np.log(pdet(R_t)) + scipy.trace(inv(
                         R_t).dot(self._E_chi2(Mt, t)))
         
-        G = G1 + G2 - np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'], \
-                self.n_t, A, index=self.partition_index)))
+        G = G1 + G2
+
+        # Only use marginal correction if non-explosive diffuse
+        if (not self.explosive) and self.t_q > 0:
+            G -= np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'], \
+                    self.n_t, A, index=self.partition_index)))
 
         return -G.item()
 
@@ -436,10 +440,11 @@ class Smoother(object):
             H1 = self.Ht[t][:n_t]
             H2 = self.Ht[t][n_t:]
             D1 = self.Dt[t][:n_t]
+            D2 = self.Dt[t][n_t:]
 
             # Get mean
             epsilon = y1_t_T - H1.dot(self.xi_t_T[t]) - D1.dot(self.Xt[t])
-            y2_t_T = B.dot(epsilon)
+            y2_t_T = H2.dot(self.xi_t_T[t]) + D2.dot(self.Xt[t]) + B.dot(epsilon)
             y_t_T_permute = np.concatenate((y1_t_T, y2_t_T), axis=0) 
 
             # Get covariance

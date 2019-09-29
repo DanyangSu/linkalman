@@ -83,9 +83,10 @@ def get_diag(arrays: List[np.ndarray]) -> List[np.ndarray]:
     ----------
     diag_arrays : list of N x 1 arrays with diagonal values only
     """
-    diag_arrays = []
-    for i in arrays:
-        diag_arrays.append(np.diag(i).reshape(-1, 1))
+    len_array = len(arrays)
+    diag_arrays = preallocate(len_array)
+    for i in range(len_array):
+        diag_arrays[i] = np.diag(arrays[i]).reshape(-1, 1)
     
     return diag_arrays
     
@@ -428,7 +429,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
 
     Parameters: 
     ----------
-    Ft : ft(theta,T) that returns [Mt]_{1,...,T}
+    Ft : ft(theta, T) that returns [Mt]_{1,...,T}
     theta : argument of ft
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
@@ -528,8 +529,8 @@ def gen_PSD(theta: np.ndarray, dim: int) -> np.ndarray:
 
 
 def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
-        x_0: np.ndarray=None, force_diffuse: List[bool]=None) -> \
-                List[np.ndarray]:
+        x_0: np.ndarray=None, force_diffuse: List[bool]=None, 
+        is_warning: bool=True) -> List[np.ndarray]:
     """
     Calculate initial state covariance matrix, and identify 
     diffuse state. It effectively solves a Lyapuov equation
@@ -541,6 +542,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     B : regression matrix
     x_0 : initial x, used for calculating ergodic mean
     force_diffuse : List of booleans of user-determined diffuse state
+    is_warning : whether to show warning message
 
     Returns:
     ----------
@@ -570,10 +572,11 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     # and issue a warning
     eig = linalg.eigvals(F)
     if np.any(np.abs(eig) > 1 + min_val):
-        warnings.warn('Ft contains explosive roots. Assumptions ' + \
-                'of marginal LL correction may be violated, and ' + \
-                'results may be biased or inconsistent. Please provide ' + \
-                'user-defined xi_1_0 and P_1_0.', RuntimeWarning)
+        if is_warning:
+            warnings.warn('Ft contains explosive roots. Assumptions ' + \
+                    'of marginal LL correction may be violated, and ' + \
+                    'results may be biased or inconsistent. Please provide ' + \
+                    'user-defined xi_1_0 and P_1_0.', RuntimeWarning)
         is_diffuse_explosive = get_explosive_diffuse(F)
         is_diffuse = [a or b for a, b in zip(is_diffuse, 
             is_diffuse_explosive)]
@@ -763,7 +766,7 @@ def partition_index(is_missing: np.ndarray) -> np.ndarray:
 
 def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None, 
         xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
-        force_diffuse: List[bool]=None) -> Dict:
+        force_diffuse: List[bool]=None, is_warning: bool=True) -> Dict:
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
     Output of f(theta) must contain all the required keys.
@@ -777,6 +780,7 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
     xi_1_0 : specify initial state mean. override calculated mean
     P_1_0 : initial state cov
     force_diffuse : use-defined diffuse state
+    is_warning : whether to display the warning about explosive roots
 
     Returns:
     ----------
@@ -846,7 +850,8 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
     # Initialization
     if P_1_0 is None or xi_1_0 is None: 
         P_1_0, xi_1_0 = get_ergodic(M['F'], M['Q'], M['B'], 
-                x_0=x_0, force_diffuse=force_diffuse) 
+                x_0=x_0, force_diffuse=force_diffuse, 
+                is_warning=is_warning) 
     Mt = {'Ft': Ft, 
             'Bt': Bt, 
             'Ht': Ht, 

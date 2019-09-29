@@ -5,6 +5,7 @@ import pandas as pd
 from linkalman.core import Filter, Smoother
 from copy import deepcopy
 from linkalman.core.utils import *
+from linkalman.models import BaseConstantModel as BCM
 
 
 # Test _E_delta2
@@ -66,3 +67,58 @@ def test_E_chi2(ft_ll_mvar_diffuse,
     e_chi2 = e_chi.dot(e_chi.T) + Ht.dot(ks.P_t_T[t]).dot(Ht.T)
     np.testing.assert_array_equal(e_chi2, chi2)
 
+
+# Test Filter.get_LL
+def test_get_LL_explosive_root(f_arma32):
+    """
+    Test how to handle explosive root in Filter
+    """
+    # Initialize the model
+    x = 1  # used to calculate stationary mean
+    model = BCM()
+    model.set_f(f_arma32)
+    theta_intend = np.array([0.1, 0.2, 0.25])
+    theta_test = np.array([0.59358299, 0.91708496, 0.54634604])
+    T = 250
+    my_ft = lambda theta,T, **kwargs: ft(theta, f_arma32, T, **kwargs)
+    x_col = ['const']
+    Xt = pd.DataFrame({x_col[0]: x * np.ones(T)})
+
+    # Build simulated data
+    df, y_col, xi_col = model.simulated_data(
+            input_theta=theta_intend, Xt=Xt)
+    Xt = df_to_list(df, x_col)
+    Yt = df_to_list(df, y_col)
+    kf = Filter(my_ft)
+    kf.fit(theta_test, Yt, Xt)
+    result = kf.get_LL()
+    assert not np.isnan(result)
+
+
+# Test Smoother.G
+def test_G_explosive_root(f_arma32):
+    """
+    Test how to handle explosive root in Smoother
+    """
+    # Initialize the model
+    x = 1  # used to calculate stationary mean
+    model = BCM()
+    model.set_f(f_arma32)
+    theta_intend = np.array([0.1, 0.2, 0.25])
+    theta_test = np.array([0.59358299, 0.91708496, 0.54634604])
+    T = 250
+    my_ft = lambda theta,T, **kwargs: ft(theta, f_arma32, T, **kwargs)
+    x_col = ['const']
+    Xt = pd.DataFrame({x_col[0]: x * np.ones(T)})
+
+    # Build simulated data
+    df, y_col, xi_col = model.simulated_data(
+            input_theta=theta_intend, Xt=Xt)
+    Xt = df_to_list(df, x_col)
+    Yt = df_to_list(df, y_col)
+    kf = Filter(my_ft, for_smoother=True)
+    kf.fit(theta_test, Yt, Xt)
+    ks = Smoother()
+    ks.fit(kf)
+    result = ks.G(theta_test)
+    assert not np.isnan(result)
