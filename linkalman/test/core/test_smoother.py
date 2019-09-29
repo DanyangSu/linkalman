@@ -463,12 +463,15 @@ def test_get_smoothed_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     Rt = Mt['Rt'][0]
     Dt = Mt['Dt'][0]
     Ht = Mt['Ht'][0]
+
     # Test smoothed y
     R2_0 = np.array([[0.5 - 0.4 / 0.6 * 0.4]])
     B0 = 0.4 / 0.6
     delta_H0 = Ht[0:1] - B0 * Ht[1:]
     eps0 = B0 * (Yt_mvar_diffuse_missing[0][1] - 
             Dt[1:].dot(ks.Xt[0]) - Ht[1:].dot(ks.xi_t_T[0]))
+    y0 = Ht[0:1].dot(ks.xi_t_T[0]) + Dt[0:1].dot(ks.Xt[0]) + eps0
+
     yP_0 = (delta_H0.dot(ks.P_t_T[0]).dot(delta_H0.T) + R2_0).item()
 
     R2_2 = np.array([[0.6 - 0.4 / 0.5 * 0.4]])
@@ -476,10 +479,11 @@ def test_get_smoothed_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     delta_H2 = Ht[1] - B2 * Ht[0]
     eps2 = B2 * (Yt_mvar_diffuse_missing[2][0] - 
             Dt[:1].dot(ks.Xt[2]) - Ht[:1].dot(ks.xi_t_T[2]))
+    y2 = Ht[1:].dot(ks.xi_t_T[2]) + Dt[1:].dot(ks.Xt[2]) + eps2
     yP_2 = (delta_H2.dot(ks.P_t_T[2]).dot(delta_H2.T) + R2_2).item()
-    expected_y_t_T = [np.array([[eps0], [2]]),
+    expected_y_t_T = [np.array([[y0], [2]]),
             Ht.dot(ks.xi_t_T[1] + Dt.dot(ks.Xt[1])),
-            np.array([[2.5], [eps2]]), 
+            np.array([[2.5], [y2]]), 
             np.array([[3], [5]])]
     expected_Pcov_T = [np.array([[yP_0, 0], [0, 0]]),
             ks.Ht[1].dot(ks.P_t_T[1]).dot(ks.Ht[1].T) + ks.Rt[1],

@@ -87,20 +87,92 @@ Equations (\ref{eq:state_evolve}) and (\ref{eq:measure}) characterize a BSTS mod
 The subscript $t$ allows flexible model specification. For example, regression effects in time series models are placed in $B_t x_t$; an ARMA process can be modeled by $F_t\xi_t$ and $v_t$; additive outliers fit into $B_t x_t$.
 
 \section{Examples} \label{sec:apply}
+In this section, I discuss some popular models in time series analysis. It is noteworthy that while a model may be defined in many ways, estimation of a model converges faster when the model is identifiable (i.e. there is no flat regions in likelihood functions near true parameters). In addition, one can also boost the model performance by imposing the correct specification. For example, if we know a process is AR(1), we may impose the transition parameter to take values between $0$ and $1$. Another technique to reduce the number of parameters is to use concentrated likelihood functions, but that generally involves calculating first order conditions. Alternatively, we may use sample statistics to directly infer system dynamics. For ARMA(p, q) process, we may use observed sample average to estimate population mean ($D$) directly, without having to reply on optimizers to estimate the value. Finally, it is always a good idea to add more data to the model so that the objective function is smoother; on-gradient optimizers are very slow if there are many parameters with little data. To achieve better performance, one should carefully design their model and refer to literatures when necessary.
+
 \subsection{AR(p)}
-Note that in order to get the state space equivalence of AR(1) model, one should set $H_t=1$ and $R_t=0$.
+An AR(p) process is defined as:
+\begin{align*}
+    y_t-\mu = \phi_1(y_{t-1}-\mu) + \phi_2(y_{t-2}-\mu) + ... + \phi_p(y_{t-p}-\mu) + \varepsilon_t
+\end{align*}
 
-\subsection{ARMA(p,q)}
-In this subsection, I use the state-space model to solve the classic ARMA(p,q) problem. 
+Writing it as a state space model, we have:
+\begin{align*}
+    F = \begin{pmatrix}
+        \phi_1 & \phi_2 & \cdots & \phi_{p-1} & \phi_p \\
+        1 & 0 & \cdots & 0 & 0 \\
+        0 & 1 & \cdots & 0 & 0 \\
+        0 & 0 & \cdots & 0 & 0 \\
+        \vdots & \vdots & \vdots & \vdots & \vdots \\
+        0 & 0 & \cdots & 1 & 0
+    \end{pmatrix}, 
+    &\ 
+    Q = \begin{pmatrix}
+        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        0 & 0 & \cdots & 0 \\
+        \vdots & \ddots & \ddots & \vdots \\ 
+        0 & \cdots & \cdots & 0
+    \end{pmatrix} \\ \\
+    H = \begin{pmatrix}
+        1 & 0 & \cdots & 0
+    \end{pmatrix}, 
+    &\ 
+    D = \mu, \ B = 0, \ R = 0
+\end{align*}
 
-\subsection{Random Walk}
+If initial state values are not provided, \texttt{linkalman} is able to calculate the ergodic mean and covariance. In practice, $y_t$ may not accurately measure $\xi_t$ (e.g. sample averages of sales to measure expected sales). We can also add measurement noise to the process (i.e. $R>0$). 
+
+\subsection{ARMA(p, q)}
+ARMA(p, q) is generalizes AR(p) and MA(q). Define $r \equiv max(p, q+1)$, then ARMA(p, q) is of the form:
+\begin{align*}
+    y_t-\mu =& \phi_1(y_{t-1}-\mu) + \phi_2(y_{t-2}-\mu) + ... + \phi_p(y_{t-r}-\mu) \\
+    &+ \varepsilon_{t-1} + \theta_1\varepsilon_{t-2} + ... + \theta_{r-1}\varepsilon_{t-r}
+\end{align*}
+
+Let $\phi_j=0$ for $j>p$ and $\theta_i=0$ for $i>q$, then we have a state space representation of ARMA(p, q) processes. There are multiple ways of writing an ARMA(p, q) process in to state space forms. I follow the form proposed by (\cite{hamilton_1994}) and rewrite ARMS(p, q) as:
+\begin{align*}
+    F = \begin{pmatrix}
+        \phi_1 & \phi_2 & \cdots & \phi_{r-1} & \phi_r \\
+        1 & 0 & \cdots & 0 & 0 \\
+        0 & 1 & \cdots & 0 & 0 \\
+        0 & 0 & \cdots & 0 & 0 \\
+        \vdots & \vdots & \vdots & \vdots & \vdots \\
+        0 & 0 & \cdots & 1 & 0
+    \end{pmatrix}, 
+    &\ 
+    Q = \begin{pmatrix}
+        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        0 & 0 & \cdots & 0 \\
+        \vdots & \ddots & \ddots & \vdots \\ 
+        0 & \cdots & \cdots & 0
+    \end{pmatrix} \\ \\
+    H = \begin{pmatrix}
+        1 & \theta_1 & \theta_2 & \cdots & \theta_{r-1}
+    \end{pmatrix}, 
+    &\ 
+    D = \mu, \ B = 0, \ R = 0
+\end{align*}
+
+Effectively, $F$ and $Q$ define the following process:
+\begin{align*}
+    (1-\phi_1L - \phi_2L^2 - ... - \phi_rL^r)\xi_{t,1} = \varepsilon_{t-1}
+\end{align*}
+where $\xi_{t, 1}$ is the first element of $\xi_{t}$. $H$ defines the following process:
+\begin{align*}
+    y_t - \mu = (1+\theta_1L+\theta_2L^2 + ... + \theta_{r-1}L^{r-1})\xi_{t}
+\end{align*}
+
+Combining the two together, we have the conventional representation of ARMA(p, q):
+\begin{align*}
+    &(1-\phi_1L - \phi_2L^2 - ... - \phi_rL^r)(y_t - \mu) \\
+    =&(1+\theta_1L+\theta_2L^2 + ... + \theta_{r-1}L^{r-1})\varepsilon_{t-1}
+\end{align*}
 
 \subsection{Local Level Model}
 
 \subsection{Cyclical Model}
 Talk about using sin and use discrete state variables for cyclical models
 
-\subsection{Measuring Treatment Effects}
+\subsection{Counterfactuals}
 
 \subsection{A Comprehensive BSTS Model}
 In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
@@ -302,7 +374,7 @@ The second principle of \texttt{linkalman} is modularity. At the fundamental lev
     \label{fig:design}
 \end{figure}
 
-The third principle of \texttt{linkalman} is numerical performance. Although \texttt{linkalman} is not designed to be the fastest solver for any specific type of problems, it nevertheless strives to achieve numerical robustness and computational efficiency\footnote{The effort in boosting performance is mostly algorithmic, so there is still room for improvement from the programming perspective.}. First of all, I use both Joseph Representation and nearest positive semi-definite matrix technique to ensure positive semi-definiteness of covariance matrices. Secondly, I use sequential filtering and smoothing to further reduce the computational burden from matrix inverse.  
+The third principle of \texttt{linkalman} is numerical performance. Although \texttt{linkalman} is not designed to be the fastest solver for any specific type of problems, it nevertheless strives to achieve numerical robustness and computational efficiency\footnote{The effort in boosting performance is mostly algorithmic, so there is still ample room for improvement from the programming perspective. For example, the computationally heavy filter updating methods can be written in \texttt{Cython}.}. First of all, I use both Joseph Representation and nearest positive semi-definite matrix technique to ensure positive semi-definiteness of covariance matrices. Secondly, I use sequential filtering and smoothing to further reduce the computational burden from matrix inverse.  
 
 \section{Kalman Filter} \label{sec:filter}
 \subsection{Filtering with Known Initial Conditions}

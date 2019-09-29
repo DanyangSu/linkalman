@@ -94,3 +94,25 @@ def scipy_solver():
         return theta_opt, fval_opt
 
     return solver_
+
+
+@pytest.fixture()
+def f_arma32():
+    def f_(theta):
+        """
+        ARMA(3, 2) model. 
+        """
+        F = np.array([[theta[0], theta[1], theta[2]],
+        [1, 0, 0],
+        [0, 1, 0]])
+        Q = np.array([[1, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]]) 
+        R = np.array([[0]])
+        H = np.array([[1, 1.2, 1.3]])
+        D = np.array([[2]])
+        M = {'F': F, 'Q': Q, 'H': H, 'R': R, 'D': D}
+
+        return M
+
+    return f_
