@@ -4,6 +4,7 @@ manual*
 ref*
 linkalman.egg-info
 .idea*
+dist/
 
 !manual.tex
 !ref.bib
