@@ -12,13 +12,14 @@ with open(os.path.join(current_dir, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name = "linkalman", 
-    version = '0.11.4',
+    version = '0.11.5',
     author = 'Danyang Su',
     author_email = 'fnosdy@gmail.com',
     url = 'https://github.com/DanyangSu/linkalman',
     download_url = 'https://github.com/DanyangSu/linkalman/archive/v0.11.2.tar.gz',
     description = 'Flexible Linear Kalman Filter',
     long_description = long_description,
+    long_description_content_type='text/markdown',
     keywords = ['kalman', 'time series', 'signal', 'filter'],
     license = '3-clause BSD',
     packages = find_packages(),
