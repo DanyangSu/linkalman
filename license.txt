@@ -1,4 +1,4 @@
-Copyright (c) 2019-2019, Danyang Su.
+Copyright (c) 2019, Danyang Su.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
