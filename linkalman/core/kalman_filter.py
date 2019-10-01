@@ -1,11 +1,11 @@
 import numpy as np
-from typing import List, Any, Callable, Tuple, Dict
-import scipy
+from typing import List, Callable, Tuple, Dict
 import scipy.linalg as linalg
 from copy import deepcopy 
-from .utils import mask_nan, LL_correct, M_wrap, Constant_M, \
-        min_val, max_val, pdet, check_consistence, get_init_mat, \
+from .utils import mask_nan, LL_correct, M_wrap, \
+        min_val, pdet, check_consistence, get_init_mat, \
         permute, partition_index, gen_Xt, preallocate
+
 
 __all__ = ['Filter']
 
@@ -28,8 +28,8 @@ class Filter(object):
     P_t_{t-1} = Cov(xi_t|Info(t-1))
 
     where Info(t) is the information set at time t. With Gaussian
-    asusmptions on v_t and w_t, we are able to characterize the
-    distribution of the BSTS model. Refer to doc/theory.pdf for details.
+    assumptions on v_t and w_t, we are able to characterize the
+    distribution of the BSTS model. Refer to doc/manual.pdf for details.
     """
 
     def __init__(self, ft: Callable, for_smoother: bool=False, **kwargs) -> None:
@@ -79,6 +79,9 @@ class Filter(object):
         self.P_inf_t = None
         self.P_star_t = None
         self.Upsilon_inf_gt_0_t = None  # store whether Upsilon_{\inf} > 0
+        self.Pi = None
+        self.A = None
+        self.q = None
         self.t_q = 0
 
         # Create output matrices for smoothers

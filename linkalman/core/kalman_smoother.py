@@ -1,10 +1,8 @@
 import numpy as np
-from typing import List, Any, Callable, Tuple, Dict
-from copy import deepcopy
-from scipy import linalg
+from typing import List, Tuple, Dict
 import scipy
-from .utils import inv, get_nearest_PSD, min_val, permute, \
-        revert_permute, preallocate, get_init_mat, pdet, LL_correct
+from .utils import inv, get_nearest_PSD, permute, pdet, \
+        revert_permute, preallocate, get_init_mat, LL_correct
 from . import Filter
 
 __all__ = ['Smoother']
@@ -31,7 +29,7 @@ class Smoother(object):
     where Info(t) is the information set at time t, and T = max(t). 
     Using forward filtering then backward smoothing, we are able to 
     characterize the distribution of the BSTS based on the full 
-    information set up to T. Refer to doc/theory.pdf for details.
+    information set up to T. Refer to doc/manual.pdf for details.
     """
 
     def __init__(self) -> None:
@@ -114,7 +112,7 @@ class Smoother(object):
 
     def _sequential_smooth(self, t: int) -> None:
         """
-        Update Kalman Smoother at time t. Refer to doc/theory.pdf 
+        Update Kalman Smoother at time t. Refer to doc/manual.pdf
         for details on the notation of each variables.
 
         Parameters:
@@ -161,7 +159,7 @@ class Smoother(object):
 
     def _sequential_smooth_diffuse(self, t: int) -> None:
         """
-        Update diffuse Kalman Smoother at time t. Refer to doc/theory.pdf 
+        Update diffuse Kalman Smoother at time t. Refer to doc/manual.pdf
         for details on the notation of each variables.
 
         Parameters:
@@ -258,7 +256,7 @@ class Smoother(object):
 
     def _E_delta2(self, Mt: List[np.ndarray], t: int) -> np.ndarray:
         """
-        Calculated expected value of delta2. See doc/theory.pdf for details. 
+        Calculated expected value of delta2. See doc/manual.pdf for details.
 
         Parameters:
         ----------
@@ -274,7 +272,7 @@ class Smoother(object):
             delta = self.xi_t_T[t] - Mt['xi_1_0']
             delta2 = delta.dot(delta.T) + self.P_t_T[t]
 
-        # For other state, use formular derived in doc/theory.pdf Appendix E
+        # For other state, use formular derived in doc/manual.pdf Appendix E
         else:
             delta = self.xi_t_T[t] - Mt['Ft'][t-1].dot(self.xi_t_T[t-1]) - \
                     Mt['Bt'][t-1].dot(self.Xt[t-1])
@@ -287,7 +285,7 @@ class Smoother(object):
 
     def _E_chi2(self, Mt: List[np.ndarray], t: int) -> np.ndarray:
         """
-        Calculate expected value of chi2. See doc/theory.pdf for details.
+        Calculate expected value of chi2. See doc/manual.pdf for details.
 
         Parameters:
         ----------
@@ -320,7 +318,7 @@ class Smoother(object):
 
         Parameters:
         ----------
-        theta : paramters to feed in self.ft
+        theta : parameters to feed in self.ft
 
         Returns:
         G : objective value for EM algorithms
@@ -353,7 +351,7 @@ class Smoother(object):
 
         # Only use marginal correction if non-explosive diffuse
         if (not self.explosive) and self.t_q > 0:
-            G -= np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'], \
+            G -= np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'],
                     self.n_t, A, index=self.partition_index)))
 
         return -G.item()
@@ -362,7 +360,7 @@ class Smoother(object):
     def get_smoothed_val(self, is_xi: bool=True, xi_col: List[int]=None) \
             -> List[np.ndarray]:
         """
-        Generated smoothed xi. If state is diffusal, 
+        Generated smoothed xi. If state is diffuse,
         no covariance for Yt. Use xi_col to include 
         only the important xi. 
 
