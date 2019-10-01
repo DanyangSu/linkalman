@@ -22,7 +22,7 @@ setup(
         'pandas',
         'networkx'
         ],
-    classifers = [
+    classifiers = [
         'Development Status :: 3 - Alpha',
         'License :: BSD 3',
         'Programming Language :: Python :: 3.7'
