@@ -14,7 +14,7 @@ setup(
     download_url = 'https://github.com/DanyangSu/linkalman/archive/v0.11.2.tar.gz',
     description = 'Flexible Linear Kalman Filter',
     keywords = ['kalman', 'time series', 'signal', 'filter'],
-    license = 'BSD 3',
+    license = '3-clause BSD',
     packages = find_packages(),
     install_requires = [
         'numpy',
@@ -24,7 +24,7 @@ setup(
         ],
     classifiers = [
         'Development Status :: 3 - Alpha',
-        'License :: BSD 3',
+        'License :: 3-clause BSD',
         'Programming Language :: Python :: 3.7'
         ]
     )
