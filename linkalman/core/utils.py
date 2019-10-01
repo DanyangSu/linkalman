@@ -19,9 +19,9 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'get_nearest_PSD', 'Constant_M']
 
 
-max_val = 1e8  # detect infinity
+max_val = 1e6  # Smaller value identifies diffuse better
 inf_val = 1e50  # value used to indicate infinity
-min_val = 1e-8  # detect 0
+min_val = 1e-7  # detect 0
     
 
 def mask_nan(is_nan: np.ndarray, mat: np.ndarray, 
@@ -115,7 +115,7 @@ def inv(h_array: np.ndarray) -> np.ndarray:
 def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
     """
     If contains explosive roots, find strongly
-    connected components. Check eigen values for
+    connected components. Check eigenvalues for
     each component submatrix, set large number to
     the ones with large component and run through 
     Lyapunov solver again to identify all the explosive
@@ -133,7 +133,7 @@ def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
     nonzeros = np.nonzero(F)
     index_ = list(zip(nonzeros[1], nonzeros[0]))
     
-    # Calculate stronly connected components (scc)
+    # Calculate strongly connected components (scc)
     DG = nx.DiGraph()
     DG.add_edges_from(index_)
     scc = list(nx.strongly_connected_components(DG))
@@ -177,7 +177,8 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
     return Xt_
 
 
-def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
+def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
+        -> List[np.ndarray]:
     """
     Convert pandas dataframe to list of arrays.
     
@@ -200,7 +201,7 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) -> List[np.ndarray]:
         if not isinstance(df, pd.DataFrame):
             raise TypeError('df must be a dataframe')
 
-        # Check datatypes, must be numeric
+        # Check data types, must be numeric
         for col in col_list:
             if not is_numeric_dtype(df[col]):
                 raise TypeError('Input dataframe must be numeric')
@@ -266,7 +267,7 @@ def create_col(col: List[str], suffix: str='_pred') -> List[str]:
 
 def preallocate(dim1, dim2=None):
     """
-    Preallocate a list by createing either [None] * dim1
+    Preallocate a list by creating either [None] * dim1
     or [[None] * dim2] * dim1. I use for loop to break reference
 
     Parameters:
@@ -276,7 +277,7 @@ def preallocate(dim1, dim2=None):
 
     Returns:
     ----------
-    allocated_list : preallocated placeholders
+    allocated_list : pre-allocated placeholders
     """
     allocated_list = None
     if dim1 > 0:
@@ -485,7 +486,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
         Y_t[t] = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
                 noise(y_dim, Mt['Rt'][t])
 
-        # Genereate xi_t1
+        # Generate xi_t1
         if t < T - 1:
             Xi_t[t+1] = Mt['Ft'][t].dot(Xi_t[t]) + Mt['Bt'][t].dot(X_t[t]) + \
                     noise(xi_dim, Mt['Qt'][t])
@@ -571,7 +572,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     # If explosive roots, use fully diffuse initialization
     # and issue a warning
     eig = linalg.eigvals(F)
-    if np.any(np.abs(eig) > 1 + min_val):
+    if np.any(np.abs(eig) > 1):
         if is_warning:
             warnings.warn('Ft contains explosive roots. Assumptions ' + \
                     'of marginal LL correction may be violated, and ' + \
@@ -591,7 +592,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
 
     # Clean up P_0
     for i in range(dim):
-        if abs(P_0[i][i]) > max_val:
+        if np.abs(P_0[i][i]) > max_val:
             is_diffuse[i] = True
     P_0 = mask_nan(is_diffuse, P_0, diag=0)
     
@@ -773,7 +774,7 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
 
     Parameters:
     ----------
-    theta : input of f(theta). Underlying paramters to be optimized
+    theta : input of f(theta). Underlying parameters to be optimized
     f : obtained from get_f. Mapping theta to M
     T : length of Mt. "Duplicate" M for T times
     x_0 : establish initial state mean
@@ -1009,7 +1010,7 @@ class M_wrap(Sequence):
         index : index of the wrapped list
 
         Returns:
-        self.m_pinvh : pesudo inverse 
+        self.m_pinvh : pseudo-inverse
         """
         if (not self._equal_M(index)) or self.m_pinvh is None:
             self.m_pinvh = inv(self.m)
@@ -1055,7 +1056,7 @@ class M_wrap(Sequence):
 class Constant_M(Sequence):
     """
     If the sequence of system matrix is mostly constant over time 
-    (with the exception of occassional deviation), using Constant_M 
+    (with the exception of occasional deviation), using Constant_M
     saves memory space. It mimics the behavior of a regular list but 
     use one single baseline M and stores any deviation.
 

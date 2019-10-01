@@ -1,12 +1,9 @@
 import numpy as np
 import pandas as pd
 from typing import List, Any, Callable, Dict, Tuple
-from collections.abc import Sequence
 from ..core import Filter, Smoother
-from ..core.utils import df_to_list, list_to_df, simulated_data, \
-        get_diag, ft, Constant_M, create_col
-from copy import deepcopy
-from numpy.random import multivariate_normal
+from ..core.utils import df_to_list, list_to_df, \
+        simulated_data, get_diag, ft, create_col
 import warnings
 warnings.simplefilter('default')
 
@@ -17,7 +14,7 @@ class BaseOpt(object):
     """
     BaseOpt is the core of model solvers. It directly interacts 
     with the Kalman filters/smoothers, and can be inherited by 
-    both constant M models and more complicated nonconstant Mt models.
+    both constant M models and more complicated non-constant Mt models.
     """
     
     def __init__(self) -> None:
@@ -125,7 +122,7 @@ class BaseOpt(object):
         if not isinstance(self.ft, Callable):
             raise TypeError('ft must be a function')
 
-        # Preprocess data inputs
+        # Pre-process data inputs
         self.x_col = x_col
         self.y_col = y_col
 
@@ -145,6 +142,7 @@ class BaseOpt(object):
             theta_i = theta_init
             counter = 0
             max_G = -np.inf
+            clock = 0
 
             while (dist > EM_threshold) and (counter < num_EM_iter):
                 kf = Filter(self.ft, for_smoother=True, **self.ft_kwargs)
@@ -316,15 +314,14 @@ class BaseOpt(object):
             P_T_diag = get_diag(P_T)
             df_xi_T = list_to_df(xi_T, xi_col_s)
             df_P_T = list_to_df(P_T_diag, P_col_s)
+            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar,
+                               df_Yt_smoothed, df_Yt_svar, df_xi_t,
+                               df_P_t, df_xi_T, df_P_T], axis=1)
 
-        # Attach index
-        if not is_xi:
-            df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar, 
-                    df_Yt_smoothed, df_Yt_svar], axis=1)
         else:
             df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar, 
-                    df_Yt_smoothed, df_Yt_svar, df_xi_t, 
-                    df_P_t, df_xi_T, df_P_T], axis=1)
+                    df_Yt_smoothed, df_Yt_svar], axis=1)
+
         df_fs.set_index(df.index, inplace=True)
 
         # Warning if new columns are in the original df.col

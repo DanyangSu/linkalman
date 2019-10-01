@@ -1,9 +1,10 @@
 __pycache__
 .DS_Store
-theory*
+manual*
 ref*
 linkalman.egg-info
+.idea*
 
-!theory.tex
+!manual.tex
 !ref.bib
 *checkpoint.ipynb

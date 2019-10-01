@@ -61,16 +61,15 @@
     \item Flexible and convenient model structure
     \item Robust and efficient implementation
     \item Proper implementation for unknown priors
-    \item Built-in numerical and EM algorithms
+    \item Built-in numerical and EM algorithm
     \item Open-source with a comprehensive user manual 
     \item Modular design with intuitive model specification
-    \item Pure \texttt{Python} implementation 
 \end{boenumerate}
 Kalman filtering is a technique that provides an elegant solution to a wide range of time series problems. When I started learning Kalman filtering, I found most many existing Kalman filter packages are based on standard textbook models that are over-simplified for pedagogical purpose. In practice, a dynamic system may assume complex functional forms and may have incomplete measurements. In addition, solving a Kalman filter requires knowledge of initial conditions, which is rarely satisfied in real world problems. Finally, numerical implementation of Kalman filter algorithms are vulnerable to failures from rounding errors. \texttt{linkalman} package provides a solid solution to all these challenges. 
 
-It is noteworthy that \texttt{linkalman} is designed for linear state space problems with Gaussian errors and predetermined system dynamics. Therefore, it is not suitable for generalized non-linear state space problem, nor does it directly solve problems with unpredictable shifting in system dynamics (e.g. vehicle maneuver). The suitable solutions are particle filters and adaptive Kalman filters, respectively. In addition, \texttt{linkalman} is not optimized for any particular type of problems that are more easily solved with specialized algorithms. As a result, \texttt{linkalman} is most suitable for problems with moderate-sized data but complex problems. 
+It is noteworthy that \texttt{linkalman} is designed for linear state space problems with Gaussian errors and predetermined system dynamics. Therefore, it is not suitable for generalized non-linear state space problem, nor does it directly solve problems with unpredictable shifting in system dynamics (e.g. vehicle maneuver). The suitable solutions are particle filters and adaptive Kalman filters, respectively. In addition, \texttt{linkalman} is not optimized for any particular type of problems that are more easily solved with specialized algorithms. As a result, \texttt{linkalman} is most suitable for problems with moderate-sized data but complex structures for which it is difficult to calculate derivatives. 
 
-This user manual is a product of my learning on Kalman filters\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation and user manual of \texttt{linkalman}. Section \ref{sec:model_setup} lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section \ref{sec:apply} presents some common time series examples. Section \ref{sec:codebase} discusses the package design of \texttt{linkalman}. The rest of the document provides the technical details of algorithms related to \texttt{linkalman}. Section \ref{sec:filter} and \ref{sec:smoother} provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section \ref{sec:param} concludes with a discussion of numerical methods and EM algorithms to estimate underlying parameters of a BSTS model. 
+This user manual is a product of my learning on Kalman filters\footnote{The primary reference is the wonderful textbook by (\cite{durbin_koopman_2001}). I also refer to many other papers for technical details omitted in the textbook.} and serves as the theoretical foundation of \texttt{linkalman}. Section \ref{sec:model_setup} lays out the general structure of a Bayesian Structural Time Series (BSTS) model. Section \ref{sec:apply} presents some common time series examples. Section \ref{sec:codebase} discusses the package design of \texttt{linkalman}. The rest of the document provides the technical details of algorithms related to \texttt{linkalman}. Section \ref{sec:filter} and \ref{sec:smoother} provide detailed discussions on Kalman filters and Kalman smoothers, respectively. Section \ref{sec:param} concludes with a discussion of numerical methods and EM algorithms to estimate underlying parameters of a BSTS model. 
 
 \section{Model Setup} \label{sec:model_setup}
 Consider the following Linear Dynamic System:
@@ -107,7 +106,7 @@ Writing it as a state space model, we have:
     \end{pmatrix}, 
     &\ 
     Q = \begin{pmatrix}
-        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        \sigma_{\varepsilon} & 0 & \cdots & 0 \\ 
         0 & 0 & \cdots & 0 \\
         \vdots & \ddots & \ddots & \vdots \\ 
         0 & \cdots & \cdots & 0
@@ -119,10 +118,10 @@ Writing it as a state space model, we have:
     D = \mu, \ B = 0, \ R = 0
 \end{align*}
 
-If initial state values are not provided, \texttt{linkalman} is able to calculate the ergodic mean and covariance. In practice, $y_t$ may not accurately measure $\xi_t$ (e.g. sample averages of sales to measure expected sales). We can also add measurement noise to the process (i.e. $R>0$). 
+If initial state values are not provided, \texttt{linkalman} is able to calculate the ergodic mean and covariance. In practice, $y_t$ may not accurately measure $\xi_t$ (e.g. sample averages of sales to measure expected sales). We can also add measurement noise to the process to allow for better signal extraction (i.e. $R>0$). 
 
 \subsection{ARMA(p, q)}
-ARMA(p, q) is generalizes AR(p) and MA(q). Define $r \equiv max(p, q+1)$, then ARMA(p, q) is of the form:
+ARMA(p, q) generalizes AR(p) and MA(q). Define $r \equiv max(p, q+1)$, then ARMA(p, q) is of the form:
 \begin{align*}
     y_t-\mu =& \phi_1(y_{t-1}-\mu) + \phi_2(y_{t-2}-\mu) + ... + \phi_p(y_{t-r}-\mu) \\
     &+ \varepsilon_{t-1} + \theta_1\varepsilon_{t-2} + ... + \theta_{r-1}\varepsilon_{t-r}
@@ -140,7 +139,7 @@ Let $\phi_j=0$ for $j>p$ and $\theta_i=0$ for $i>q$, then we have a state space 
     \end{pmatrix}, 
     &\ 
     Q = \begin{pmatrix}
-        Var(\varepsilon_t) & 0 & \cdots & 0 \\ 
+        \sigma_{\varepsilon} & 0 & \cdots & 0 \\ 
         0 & 0 & \cdots & 0 \\
         \vdots & \ddots & \ddots & \vdots \\ 
         0 & \cdots & \cdots & 0
@@ -167,158 +166,58 @@ Combining the two together, we have the conventional representation of ARMA(p, q
     =&(1+\theta_1L+\theta_2L^2 + ... + \theta_{r-1}L^{r-1})\varepsilon_{t-1}
 \end{align*}
 
-\subsection{Local Level Model}
+\subsection{Stochastic Linear Trend Model}
+A random walk process can be written as:
+\begin{align*}
+    \alpha_t = \alpha_{t-1} + \beta_{t-1} + \varepsilon_{t-1}
+    \beta_t = \beta_{t-1} + \delta_{t-1}
+    y_t = \alpha_t + \omega_t
+\end{align*}
+where $\beta_t$ is regarded as the stochastic increment between $alpha_{t-1}$ and $\alpha_t$. $\beta_t$ follows a random walk, and without $\delta_{t}$, movement of $\alpha$ does not allows turning-points. 
+
+In state space form, a stochastic linear trend process may be written as:
+\begin{align*}
+    F = \begin{pmatrix}
+        1 & 1 \\
+        0 & 1
+    \end{pmatrix}, &
+    \ Q = \begin{pmatrix}
+        \sigma_{\varepsilon} & 0\\
+        0 & \sigma_{\delta}
+    \end{pmatrix}, \ 
+    \xi_t=\begin{pmatrix}
+        \alpha_t \\
+        \beta_t
+    \end{pmatrix} \\
+    H=\begin{pmatrix}
+        1 & 0
+    \end{pmatrix}, & \ R=\sigma_{\omega}
+\end{align*}
+
+A stochastic linear trend process is non-stationary, and therefore is difficult to forecast long-term outcomes. 
 
 \subsection{Cyclical Model}
-Talk about using sin and use discrete state variables for cyclical models
+A cyclical process exhibits recurring patterns. There are two ways of modeling the process: fixed valued cycles and trigonometric cycles. Following (\cite{harvey_1985}), I write a cyclical process as:
+\begin{align*}
+    \begin{pmatrix}\phi_t \\\phi_t^{*}\end{pmatrix} &= \rho 
+        \begin{pmatrix}cos\lambda & sin\lambda \\-sin\lambda & cos\lambda 
+        \end{pmatrix}\begin{pmatrix}\phi_{t-1} \\ \phi_{t-1}^{*}\end{pmatrix} 
+        + \begin{pmatrix}\omega_{t-1} \\ \omega_{t-1}^{*}\end{pmatrix} \\
+    y_t &= \phi_t + \varepsilon_t
+\end{align*}
+where $\lambda\in (0, \pi)$ determines the frequency of the cycle, and $\rho\in (0, 1)$ is the dampening parameter. If $\rho=1$, the process is non-stationary. Let $\xi_t = (\phi_t, \phi_t^{*})^{'}$, and we can easily derive the state space representation, which I omit here. This approach fits well the cyclical behavior with the restriction of trigonometric formulation. 
+
+    Another approach further relax the restriction at the cost of increasing number of states to be estimated. Instead of using sine and cosine functions to approximate a cycle, it directly assigns a state to each point in a cycle\footnote{See (\cite{harvey2007trends}) for details}. For example, weekly effects may be represented as:
+\begin{align*}
+    \delta_t = -\sum_{j=1}^{6}\delta_{t-j} + \varepsilon_{t-1}
+\end{align*}
+
+The formulation means the sum of weekly effect bounces around 0. If it is not 0, then we have a linear trend as well, which should be part of the linear trend model.
+
+Note that a cyclical process is different from fixed effects models, where the cyclical pattern is accounted for by regression factors. For example, one may use dummy variables for weekdays and extract weekly fixed effect from $D_t$. The distinction is that the fixed effects approach try to estimate the average cyclical pattern of the time series, whereas the cyclical model is more time sensitive and relies more on the recent data to form the cyclical pattern for prediction. 
 
 \subsection{Counterfactuals}
-
-\subsection{A Comprehensive BSTS Model}
-In this subsection, I use the Kalman Filter to solve a complex time series problem\footnote{For a list of reference on applications of BSTS models, please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}), on which this section draws inspiration.}. Consider the following state definition\footnote{In this section, I recycle some symbols, which are defined differently than in other sections.}:
-\begin{align}
-    \alpha_t = \mu_t + \gamma_t + \psi_t \label{eq:state_decompose}
-\end{align}
-where $\varepsilon_t\sim\mathcal{N}(0,\sigma_{\varepsilon}^2)$. The state variable $\alpha_t$ is the latent state variable of interest. For example, $\alpha_t$ may be the economic vitality. I assume that $\alpha_t$ can be additively decomposed into five components: the local linear trend component ($\mu_t$), the seasonal component ($\gamma_t$), and the cyclical component ($\psi_t$). In what follows, I define each of the three components:
-
-First, consider $\mu_t$:
-\begin{align}
-    \mu_{t+1} &= \mu_t+Bx_{t,1}+\delta_t+\eta_{\mu,t} \label{eq:trend_start} \\
-    x_{t,1} &= \mathbbm{1}_{t=t^{*}} \\
-    \delta_{t+1} &= \Delta_{\delta} + \rho_{\delta}(\delta_t-\Delta_{\delta}) + \eta_{\delta,t} \label{eq:trend_end} 
-\end{align}
-where $\eta_{\mu,t}\sim\mathcal{N}(0,\sigma_{\mu}^2)$, $\eta_{\delta,t}\sim\mathcal{N}(0,\sigma_{\delta}^2)$. Equation (\ref{eq:trend_start}) through (\ref{eq:trend_end}) define a generalized local linear trend model with stationary slope\footnote{See (\cite{brodersen_etal_2015}) for details.} and permanent intervention effect (e.g. technology breakthrough at time $t^*)$. Here, the slope of the time trend has AR(1) variation around long-term slop of $\Delta_{\delta}$ with $|\rho_{\delta}|<1$. 
-
-Next, consider $\gamma_t$:
-\begin{align}
-    \gamma_{t+1}&= -\sum_{j=0}^{5}\gamma_{t-j} + \eta_{\gamma,t} \label{eq:season}
-\end{align}
-where $\eta_{\gamma,t}\sim\mathcal{N}(0,\sigma_{\gamma}^2)$. Equation (\ref{eq:season}) models weekly effects, where the sum of the weekly effects is a white noise\footnote{The sum should be a stationary process, otherwise we don't identification.}.
-
-Finally, $\psi_t$ is defined as\footnote{For details, refer to (\cite{harvey_1985}) and (\cite{harvey2007trends}).}:
-\begin{align}
-    \begin{pmatrix}
-        \psi_{t+1} \\
-        \psi_{t+1}^{*}
-    \end{pmatrix}
-    =\rho\begin{pmatrix}
-        \cos(\lambda) & \sin(\lambda) \\
-        -\sin(\lambda) & \cos(\lambda)
-    \end{pmatrix}
-    \begin{pmatrix}
-        \psi_{t} \\
-        \psi_{t}^{*}
-    \end{pmatrix}
-    +\begin{pmatrix}
-        \eta_{\psi,t} \\
-        \eta_{\psi,t}^{*}
-    \end{pmatrix} \label{eq:cycle}
-\end{align}
-where $\eta_{\psi,t}\sim\mathcal{N}(0,\sigma_{\psi}^2)$, $\eta_{\psi,t}^{*}\sim\mathcal{N}(0,\sigma_{\psi,*}^2)$, and $\psi_{t}^{*}$ is an auxiliary variable. In addition, following the argument by (\cite{harvey_1985}), I impose $\sigma_{\psi}^2=\sigma_{\psi,*}^2$.
-
-Now I specify measurement equations: 
-\begin{align}
-    y_{t,1} &= \alpha_t+D_1x_{t,2}+w_{t,1} \ , \ t\in\{7,14,21,...\} \\
-    y_{t,2} &= d + \pi\alpha_t+D_2x_{t,2}+w_{t,2}\ , \ t\in\{1,2,3,4,5,8,9,10,11,13,15...\} \label{eq:y2}
-\end{align}
-where $w_{t,1}\sim\mathcal{N}(0,\sigma_{w,1}^2)$, $w_{t,2}\sim\mathcal{N}(0,\sigma_{w,2}^2)$. $y_{t,1}$ may be thought of as the unbiased measurement of $\alpha_t$. In other words, $y_{t,1}$ defines $\alpha_t$. For example, $y_{t,1}$ can be the weekly economy index (I made it up...). This index update only once in a week on the Sundays. $y_{t,2}$, on the other hand, is the biased measurement of $\alpha_t$, which is highly correlated but does not directly defines the latent state. For example, $y_{t,2}$ can be the S\&P index. $x_{t,2}$ is the transient effect on the measurements (e.g. the interest rate). In addition, by construction, we have both partial missing measurements (e.g. every sixth and seventh days). Note that I do not use conventional weekdays availability for $y_{t,2}$ because otherwise we have a fully diffuse time series (e.g. We will never get the weekly effect due to missing measurements for Saturdays).
-
-To fit equations (\ref{eq:state_decompose}) through (\ref{eq:y2}) into a BSTS framework, I make the following definitions:
-\begin{align*}
-    \xi_{t+1} = \begin{pmatrix}
-        \mu_{t+1} \\
-        \delta_{t+1} \\
-        \gamma_{t+1} \\
-        \gamma_t \\
-        \gamma_{t-1} \\
-        \gamma_{t-2} \\
-        \gamma_{t-3} \\
-        \gamma_{t-4} \\
-        \psi_{t+1} \\
-        \psi_{t+1}^{*}
-    \end{pmatrix}, 
-    &\ 
-    F_t = F = \begin{pmatrix}
-        1 & 1  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & \rho_{\delta}  & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & -1 & -1 & -1 & -1 & -1 & -1 & 0 & 0 \\
-        0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
-        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \rho \cos(\lambda) & \rho \sin(\lambda) \\
-        0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & -\rho \sin(\lambda) & \rho \cos(\lambda)
-    \end{pmatrix} \\
-    v_t = \begin{pmatrix}
-        \eta_{\mu,t} \\
-        \eta_{\delta,t} \\
-        \eta_{\gamma,t} \\
-        0 \\
-        0 \\
-        0 \\
-        0 \\
-        0 \\
-        \eta_{\psi,t} \\
-        \eta_{\psi,t}^*
-    \end{pmatrix} 
-    , & v_t\sim\mathcal{N}(0,Q),
-    \ 
-    B_t = B = \begin{pmatrix}
-        0 & B & 0 \\
-        (1-\rho_{\delta})\Delta_{\delta} & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0 \\
-        0 & 0 & 0
-    \end{pmatrix},
-    \ 
-    x_t = \begin{pmatrix}
-        1 \\
-        x_{t,1} \\
-        x_{t,2}
-    \end{pmatrix} \\
-    y_t = \begin{pmatrix}
-        y_{t,1} \\
-        y_{t,2} 
-    \end{pmatrix},
-    &\ 
-    D_t = D = \begin{pmatrix}
-        0 & 0 & D_1 \\
-        d & 0 & D_2
-    \end{pmatrix},
-    \ 
-    w_t = \begin{pmatrix}
-        w_{t,1} \\
-        w_{t,2}
-    \end{pmatrix} 
-    , \ w_t\sim\mathcal{N}(0,R) \\
-    & H_t = H = \begin{pmatrix}
-        1 & 0 &1 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
-        \pi & 0 & \pi & 0 & 0 & 0 & 0 & 0 & \pi & 0  
-    \end{pmatrix}
-    \\
-    & Q_t = Q = \begin{pmatrix}
-        \sigma_{\mu}^2 & 0 & 0 & \cdots & \cdots & \cdots & \cdots & 0 \\
-        0 & \sigma_{\delta}^2 & 0 & & & & & \vdots \\
-        0 & 0 & \sigma_{\gamma}^2 & & & & & \vdots \\
-        \vdots & & & 0 & & & & \vdots \\
-        \vdots & & & & \ddots & & & \vdots \\
-        \vdots & & & & & 0 & & \vdots \\
-        \vdots & & & & & & \sigma_{\psi}^2 & 0 \\
-        0 & \cdots & \cdots & \cdots & \cdots & \cdots & 0 & \sigma_{\psi}^2
-    \end{pmatrix}
-    ,\ 
-    R_t = R= \begin{pmatrix}
-        \sigma_{w,1} & \sigma_{w,1,2} \\
-        \sigma_{w,1,2} & \sigma_{w,2}
-    \end{pmatrix}
-\end{align*}
-The system parameters are $\theta\equiv\{\rho_{\delta}, \Delta_{\delta}, \rho, \lambda, B, d, D_1, D_2, \pi, \sigma_{\mu}, \sigma_{\delta}, \sigma_{\gamma}, \sigma_{\psi}, \sigma_{w,1}, \sigma_{w,1,2}, \sigma_{w,2}\}$. We may use techniques described in Section \ref{sec:param} to solve $\theta$. Note that $\mu_t$, $\delta_t$ and $\gamma_{t}$ are not stationary, so we need to use diffuse priors for them. 
+Getting counterfactuals for treatments are of great interest in many areas\footnote{Please refer to (\cite{brodersen_etal_2015}), (\cite{harvey_1985}), and (\cite{harvey2007trends}) and papers they cite for more examples.}. Kalman filters/smoothers provides an elegant solution from a time series perspective. Treatments effectively alter system dynamics. If we treat the measurement during treatment periods as missing. We may find counterfactuals using filtered predictions. In addition, if the treatment effect is transient, we can also use the smoothed predictions for better performance. 
 
 \section{\texttt{linkalman} Design} \label{sec:codebase}
 The first principle of \texttt{linkalman} is flexibility. I design \texttt{linkalman} such that it may be used for a wide variety of BSTS models. With minimal I/O restriction, users may write their customized system dynamics function, as well as plug-in solver function for additional flexibility. \texttt{linkalman} also features flexibility in data inputs. It is capable of handling both completely and partially missing measurements, which are common for real world data. In addition, whereas many other packages use approximation approach to handle unknown initial values, \texttt{linkalman} provides the rigorous diffuse filter/smoother techniques, but also gives users the option to feed in customized initial state values. 
@@ -475,7 +374,7 @@ When $q_{t}=0$ for $t=t_q$, the diffuse Kalman filter degenerates into a usual o
 \subsection{Missing Measurements and Sequential Filtering} \label{subsec:seq_filter}
 So far we have assumed that we observe complete measurement $y_t$ for each $t$. If we have incomplete measurements, we can instead update the Kalman Filter sequentially (see (\cite{durbin_koopman_2001}) Section 6.4 and \cite{durbin_koopman_2000} for details), based only on observed measurements. Sequential filtering also boosts speed dramatically in the presence of large measurement dimensions, reducing cost from $\mathcal{O}(n^3)$ to $\mathcal{O}(n)$. In addition, univariate treatment of Kalman filters allows clean formulation with diffuse priors. The techniques developed in this subsection is implemented in \texttt{linkalman} and will be discussed in detail. 
 
-Denote $y_{t:(i)}$ as the $i$-th observed measurement at time $t$, then $y_{t:(1)}$ is the first non-missing univariate measurement at time $t$. Let $(n_t)$ as the index for the last non-missing univatriate measurement at time $t$. Define $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ as the state estimates after updating univariate measurement $(i)$ at time $t$:
+Denote $y_{t:(i)}$ as the $i$-th observed measurement at time $t$, then $y_{t:(1)}$ is the first non-missing univariate measurement at time $t$. Let $(n_t)$ as the index for the last non-missing univariate measurement at time $t$. Define $\hat{\xi}_{t:(i)}$ and $P_{t:(i)}$ as the state estimates after updating univariate measurement $(i)$ at time $t$:
 \begin{align*}
     \hat{\xi}_{t:(i)} &\equiv E(\xi_t|Y_{t-1},y_{t:(1)},...,y_{t:(i-1)},X_T;\theta) \\
     P_{t:(i)} &\equiv Var(\xi_t|Y_{t-1},y_{t:(1)},...,y_{t:(i-1)},X_T;\theta) 
@@ -741,7 +640,11 @@ This section follows closely (\cite{durbin_koopman_2001}) with marginal likeliho
     \Psi_{t:(i)} =& \begin{cases}
         log|\Upsilon_{\infty,t:(i)}| & \Upsilon_{\infty,t:(i)} > 0 \\
         log|\Upsilon_{*,t:(i)}| + \frac{d_{t:(i)}^{'}d_{t:(i)}}{\Upsilon_{*,t:(i)}} & \Upsilon_{\infty,t:(i)}=0
-    \end{cases} \nonumber \\
+    \end{cases} \nonumber 
+\end{align}
+
+The last term in $l_m$ is the marginal likelihood correction term, expressed as:
+\begin{align}    
     Z_t &= H_t\phi_t \label{eq:marginal_correct} \\
     \phi_{t+1} &= F_t\phi_t \nonumber \\
     \phi_1 &= A \nonumber
