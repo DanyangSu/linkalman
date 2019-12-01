@@ -16,7 +16,7 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
         'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse',
-        'get_nearest_PSD', 'Constant_M']
+        'get_nearest_PSD', 'Constant_M', 'Constant_M_simple', 'Constant_M_complex']
 
 
 max_val = 1e6  # Smaller value identifies diffuse better
@@ -152,8 +152,8 @@ def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
     return is_diffuse
 
 
-def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
-        -> List[np.ndarray]:
+def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, 
+        T: int=None, const_M_type: str='simple') -> List[np.ndarray]:
     """
     Generate a list of zero arrays if Xt is None
 
@@ -162,6 +162,7 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
     Xt : input Xt
     B : provide dimension information for generating dummy Xt
     T : provide length of the output list Xt
+    const_M_type : type of constant_M generator
 
     Returns:
     ----------
@@ -171,7 +172,7 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, T: int=None) \
         if B is None or T is None:
             raise ValueError('B and T must not be None')
         Xt_ = Constant_M(np.zeros(
-                (B.shape[1], 1)), T)
+                (B.shape[1], 1)), T, constant_M_type=const_M_type)
     else:
         Xt_ = Xt
     return Xt_
@@ -422,7 +423,8 @@ def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray,
 
 def simulated_data(Ft: Callable, theta: np.ndarray, 
         Xt: pd.DataFrame=None, T: int=None, init_state: Dict=None, 
-        **kwargs) -> Tuple[pd.DataFrame, List[str], List[str]]:
+        const_M_type: str='simple', **kwargs) \
+        -> Tuple[pd.DataFrame, List[str], List[str]]:
     """
     Generate simulated data from a given BSTS system. Xt and T
     cannot be both set to None. If P_1_0 and xi_1_0  are 
@@ -435,6 +437,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     Xt : input Xt. Optional and can be set to None
     T : length of the time series
     init_state : user-specified initial state values
+    const_M_type : type of constant matrix generator
     kwargs : kwargs for Ft
 
     Returns:
@@ -453,7 +456,8 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     if Xt is None:
         if T is None:
             raise ValueError('When Xt = None, T must be assigned')
-        X_t = Constant_M(np.zeros((x_dim, 1)), T)
+        X_t = Constant_M(np.zeros((x_dim, 1)), T, 
+                constant_M_type=const_M_type)
     else:
         T = Xt.shape[0]
         X_t = df_to_list(Xt, list(Xt.columns))
@@ -767,7 +771,8 @@ def partition_index(is_missing: np.ndarray) -> np.ndarray:
 
 def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None, 
         xi_1_0: np.ndarray=None, P_1_0: np.ndarray=None, 
-        force_diffuse: List[bool]=None, is_warning: bool=True) -> Dict:
+        force_diffuse: List[bool]=None, is_warning: bool=True, 
+        const_M_type: str='simple') -> Dict:
     """
     Duplicate arrays in M = f(theta) and generate list of Mt
     Output of f(theta) must contain all the required keys.
@@ -782,6 +787,7 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
     P_1_0 : initial state cov
     force_diffuse : use-defined diffuse state
     is_warning : whether to display the warning about explosive roots
+    const_M_type : type of list of constant matrices, default as 'simple'
 
     Returns:
     ----------
@@ -825,10 +831,10 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
         raise ValueError('R is not symmetric')
     
     # Generate ft for required keys
-    Ft = Constant_M(M['F'], T)
-    Ht = Constant_M(M['H'], T)
-    Qt = Constant_M(M['Q'], T)
-    Rt = Constant_M(M['R'], T)
+    Ft = Constant_M(M['F'], T, constant_M_type=const_M_type)
+    Ht = Constant_M(M['H'], T, constant_M_type=const_M_type)
+    Qt = Constant_M(M['Q'], T, constant_M_type=const_M_type)
+    Rt = Constant_M(M['R'], T, constant_M_type=const_M_type)
 
     # Set Bt if Bt is not Given
     if 'B' not in M_keys:
@@ -845,8 +851,8 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
         M.update({'D': np.zeros((dim_y, dim_x))})
 
     # Get Bt and Dt for ft
-    Bt = Constant_M(M['B'], T)
-    Dt = Constant_M(M['D'], T)
+    Bt = Constant_M(M['B'], T, constant_M_type=const_M_type)
+    Dt = Constant_M(M['D'], T, constant_M_type=const_M_type)
 
     # Initialization
     if P_1_0 is None or xi_1_0 is None: 
@@ -1053,12 +1059,94 @@ class M_wrap(Sequence):
         return self.m_pdet
 
 
-class Constant_M(Sequence):
+def Constant_M(M: np.ndarray, length: int, 
+        constant_M_type: str='simple'):
+    """
+    Determine which class struct to use
+
+    Parameters:
+    ----------
+    M : input system matrix 
+    length : length of the list
+    constant_M_type : if 'simple' use simple generator
+    """
+    if constant_M_type == 'simple':
+        return Constant_M_simple(M, length)
+    elif constant_M_type == 'complex':
+        return Constant_M_complex(M, length)
+    else:
+        raise ValueError('constant_M_type must take' + \
+                ' value "simple" or "complex".')
+
+
+class Constant_M_simple(object):
+    """
+    Simple way of creating a list of constant matrix
+    """
+
+    def __init__(self, M: np.ndarray, length: int) -> None:
+        """
+        Generate a list of M.
+
+        Parameters:
+        ----------
+        M : input system matrix 
+        length : length of the list
+        """
+        # Raise if M is not np.array type
+        if not isinstance(M, np.ndarray):
+            raise TypeError('M must be a numpy array')
+
+        self.Mt = [M.copy() for _ in range(length)] 
+        self.length = length
+    
+    
+    def __setitem__(self, index: int, val: np.ndarray) -> None:
+        """
+        Set value for the wrapped list of matrices
+
+        Parameters:
+        ----------
+        index : index number of the list between 0 and self.T
+        val : value to replace M at index. 
+        """
+        self.Mt[index] = val
+
+
+    def __getitem__(self, index: int) -> np.ndarray:
+        """
+        Select matrix from the wrapped list of matrices
+
+        Parameters:
+        ----------
+        index : index number of the list
+
+        Returns:
+        ----------
+        Mt_index : Constant_M_simple[index]
+        """
+        return self.Mt[index]
+
+
+    def __len__(self) -> int:
+        """
+        Set length of the list, required for an object inherited 
+        from Sequence.
+
+        Returns:
+        ----------
+        self.length : length of the list
+        """
+        return self.length
+
+
+class Constant_M_complex(Sequence):
     """
     If the sequence of system matrix is mostly constant over time 
-    (with the exception of occasional deviation), using Constant_M
-    saves memory space. It mimics the behavior of a regular list but 
-    use one single baseline M and stores any deviation.
+    (with the exception of occasional deviation), using 
+    Constant_M_complex saves memory space. It mimics the behavior 
+    of a regular list but use one single baseline M and stores 
+    any deviation.
 
     Example:
     ----------
@@ -1066,7 +1154,7 @@ class Constant_M(Sequence):
     T = 100  # intended length of the list
     
     # Mt has similar behavior as [copy.deepcopy(M) for _ in range(T)]
-    Mt = Constant_M(M, T)  
+    Mt = Constant_M_complex(M, T)  
     
     # Modify Mt[i] for i doesn't affect Mt[j] for j!=i
     Mt[2] = np.array([[5, 2], [2, 5]])
@@ -1152,7 +1240,7 @@ class Constant_M(Sequence):
 
         Returns:
         ----------
-        Mt_index : Constant_M[index]
+        Mt_index : Constant_M_complex[index]
         """
         # Restore self.M and update self.Mt
         if self.is_M_modified:
