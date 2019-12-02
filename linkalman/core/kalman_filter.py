@@ -1,11 +1,10 @@
 import numpy as np
-from typing import List, Callable, Tuple, Dict
+from typing import List, Callable, Tuple, Dict, Any
 import scipy.linalg as linalg
 from copy import deepcopy 
-from .utils import mask_nan, LL_correct, M_wrap, \
+from .utils import mask_nan, LL_correct, validate_wrapper, \
         min_val, pdet, check_consistence, get_init_mat, \
         permute, partition_index, gen_Xt, preallocate
-
 
 __all__ = ['Filter']
 
@@ -32,7 +31,8 @@ class Filter(object):
     distribution of the BSTS model. Refer to doc/manual.pdf for details.
     """
 
-    def __init__(self, ft: Callable, for_smoother: bool=False, **kwargs) -> None:
+    def __init__(self, ft: Callable, for_smoother: bool=False, 
+            wrapper: Any=None, **kwargs) -> None:
         """
         Initialize a Kalman Filter. Filter take system matrices 
         Mt returns characteristics of the BSTS model. Note that self.Qt
@@ -43,11 +43,15 @@ class Filter(object):
         ft : function that generate Mt
         for_smoother : whether to store extra information for Kalman smoothers
         kwargs : kwargs for ft
+        wrapper : wrapper of list of system matrices, determine whether 
+            or not to carry out certain operations to boost performance.
+            If not None, then it has to be a class object.
         """
         self.ft = ft
         self.for_smoother = for_smoother
         self.is_filtered = False  # determine if the filter object has been fitted
         self.ft_kwargs = kwargs
+        self.wrapper = validate_wrapper(wrapper)
 
         # Create placeholders for other class attributes
         self.theta = None
@@ -119,12 +123,12 @@ class Filter(object):
         check_consistence(Mt, self.Yt[0], self.Xt[0], 
                 init_state=init_state)
 
-        self.Ft = M_wrap(Mt['Ft'])
-        self.Bt = M_wrap(Mt['Bt'])
-        self.Ht = M_wrap(Mt['Ht'])
-        self.Dt = M_wrap(Mt['Dt'])
-        self.Qt = M_wrap(Mt['Qt'])
-        self.Rt = M_wrap(Mt['Rt'])
+        self.Ft = self.wrapper(Mt['Ft'])
+        self.Bt = self.wrapper(Mt['Bt'])
+        self.Ht = self.wrapper(Mt['Ht'])
+        self.Dt = self.wrapper(Mt['Dt'])
+        self.Qt = self.wrapper(Mt['Qt'])
+        self.Rt = self.wrapper(Mt['Rt'])
         self.xi_length = self.Ft[0].shape[0]
         self.y_length = self.Ht[0].shape[0]
         self.I = np.eye(self.xi_length)
@@ -403,13 +407,13 @@ class Filter(object):
         partitioned_index : sorted index, used for EM algorithms
         """
         # Preprocess Rt and Yt if Yt has missing measurements
-        is_missing = np.hstack(np.isnan(self.Yt[t]))
+        is_missing = np.isnan(self.Yt[t])[:,0]
         n_t = (~is_missing).sum()
 
         # Sort observed measurements to the top
         partitioned_index = partition_index(is_missing)  
 
-        if np.any(is_missing):
+        if n_t < self.y_length:
             self.Yt[t] = mask_nan(is_missing, self.Yt[t], dim='row')
             self.Yt[t] = permute(self.Yt[t], partitioned_index)
             self.Rt[t] = permute(self.Rt[t], partitioned_index, axis='both')

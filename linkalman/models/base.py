@@ -29,6 +29,7 @@ class BaseOpt(object):
         self.x_col = None
         self.y_col = None
         self.solver = None
+        self.wrapper = None
 
         # Store fitted Kalman smoother 
         self.ks_fitted = None
@@ -75,7 +76,8 @@ class BaseOpt(object):
             y_col: List[str], x_col: List[str]=None, 
             method: str='LLY', EM_threshold: float=1e-3, 
             num_EM_iter: int=np.inf, post_min_iter: int=100, 
-            EM_stopping_rate: float=0.01, init_state: Dict=None) -> None:
+            EM_stopping_rate: float=0.01, init_state: Dict=None, 
+            wrapper: Any=None) -> None:
         """
         Fit the model and returns optimal theta. 
 
@@ -95,6 +97,9 @@ class BaseOpt(object):
             update theta_opt slower. EM_stopping_rate = 0 means full 
             weight on theta_opt after each iteration
         init_state : user-specified initial state values
+        wrapper : wrapper of list of system matrices, determine whether
+            or not to carry out certain operations to boost performance. 
+            If not None, then it has to be a class object.
         """
         # Raise exception if method is not correctly specified
         if method not in ['EM','LLY']:
@@ -131,8 +136,9 @@ class BaseOpt(object):
         Yt = df_to_list(df, y_col)
 
         # Run solver
+        self.wrapper = wrapper
         if method == 'LLY': 
-            obj = lambda theta: self.get_LLY(theta, Yt, Xt)
+            obj = lambda theta: self.get_LLY(theta, Yt, Xt) 
             self.theta_opt, self.fval_opt = self.solver(
                     theta_init, obj, **self.solver_kwargs)
 
@@ -145,7 +151,8 @@ class BaseOpt(object):
             clock = 0
 
             while (dist > EM_threshold) and (counter < num_EM_iter):
-                kf = Filter(self.ft, for_smoother=True, **self.ft_kwargs)
+                kf = Filter(self.ft, for_smoother=True, 
+                        wrapper=self.wrapper, **self.ft_kwargs)
                 kf.fit(theta_i, Yt, Xt)
                 ks = Smoother()
                 ks.fit(kf)
@@ -173,7 +180,8 @@ class BaseOpt(object):
             self.fval_opt = ks.G(theta_i)
 
         # Generate fitted smoother
-        kf = Filter(self.ft, **self.ft_kwargs, for_smoother=True)
+        kf = Filter(self.ft, **self.ft_kwargs, wrapper=self.wrapper, 
+                for_smoother=True)
         kf.fit(self.theta_opt, Yt, Xt, init_state=init_state)
         ks = Smoother()
         ks.fit(kf)
@@ -196,7 +204,7 @@ class BaseOpt(object):
         ----------
         lly : log likelihood from Kalman filters
         """
-        kf = Filter(self.ft, **self.ft_kwargs)
+        kf = Filter(self.ft, wrapper=self.wrapper, **self.ft_kwargs)
         kf.fit(theta, Yt, Xt)
         return kf.get_LL()
 
@@ -265,7 +273,8 @@ class BaseOpt(object):
         Yt = df_to_list(df, self.y_col)
         
         # Generate filtered predictions
-        kf = Filter(self.ft, for_smoother=True, **self.ft_kwargs)
+        kf = Filter(self.ft, for_smoother=True, wrapper=self.wrapper, 
+                **self.ft_kwargs)
 
         # Override theta_opt if theta is not None
         if theta is not None:

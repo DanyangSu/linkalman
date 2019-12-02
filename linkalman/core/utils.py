@@ -9,6 +9,7 @@ from pandas.api.types import is_numeric_dtype
 from numpy.random import multivariate_normal
 from copy import deepcopy
 import warnings
+import inspect
 warnings.simplefilter('default')
 
 __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_diag',
@@ -16,7 +17,8 @@ __all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_dia
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
         'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse',
-        'get_nearest_PSD', 'Constant_M', 'Constant_M_simple', 'Constant_M_complex']
+        'get_nearest_PSD', 'Constant_M', 'Constant_M_simple', 'Constant_M_complex',
+        'validate_wrapper']
 
 
 max_val = 1e6  # Smaller value identifies diffuse better
@@ -137,7 +139,7 @@ def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
     DG = nx.DiGraph()
     DG.add_edges_from(index_)
     scc = list(nx.strongly_connected_components(DG))
-    F_ = deepcopy(F)
+    F_ = F.copy()
     
     # Loop through each component for explosive roots
     for comp_ in scc:
@@ -176,6 +178,37 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None,
     else:
         Xt_ = Xt
     return Xt_
+
+
+def validate_wrapper(wrapper: Any) -> Any:
+    """
+    Validate whether a wrapper contains required methods. If
+    wrapper == None, return M_wrap as the default wrapper
+
+    Parameters:
+    ----------
+    wrapper : wrapper of list of matrices. It should include 
+        pinvh, pdet, and ldl. Users may also modify their wrapper
+        to avoid unnecessary calculations. 
+
+    Returns:
+    ----------
+    output wrapper : validated wrapper object
+    """
+    if wrapper is None:
+        return M_wrap
+    else:
+        required_list = ['pinvh', 'pdet', 'ldl']
+        methods = inspect.getmembers(wrapper, 
+                predicate=inspect.isroutine)
+        counter = 0
+        for i in methods:
+            if i[0] in required_list:
+                counter += 1
+        if counter < len(required_list):
+            raise AttributeError('The wrapper does not contain ' + \
+                    'all required methods.')
+        return wrapper
 
 
 def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
@@ -471,8 +504,8 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     Mt = Ft(theta, T, **kwargs)
     
     # Generate initial values
-    xi_1_0 = deepcopy(Mt['xi_1_0'])
-    P_1_0 = deepcopy(Mt['P_1_0'])
+    xi_1_0 = Mt['xi_1_0'].copy()
+    P_1_0 = Mt['P_1_0'].copy()
 
     # Override if init_state is provided
     if init_state is not None:
@@ -554,7 +587,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     P_0 : the initial state covariance matrix, np.inf for diffuse state
     xi_0 : the initial state mean, 0 for diffuse state
     """
-    Q_ = deepcopy(Q)
+    Q_ = Q.copy()
     dim = Q.shape[0]
     
     # Is is_diffuse is not supplied, create the list
@@ -614,7 +647,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
             raise ValueError('B has the wrong dimension')
         Bx = B.dot(x_0)
     Bx[is_diffuse] = 0
-    F_star = deepcopy(F)
+    F_star = F.copy()
     F_star[is_diffuse] = 0
     xi_0 = inv(np.eye(dim) - F_star).dot(Bx)
 
@@ -642,7 +675,7 @@ def get_init_mat(P_1_0: np.ndarray) \
     A = np.diag(is_diffuse.astype(float))
     Pi = np.diag((~is_diffuse).astype(float))
 
-    P_clean = deepcopy(P_1_0)
+    P_clean = P_1_0.copy()
     P_clean[np.isnan(P_clean)] = 0
     P_star = Pi.dot(P_clean).dot(Pi.T)
     
@@ -680,7 +713,7 @@ def clean_matrix(mat: np.ndarray) -> np.ndarray:
     ----------
     cleaned_mat : processed matrix
     """
-    cleaned_mat = deepcopy(mat).astype(float, copy=True)
+    cleaned_mat = mat.copy().astype(float, copy=True)
     cleaned_mat[np.abs(cleaned_mat) < min_val] = 0
     cleaned_mat[np.abs(cleaned_mat) > max_val] = inf_val
 
@@ -907,7 +940,7 @@ def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray],
     Returns:
     MLL_correct : correction term for the marginal likelihood
     """
-    psi = deepcopy(A)
+    psi = A.copy()
     MLL_correct = np.zeros(Ft[0].shape)
     if index is None:
         for t in range(len(Ht)):
@@ -931,7 +964,7 @@ class M_wrap(Sequence):
     repeated calculation when m_list contains same arrays. 
         raise TypeError('Q must be a square matrix')
     """
-
+    
     def __init__(self, m_list: List[np.ndarray]) -> None:
         """
         Create placeholder for calculated matrix. 
@@ -940,15 +973,15 @@ class M_wrap(Sequence):
         ----------
         m_list : list of input arrays. Should be mostly constant
         """
+        self.m_list = m_list
         self.m = None
         self.m_pinvh = None
         self.L = None
         self.D = None
         self.L_I = None
         self.m_pdet = None
-        self.m_list = m_list
-        
-
+    
+    
     def __getitem__(self, index: int) -> np.ndarray:
         """
         Returns indexed array of the wrapped list
@@ -1176,8 +1209,8 @@ class Constant_M_complex(Sequence):
         if not isinstance(M, np.ndarray):
             raise TypeError('M must be a numpy array')
 
-        self.M = deepcopy(M)
-        self._M = deepcopy(M)  # benchmark M
+        self.M = M.copy()
+        self._M = M.copy()  # benchmark M
         self.index = None
         self.Mt = {}
         self.length = length
@@ -1203,8 +1236,8 @@ class Constant_M_complex(Sequence):
         in self.M. This function will record the change before restoring
         self.M to its original state.
         """
-        self.Mt.update({self.index: deepcopy(self.M)})
-        self.M = deepcopy(self._M)
+        self.Mt.update({self.index: self.M.copy()})
+        self.M = self._M.copy()
 
 
     def __setitem__(self, index: int, val: np.ndarray) -> None:
@@ -1223,7 +1256,7 @@ class Constant_M_complex(Sequence):
 
         # Only update if val differs from current value or self._M
         if not np.array_equal(self.Mt.get(index, self._M), val):
-            self.Mt.update({index: deepcopy(val)}) 
+            self.Mt.update({index: val.copy()}) 
 
 
     def __getitem__(self, index: int) -> np.ndarray:
