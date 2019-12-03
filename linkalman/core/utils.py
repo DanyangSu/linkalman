@@ -241,9 +241,8 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
                 raise TypeError('Input dataframe must be numeric')
 
         # Convert df to list row-wise
-        L = preallocate(df.shape[0])
-        for i in range(df.shape[0]):
-            L[i] = np.array([df[col_list].iloc[i, :]]).T
+        L = np.hsplit(df[col_list].values.T, df.index)
+        L.pop(0)
         return L
 
 
@@ -275,8 +274,7 @@ def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
         if num_col != i.shape[0]:
             raise ValueError('Input arrays have wrong size.')
 
-    df_val = np.concatenate([i.T for i in L])
-    df = pd.DataFrame(data=df_val, columns=col)
+    df = pd.DataFrame(np.hstack(L).T, columns=col)
     return df
 
 
