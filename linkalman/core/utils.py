@@ -241,8 +241,7 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
                 raise TypeError('Input dataframe must be numeric')
 
         # Convert df to list row-wise
-        L = np.hsplit(df[col_list].values.T, df.index)
-        L.pop(0)
+        L = np.hsplit(df[col_list].values.T, range(1, df.shape[0]))
         return L
 
 

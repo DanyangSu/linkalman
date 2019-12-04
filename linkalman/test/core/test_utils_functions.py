@@ -850,3 +850,37 @@ def test_get_nearest_PSD_not_PSD():
     X_PSD = get_nearest_PSD(X)
     expected_X = np.zeros([1, 1])
     np.testing.assert_array_equal(expected_X, X_PSD)
+
+
+# Test validate_wrapper
+def test_validate_wrapper_string():
+    """
+    Test error message if input is some random object
+    """
+    with pytest.raises(AttributeError) as error:
+        validate_wrapper(2)
+    expected_result = 'The wrapper does not contain all required methods.'
+    assert expected_result == str(error.value)
+
+
+def test_validate_wrapper_incomplete_obj():
+    """
+    Test error message if input does not have all required methods
+    """
+    class incomplete_M(object):
+        def __init__(self):
+            pass
+
+        def pinvh(self):
+            pass
+
+        def pdet(self):
+            pass
+
+        def Ldl(self):  # intentionally use capital L
+            pass 
+
+    with pytest.raises(AttributeError) as error:
+        validate_wrapper(incomplete_M)
+    expected_result = 'The wrapper does not contain all required methods.'
+    assert expected_result == str(error.value)
