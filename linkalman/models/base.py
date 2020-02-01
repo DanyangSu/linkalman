@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Any, Callable, Dict, Tuple
 from ..core import Filter, Smoother
-from ..core.utils import df_to_list, list_to_df, \
+from ..core.utils import df_to_tensor, tensor_to_df, \
         simulated_data, get_diag, ft, create_col
 import warnings
 warnings.simplefilter('default')
@@ -132,8 +132,8 @@ class BaseOpt(object):
         self.y_col = y_col
 
         # If x_col is given, convert dataframe to lists
-        Xt = df_to_list(df, x_col)
-        Yt = df_to_list(df, y_col)
+        Xt = df_to_tensor(df, x_col)
+        Yt = df_to_tensor(df, y_col)
 
         # Run solver
         self.wrapper = wrapper
@@ -269,8 +269,8 @@ class BaseOpt(object):
         df_fitted : Contains filtered/smoothed y_t, xi_t, and P_t
         """
         # Generate system matrices for prediction
-        Xt = df_to_list(df, self.x_col)
-        Yt = df_to_list(df, self.y_col)
+        Xt = df_to_tensor(df, self.x_col)
+        Yt = df_to_tensor(df, self.y_col)
         
         # Generate filtered predictions
         kf = Filter(self.ft, for_smoother=True, wrapper=self.wrapper, 
@@ -294,8 +294,8 @@ class BaseOpt(object):
         Yt_filtered, Yt_P, xi_t, P_t = kf.get_filtered_val(
                 is_xi=is_xi, xi_col=xi_col)
         Yt_P_diag = get_diag(Yt_P)
-        df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
-        df_Yt_fvar = list_to_df(Yt_P_diag, y_filter_var)
+        df_Yt_filtered = tensor_to_df(Yt_filtered, y_col_filter)
+        df_Yt_fvar = tensor_to_df(Yt_P_diag, y_filter_var)
             
         # Get smoothed Yt
         y_col_smoother = create_col(self.y_col, suffix=smean_suffix)
@@ -303,8 +303,8 @@ class BaseOpt(object):
         Yt_smoothed, Yt_S, xi_T, P_T = ks.get_smoothed_val(
                 is_xi=is_xi, xi_col=xi_col)
         Yt_S_diag = get_diag(Yt_S)
-        df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
-        df_Yt_svar = list_to_df(Yt_S_diag, y_smoother_var)
+        df_Yt_smoothed = tensor_to_df(Yt_smoothed, y_col_smoother)
+        df_Yt_svar = tensor_to_df(Yt_S_diag, y_smoother_var)
 
         # Generate xi values if needed
         if is_xi:
@@ -316,13 +316,13 @@ class BaseOpt(object):
             xi_col_s = ['xi_{}_smoothed'.format(i) for i in xi_col]
             P_col_s = ['P_{}_smoothed'.format(i) for i in xi_col]
 
-            df_xi_t = list_to_df(xi_t, xi_col_f)
+            df_xi_t = tensor_to_df(xi_t, xi_col_f)
             P_t_diag = get_diag(P_t)
-            df_P_t = list_to_df(P_t_diag, P_col_f)
+            df_P_t = tensor_to_df(P_t_diag, P_col_f)
 
             P_T_diag = get_diag(P_T)
-            df_xi_T = list_to_df(xi_T, xi_col_s)
-            df_P_T = list_to_df(P_T_diag, P_col_s)
+            df_xi_T = tensor_to_df(xi_T, xi_col_s)
+            df_P_T = tensor_to_df(P_T_diag, P_col_s)
             df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar,
                                df_Yt_smoothed, df_Yt_svar, df_xi_t,
                                df_P_t, df_xi_T, df_P_T], axis=1)

@@ -96,6 +96,199 @@ def test_inv_not_PSD():
     np.testing.assert_array_almost_equal(result, expected_result)
 
 
+# Test gen_PSD
+def test_gen_PSD():
+    """
+    Test normal behavior 
+    """
+    theta = [0,2,0,4,5,0]
+    dim = 3
+    expected_results = np.array([[1, 2, 4],
+                                [2, 5, 13],
+                                [4, 13, 42]])
+    results = gen_PSD(theta, dim)
+    assert(np.array_equal(expected_results, results))
+
+
+def test_gen_PSD_wrong_theta_size():
+    """
+    Test if raise exception when theta wrong size
+    """
+    theta = [1,2,3,4,5,6]
+    dim = 2
+    with pytest.raises(ValueError):
+        PSD = gen_PSD(theta, dim)
+
+    
+# Test df_to_tensor
+def test_df_to_tensor(df1):
+    """
+    Test normal behaviors
+    """
+    expected_result = np.array([[[1.], [4.]], [[2.], [5.]], [[3.], [6.]]])
+    col_list = ['a', 'b']
+    result = df_to_tensor(df1, col_list)
+    
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_df_to_tensor_nan(df1):
+    """
+    Test if return None when not specify col_list
+    """
+    expected_result = None
+    result = df_to_tensor(df1)
+
+    assert result == expected_result
+
+
+def test_df_to_tensor_NaN():
+    """
+    Test partially missing observations
+    """
+    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., np.nan, 4.], 'c': [1, 2, 3]})
+    expected_result = np.array([[[1.], [2.]], [[2.], [np.nan]], [[3.], [4.]]])
+    col_list = ['c', 'b']
+    result = df_to_tensor(df, col_list)
+    
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_df_to_tensor_all_NaN():
+    """
+    Test 2 fully missing observations 
+    """
+    df = pd.DataFrame({'a': [1., np.nan, 3.], 'b': [2., np.nan, 4.]})
+    col_list = ['a', 'b']
+    expected_result = np.array([[[1.], [2.]], [[np.nan], [np.nan]], [[3.], [4.]]])
+    result = df_to_tensor(df, col_list)
+
+    np.testing.assert_array_equal(expected_result, result)
+
+
+def test_df_to_tensor_string():
+    """
+    Test str input exceptions
+    """
+    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [1, 'str2', 'str3']})
+    col_list = ['a', 'b']
+    with pytest.raises(TypeError):
+        df_to_tensor(df, col_list)
+
+
+def test_df_to_list_not_df(df1):
+    with pytest.raises(TypeError):
+        df_to_tensor(df1['a'], ['a'])
+    
+
+# Test tensor_to_df
+def test_tensor_to_df():
+    """
+    Test normal behaviors
+    """
+    input_array = np.array([[[1.], [2.]], [[2.], [3.]], [[3.], [4.]]])
+    col = ['a', 'b']
+    expected_result = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
+    result = tensor_to_df(input_array, col)
+    assert(expected_result.equals(result))
+
+
+def test_tensor_to_df_NaN():
+    """
+    Test partially missing observations
+    """
+    input_array = np.array([[[1.], [2.]], [[2.], [np.nan]], [[3.], [4.]]])
+    col = ['a', 'b']
+    expected_result = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., np.nan, 4.]})
+    result = tensor_to_df(input_array, col)
+    assert(expected_result.equals(result))
+
+
+def test_tensor_to_df_all_NaN():
+    """
+    Test 2 fully missing observations
+    """
+    input_array = np.array([[[1.], [2.]], [[np.nan], [np.nan]], [[3.], [4.]]])
+    col = ['a', 'b']
+    expected_result = pd.DataFrame({'a': [1., np.nan, 3.], 'b': [2., np.nan, 4.]})
+    result = tensor_to_df(input_array, col)
+    assert(expected_result.equals(result))
+
+
+def test_list_to_df_col_not_list():
+    """
+    Test if raise exception if col is not a list
+    """
+    input_array = np.array([[[1.]], [[np.nan]], [[3]]])
+    col = 'string'
+    with pytest.raises(TypeError):
+        tensor_to_df(input_array, col)
+
+
+# Test get_reset
+def test_get_reset():
+    """
+    Test if generate correct reset array
+    """
+    tensor = build_tensor(np.array([[1, 2], [3, 4]]), 10)
+    tensor[1][1][1] = 0
+    tensor[2][1][1] = 0
+    tensor[6][0][0] = 8
+
+    expected_result = np.zeros(10)
+    expected_result[0] = 1
+    expected_result[1] = 1
+    expected_result[3] = 1
+    expected_result[6] = 1
+    expected_result[7] = 1
+
+    result = get_reset(tensor)
+    np.testing.assert_array_equal(expected_result, result)
+
+
+# Test creat_col
+def test_create_col():
+    """
+    Test append column suffix
+    """
+    col = ['a', 'b']
+    suffix = '_test'
+    expected_result = ['a_test', 'b_test']
+    result = create_col(col, suffix=suffix)
+    assert(expected_result == result)
+
+
+def test_create_col_default():
+    """
+    Test default suffix
+    """
+    col = ['a', 'b']
+    expected_result = ['a_pred', 'b_pred']
+    result = create_col(col)
+    assert(expected_result == result)
+
+
+# Test noise
+def test_noise_1d():
+    """
+    test 1d noise
+    """
+    epsilon = noise(1, np.array([[1]]))
+    result = epsilon.shape
+    expected_result = (1, 1)
+    assert(result == expected_result)
+
+
+def test_noise_2d():
+    """
+    test 2d noise
+    """
+    epsilon = noise(2, np.array([[3, 2], [2, 4]]))
+    result = epsilon.shape
+    expected_result = (2, 1)
+    assert(result == expected_result)
+
+
 # Test ft
 def test_ft():
     """
@@ -193,184 +386,24 @@ def test_ft_Q_symmetric():
     assert result == expected_result
 
 
-# Test gen_PSD
-def test_gen_PSD():
+# Test build_tensor
+def test_build_tensor():
     """
-    Test normal behavior 
+    Test normal behavior of build_tensor
     """
-    theta = [0,2,0,4,5,0]
-    dim = 3
-    expected_results = np.array([[1, 2, 4],
-                                [2, 5, 13],
-                                [4, 13, 42]])
-    results = gen_PSD(theta, dim)
-    assert(np.array_equal(expected_results, results))
+    arr = np.array([[1, 2], [3, 4]])
+    tensor = build_tensor(arr, 10)
+    assert tensor.shape == (10, 2, 2)
+    np.testing.assert_array_equal(arr, tensor[5])
 
 
-def test_gen_PSD_wrong_theta_size():
-    """
-    Test if raise exception when theta wrong size
-    """
-    theta = [1,2,3,4,5,6]
-    dim = 2
-    with pytest.raises(ValueError):
-        PSD = gen_PSD(theta, dim)
-
-    
-# Test df_to_list
-def test_df_to_list():
-    """
-    Test normal behaviors
-    """
-    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
-    expected_result = [np.array([[1.], [2.]]), np.array([[2.], [3.]]), np.array([[3.], [4.]])]
-    col_list = ['a', 'b']
-    result = df_to_list(df, col_list)
-    outcome = True
-
-    for i in range(len(expected_result)):
-        outcome = outcome and np.array_equal(expected_result[i], result[i])
-    assert(outcome)
-
-
-def test_df_to_list_nan():
-    """
-    Test if return None when not specify col_list
-    """
-    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
-    expected_result = None
-    result = df_to_list(df)
-
+def test_build_tensor_1d():
+    arr = np.array([1])
+    with pytest.raises(TypeError) as error:
+        build_tensor(arr, 5)
+    expected_result = 'Input must be 2-d arrays'
+    result = str(error.value)
     assert result == expected_result
-
-
-def test_df_to_list_NaN():
-    """
-    Test partially missing observations
-    """
-    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., np.nan, 4.]})
-    expected_result = [np.array([[1.], [2.]]), np.array([[2.], [np.nan]]), np.array([[3.], [4.]])]
-    col_list = ['a', 'b']
-    result = df_to_list(df, col_list)
-    
-    for i in range(len(expected_result)):
-        np.testing.assert_array_equal(expected_result[i], result[i])
-
-
-def test_df_to_list_all_NaN():
-    """
-    Test 2 fully missing observations 
-    """
-    df = pd.DataFrame({'a': [1., np.nan, 3.], 'b': [2., np.nan, 4.]})
-    col_list = ['a', 'b']
-    expected_result = [np.array([[1.], [2.]]), np.array([[np.nan], [np.nan]]), np.array([[3.], [4.]])]
-    result = df_to_list(df, col_list)
-
-    for i in range(len(expected_result)):
-        np.testing.assert_array_equal(expected_result[i], result[i])
-
-
-def test_df_to_list_string():
-    """
-    Test str input exceptions
-    """
-    df = pd.DataFrame({'a': [1., 2., 3.], 'b': [1, 'str2', 'str3']})
-    col_list = ['a', 'b']
-    with pytest.raises(TypeError):
-        df_to_list(df, col_list)
-
-
-def test_df_to_list_not_df():
-    df = pd.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6]})
-    with pytest.raises(TypeError):
-        df_to_list(df['a'], ['a'])
-    
-
-# Test list_to_df
-def test_list_to_df():
-    """
-    Test normal behaviors
-    """
-    input_array = [np.array([[1.], [2.]]), np.array([[2.], [3.]]), np.array([[3.], [4.]])]
-    col = ['a', 'b']
-    expected_result = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., 3., 4.]})
-    result = list_to_df(input_array, col)
-    assert(expected_result.equals(result))
-
-
-def test_list_to_df_NaN():
-    """
-    Test partially missing observations
-    """
-    input_array = [np.array([[1.], [2.]]), np.array([[2.], [np.nan]]), np.array([[3.], [4.]])]
-    col = ['a', 'b']
-    expected_result = pd.DataFrame({'a': [1., 2., 3.], 'b': [2., np.nan, 4.]})
-    result = list_to_df(input_array, col)
-    assert(expected_result.equals(result))
-
-
-def test_list_to_df_all_NaN():
-    """
-    Test 2 fully missing observations
-    """
-    input_array = [np.array([[1.], [2.]]), np.array([[np.nan], [np.nan]]), np.array([[3.], [4.]])]
-    col = ['a', 'b']
-    expected_result = pd.DataFrame({'a': [1., np.nan, 3.], 'b': [2., np.nan, 4.]})
-    result = list_to_df(input_array, col)
-    assert(expected_result.equals(result))
-
-
-def test_list_to_df_col_not_list():
-    """
-    Test if raise exception if col is not a list
-    """
-    input_array = [np.array([[1.]]), np.array([[np.nan]]), np.array([[3]])]
-    col = 'string'
-    with pytest.raises(TypeError):
-        list_to_df(input_array, col)
-
-
-# Test creat_col
-def test_create_col():
-    """
-    Test append column suffix
-    """
-    col = ['a', 'b']
-    suffix = '_test'
-    expected_result = ['a_test', 'b_test']
-    result = create_col(col, suffix=suffix)
-    assert(expected_result == result)
-
-
-def test_create_col_default():
-    """
-    Test default suffix
-    """
-    col = ['a', 'b']
-    expected_result = ['a_pred', 'b_pred']
-    result = create_col(col)
-    assert(expected_result == result)
-
-
-# Test noise
-def test_noise_1d():
-    """
-    test 1d noise
-    """
-    epsilon = noise(1, np.array([[1]]))
-    result = epsilon.shape
-    expected_result = (1, 1)
-    assert(result == expected_result)
-
-
-def test_noise_2d():
-    """
-    test 2d noise
-    """
-    epsilon = noise(2, np.array([[3, 2], [2, 4]]))
-    result = epsilon.shape
-    expected_result = (2, 1)
-    assert(result == expected_result)
 
 
 # Test simulated_data
@@ -778,20 +811,9 @@ def test_preallocate_dim1():
     Test for 1d list of None
     """
     dim1 = 3
-    result = preallocate(dim1)
-    expected_result = [None, None, None]
-    assert result == expected_result
-
-
-def test_preallocate_dim2():
-    """
-    Test for 2d list of None
-    """
-    dim1 = 3
-    dim2 = 2
-    result = preallocate(dim1, dim2)
-    expected_result = [[None, None], [None, None], [None, None]]
-    assert result == expected_result
+    result = preallocate(dim1, 1, 1)
+    expected_result = np.zeros((3, 1, 1))
+    np.testing.assert_array_equal(result, expected_result)
 
 
 # Test get_explosive_diffuse
@@ -809,8 +831,8 @@ def test_get_explosive_diffuse4():
                         [0.01, 0, 0, 0, 0, 0, 0.1, 0.2],
                         [0, 0, 0, 0, 0, 0, 1, 0]])
     result = get_explosive_diffuse(test_F)
-    expected_result = [True, True, False, False, True, True, False, False]
-    assert result == expected_result
+    expected_result = np.array([True, True, False, False, True, True, False, False])
+    np.testing.assert_array_equal(result, expected_result)
 
 
 def test_get_explosive_diffuse3():
@@ -827,8 +849,8 @@ def test_get_explosive_diffuse3():
                         [0.01, 0, 0, 0, 0, 0, 0.1, 0.2],
                         [0, 0, 0, 0, 0, 0, 1, 0]])
     result = get_explosive_diffuse(test_F)
-    expected_result = [True, True, True, True, True, True, False, False]
-    assert result == expected_result
+    expected_result = np.array([True, True, True, True, True, True, False, False])
+    np.testing.assert_array_equal(result, expected_result)
 
 
 # Test get_nearest_PSD

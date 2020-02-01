@@ -10,15 +10,16 @@ from numpy.random import multivariate_normal
 from copy import deepcopy
 import warnings
 import inspect
+from deprecated import deprecated
 warnings.simplefilter('default')
 
-__all__ = ['mask_nan', 'inv', 'df_to_list', 'list_to_df', 'create_col', 'get_diag',
+__all__ = ['mask_nan', 'inv', 'df_to_tensor', 'tensor_to_df', 'create_col', 'get_diag',
         'noise', 'simulated_data', 'gen_PSD', 'ft', 'M_wrap', 'LL_correct', 
         'clean_matrix', 'get_ergodic', 'min_val', 'max_val', 'inf_val', 'pdet',
         'permute', 'revert_permute', 'partition_index', 'get_init_mat', 
         'check_consistence', 'gen_Xt', 'preallocate', 'get_explosive_diffuse',
         'get_nearest_PSD', 'Constant_M', 'Constant_M_simple', 'Constant_M_complex',
-        'validate_wrapper']
+        'validate_wrapper', 'get_reset', 'build_tensor']
 
 
 max_val = 1e6  # Smaller value identifies diffuse better
@@ -72,22 +73,21 @@ def mask_nan(is_nan: np.ndarray, mat: np.ndarray,
     return mat_masked
 
 
-def get_diag(arrays: List[np.ndarray]) -> List[np.ndarray]:
+def get_diag(arrays: np.ndarray) -> np.ndarray:
     """
-    Convert a list of square arrays into a lit of 1D arrays with 
+    Convert a tensor of square arrays into a tensor of 1D arrays with 
     diagonal values only
 
     Parameters:
     ----------
-    arrays : list of square arrays
+    arrays : tensor of square arrays
 
     Returns:
     ----------
-    diag_arrays : list of N x 1 arrays with diagonal values only
+    diag_arrays : tensor of N x 1 arrays with diagonal values only
     """
-    len_array = len(arrays)
-    diag_arrays = preallocate(len_array)
-    for i in range(len_array):
+    diag_arrays = preallocate(arrays.shape[0], arrays.shape[1], 1)
+    for i in range(arrays.shape[0]):
         diag_arrays[i] = np.diag(arrays[i]).reshape(-1, 1)
     
     return diag_arrays
@@ -150,12 +150,12 @@ def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
             F_[l_comp, l_comp] = inf_val
     
     # Get diffuse states 
-    is_diffuse = (np.diag(F_) > max_val).tolist()
+    is_diffuse = np.diag(F_) > max_val
     return is_diffuse
 
 
-def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None, 
-        T: int=None, const_M_type: str='simple') -> List[np.ndarray]:
+def gen_Xt(Xt: np.ndarray=None, B: np.ndarray=None, 
+        T: int=None) -> np.ndarray:
     """
     Generate a list of zero arrays if Xt is None
 
@@ -164,7 +164,6 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None,
     Xt : input Xt
     B : provide dimension information for generating dummy Xt
     T : provide length of the output list Xt
-    const_M_type : type of constant_M generator
 
     Returns:
     ----------
@@ -173,8 +172,7 @@ def gen_Xt(Xt: List[np.ndarray]=None, B: np.ndarray=None,
     if Xt is None:
         if B is None or T is None:
             raise ValueError('B and T must not be None')
-        Xt_ = Constant_M(np.zeros(
-                (B.shape[1], 1)), T, constant_M_type=const_M_type)
+        Xt_ = np.zeros((T, B.shape[1], 1))
     else:
         Xt_ = Xt
     return Xt_
@@ -211,8 +209,8 @@ def validate_wrapper(wrapper: Any) -> Any:
         return wrapper
 
 
-def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
-        -> List[np.ndarray]:
+def df_to_tensor(df: pd.DataFrame, col_list: List[str]=None) \
+        -> np.ndarray:
     """
     Convert pandas dataframe to list of arrays.
     
@@ -223,7 +221,7 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
 
     Returns:
     ----------
-    L : len(L) == df.shape[0], L[0].shape[0] == df.shape[1]
+    L : tensor of shape (T * len(col_name) * 1)
     """
     # If col_list is None, return None. None is treated by
     # downstream functions as an indicator.
@@ -240,41 +238,51 @@ def df_to_list(df: pd.DataFrame, col_list: List[str]=None) \
             if not is_numeric_dtype(df[col]):
                 raise TypeError('Input dataframe must be numeric')
 
-        # Convert df to list row-wise
-        L = np.hsplit(df[col_list].values.T, range(1, df.shape[0]))
+        # Convert df to tnesor row-wise
+        L = df[col_list].values.reshape((df.shape[0], len(col_list), 1))
         return L
 
 
-def list_to_df(L: List[np.ndarray], col: List[str]) -> pd.DataFrame:
+def tensor_to_df(L: np.ndarray, col: List[str]) -> pd.DataFrame:
     """
-    Convert list of arrays to a dataframe. Reverse operation of _df_to_list.
+    Convert list of arrays to a dataframe. Reverse operation of df_to_tensor.
 
     Parameters:
     ----------
-    L : len(L) == df.shape[0], L[0].shape[0] == df.shape[1]
-    col : list of column names. len(col) must equal to L[0].shape[0]
+    L : shape (m * n * 1)
+    col : list of column names. len(col) = n
 
     Returns:
     ----------
-    df: output dataframe
+    df: output dataframe shape (m * n)
     """
-    if not isinstance(col, list):
-        raise TypeError('col must be a list of strings')
-    num_col = len(col)
-    
-    for i in L:
-        # Check convertibility
-        if i.ndim > 1:
-            if i.shape[0] > 1 and i.shape[1] > 1:
-                raise ValueError('Input must be one dimensional.')
-            else:
-                i = i.flatten()
-
-        if num_col != i.shape[0]:
-            raise ValueError('Input arrays have wrong size.')
-
-    df = pd.DataFrame(np.hstack(L).T, columns=col)
+    if not isinstance(L, np.ndarray):
+        raise TypeError('col must be an ndarray')
+    if len(L.shape) < 3:
+        raise TypeError('Input array must be a tensor')
+    if len(col) != L.shape[1]:
+        raise TypeError('Column length does not match input array')
+    df = pd.DataFrame(L.reshape(L.shape[0], L.shape[1]), columns=col)
     return df
+
+
+def build_tensor(arr: np.ndarray, T: int) -> np.ndarray:
+    """
+    Create tensor from a 2d array
+
+    Parameters:
+    ----------
+    arr : input matrix
+    T : number of times to replicate along the first dimension
+
+    Returns:
+    ----------
+    tensor : output 3d tensor
+    """
+    if len(arr.shape) < 2:
+        raise TypeError('Input must be 2-d arrays')
+
+    return np.repeat(arr[np.newaxis, :, :], T, axis=0)
 
 
 def create_col(col: List[str], suffix: str='_pred') -> List[str]:
@@ -296,27 +304,32 @@ def create_col(col: List[str], suffix: str='_pred') -> List[str]:
     return col_new
 
 
-def preallocate(dim1, dim2=None):
+def preallocate(dim1: int, *dimn: int, default_val: float = 0, 
+        arr_type: str='float') -> np.ndarray:
     """
-    Preallocate a list by creating either [None] * dim1
-    or [[None] * dim2] * dim1. I use for loop to break reference
+    Preallocate a tensor placeholder
 
     Parameters:
     ----------
-    dim1 : length of list
-    dim2 : if not None, each element is also a list of None
+    dim1 : length of tensor
+    dim2 : m of m*n matrix
+    dim3 : n of m*n matrix
+    default_val : default value of array
+    arr_type : if 'float' then np.float64, if 'int' then int
 
     Returns:
     ----------
-    allocated_list : pre-allocated placeholders
+    allocated_tensor : pre-allocated tensor
     """
-    allocated_list = None
-    if dim1 > 0:
-        if dim2 is None:
-            allocated_list = [None for _ in range(dim1)]
-        else:
-            allocated_list = [[None for _1 in range(dim2)] for _2 in range(dim1)]
-    return allocated_list
+    if arr_type == 'float':
+        array_type = np.float64
+    elif arr_type == 'int':
+        array_type = int
+    else:
+        raise TypeError("array_type must be 'float' or 'int'")
+    allocated_tensor = default_val * np.ones((dim1, *dimn), 
+            dtype=array_type, order='F')
+    return allocated_tensor
 
 
 def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
@@ -486,11 +499,10 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     if Xt is None:
         if T is None:
             raise ValueError('When Xt = None, T must be assigned')
-        X_t = Constant_M(np.zeros((x_dim, 1)), T, 
-                constant_M_type=const_M_type)
+        X_t = preallocate(T, x_dim, 1)
     else:
         T = Xt.shape[0]
-        X_t = df_to_list(Xt, list(Xt.columns))
+        X_t = df_to_tensor(Xt, list(Xt.columns))
     
     # Check consistence
     x_dim = X_t[0].shape[0]
@@ -510,11 +522,11 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
         P_1_0 = init_state.get('P_star_t', P_1_0)
 
     P_1_0[np.isnan(P_1_0)] = 1  # give an arbitrary value to diffuse priors
-    Xi_t = preallocate(T)
+    Xi_t = preallocate(T, 1, 1)
     Xi_t[0] = xi_1_0 + noise(xi_dim, P_1_0)
 
     # Iterate through time steps
-    Y_t = [None] * T
+    Y_t = preallocate(T, y_dim, 1)
     for t in range(T):
         # Generate y_t
         Y_t[t] = Mt['Ht'][t].dot(Xi_t[t]) + Mt['Dt'][t].dot(X_t[t]) + \
@@ -528,8 +540,8 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
     # Generate df
     y_col = ['y_{}'.format(i) for i in range(y_dim)]
     xi_col = ['xi_{}'.format(i) for i in range(xi_dim)]
-    df_Y = list_to_df(Y_t, y_col)
-    df_Xi = list_to_df(Xi_t, xi_col)
+    df_Y = tensor_to_df(Y_t, y_col)
+    df_Xi = tensor_to_df(Xi_t, xi_col)
     df = pd.concat([df_Xi, df_Y, Xt], axis=1)
     return df, y_col, xi_col
 
@@ -565,7 +577,7 @@ def gen_PSD(theta: np.ndarray, dim: int) -> np.ndarray:
 
 def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
         x_0: np.ndarray=None, force_diffuse: List[bool]=None, 
-        is_warning: bool=True) -> List[np.ndarray]:
+        is_warning: bool=True) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calculate initial state covariance matrix, and identify 
     diffuse state. It effectively solves a Lyapuov equation
@@ -861,10 +873,10 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
         raise ValueError('R is not symmetric')
     
     # Generate ft for required keys
-    Ft = Constant_M(M['F'], T, constant_M_type=const_M_type)
-    Ht = Constant_M(M['H'], T, constant_M_type=const_M_type)
-    Qt = Constant_M(M['Q'], T, constant_M_type=const_M_type)
-    Rt = Constant_M(M['R'], T, constant_M_type=const_M_type)
+    Ft = build_tensor(M['F'], T)
+    Ht = build_tensor(M['H'], T)
+    Qt = build_tensor(M['Q'], T)
+    Rt = build_tensor(M['R'], T)
 
     # Set Bt if Bt is not Given
     if 'B' not in M_keys:
@@ -881,8 +893,8 @@ def ft(theta: np.ndarray, f: Callable, T: int, x_0: np.ndarray=None,
         M.update({'D': np.zeros((dim_y, dim_x))})
 
     # Get Bt and Dt for ft
-    Bt = Constant_M(M['B'], T, constant_M_type=const_M_type)
-    Dt = Constant_M(M['D'], T, constant_M_type=const_M_type)
+    Bt = build_tensor(M['B'], T)
+    Dt = build_tensor(M['D'], T)
 
     # Initialization
     if P_1_0 is None or xi_1_0 is None: 
@@ -920,16 +932,16 @@ def pdet(array: np.ndarray) -> float:
     return array_pdet
 
 
-def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray], 
-        n_t: List[int], A: np.ndarray, index: List[List[int]]=None) \
+def LL_correct(Ht: np.ndarray, Ft: np.ndarray, 
+        n_t: np.ndarray, A: np.ndarray, index: np.ndarray=None) \
         -> np.ndarray:
     """
     Calculate Correction term for the marginal likelihood
 
     Parameters:
     ----------
-    Ht : list of measurement specification matrices
-    Ft : list of state transition matrices
+    Ht : tensor of measurement specification matrices
+    Ft : tensor of state transition matrices
     n_t : only the first n_t[t] rows of Ht are used
     A : selection matrix for P_inf_1_0
     index : if not None, sort Ht first
@@ -955,43 +967,71 @@ def LL_correct(Ht: List[np.ndarray], Ft: List[np.ndarray],
     return MLL_correct
     
 
+def get_reset(tensor: np.ndarray) -> np.ndarray:
+    """
+    Get reset array based on whehter tensor[n] == tensor[n-1]
+
+    Parameters:
+    ----------
+    tensor : input tensor
+    
+    Returns:
+    ----------
+    reset_array : true if tensor[n] != tensor[n-1]
+    """
+    reset_array = np.zeros(tensor.shape[0])
+    reset_array[0] = 1
+    for i in range(tensor.shape[0]-1):
+        if not np.array_equal(
+                tensor[i+1, :, :], tensor[i, :, :]):
+            reset_array[i+1] = 1
+    return reset_array
+        
+    
 class M_wrap(Sequence):
     """
-    Wraper of array lists. Improve efficiency by skipping 
-    repeated calculation when m_list contains same arrays. 
-        raise TypeError('Q must be a square matrix')
+    Wraper of tensor. Improve efficiency by skipping 
+    repeated calculation when m_tensor contains same arrays. 
     """
     
-    def __init__(self, m_list: List[np.ndarray]) -> None:
+    def __init__(self, m_tensor: np.ndarray, 
+            reset: np.ndarray=None) -> None:
         """
         Create placeholder for calculated matrix. 
 
         Parameters:
         ----------
-        m_list : list of input arrays. Should be mostly constant
+        m_tensor : input tensor. 
+        reset : if true, then recalculate ldl, etc
         """
-        self.m_list = m_list
-        self.m = None
+        self.m_tensor = m_tensor
+
+        if reset is None:
+            self.reset = get_reset(m_tensor) 
+        else:
+            self.reset = reset
+
+        # Initialize using first value
         self.m_pinvh = None
         self.L = None
         self.D = None
         self.L_I = None
         self.m_pdet = None
-    
+
     
     def __getitem__(self, index: int) -> np.ndarray:
         """
-        Returns indexed array of the wrapped list
+        Returns indexed array of the wrapped tensor
 
         Parameters:
         ----------
-        index : index of the wrapped list
+        index : index of the wrapped tensor
 
         Returns:
         ----------
-        self.m_list[index] : indexed array of the wrapped list
+        self.m_tensor[index] : indexed array of the wrapped tensor
         """
-        return self.m_list[index]
+        return self.m_tensor[index]
 
 
     def __setitem__(self, index: int, val: np.ndarray) -> None:
@@ -1003,7 +1043,7 @@ class M_wrap(Sequence):
         index : index of the wrapped list
         val : input array
         """
-        self.m_list[index] = val 
+        self.m_tensor[index] = val 
 
 
     def __len__(self) -> int:
@@ -1014,32 +1054,20 @@ class M_wrap(Sequence):
         ----------
         len(self.m_list) : length of the wrapped list
         """
-        return len(self.m_list)
+        return len(self.m_tensor)
 
 
-    def _equal_M(self, index: int) ->bool:
+    def refresh(self) -> None:
         """
-        Return true if self.m_list[index] == self.m. 
-        If false, set self.m = self.m_list[index]
-
-        Parameters: 
-        ----------
-        index : index of the wrapped list
-
-        Returns:
-        ----------
-        Boolean that indicates whether we need to perform the operation
+        Reset self.reset after modification 
+        to self.m_tensor. 
         """
-        if np.array_equal(self.m, self.m_list[index]):
-            return True
-        else:
-            self.m = self.m_list[index]
-            return False
-    
+        self.reset = get_reset(self.m_tensor)
+
 
     def pinvh(self, index: int) -> np.ndarray:
         """
-        Return pseudo-inverse of self.m_list[index]
+        Return pseudo-inverse of self.m_tensor[index]
 
         Parameters:
         ----------
@@ -1048,26 +1076,27 @@ class M_wrap(Sequence):
         Returns:
         self.m_pinvh : pseudo-inverse
         """
-        if (not self._equal_M(index)) or self.m_pinvh is None:
-            self.m_pinvh = inv(self.m)
+        if self.reset[index] or (self.m_pinvh is None):
+            self.m_pinvh = inv(self.m_tensor[index])
         return self.m_pinvh
     
 
-    def ldl(self, index: int) -> List[np.ndarray]:
+    def ldl(self, index: int) -> Tuple[np.ndarray, np.ndarray, 
+            np.ndarray]:
         """
         Calculate L and D from LDL decomposition, and inverse of L
 
         Parameters:
         ----------
-        index : index of the wrapped list
+        index : index of the wrapped tensor
 
         Returns:
-        self.L : L  of LDL
+        self.L : L of LDL
         self.D : D of LDL
         self.L_I : inverse of L
         """
-        if (not self._equal_M(index)) or self.L is None:
-            self.L, self.D, _ = linalg.ldl(self.m)
+        if self.reset[index] or (self.L is None):
+            self.L, self.D, _ = linalg.ldl(self.m_tensor[index])
             self.L_I, _ = linalg.lapack.dtrtri(self.L, lower=True)
         return self.L, self.D, self.L_I
 
@@ -1078,17 +1107,18 @@ class M_wrap(Sequence):
 
         Parameters:
         ----------
-        index : index of the wrapped list
+        index : index of the wrapped tensor
         
         Returns:
         ----------
         self.m_pdet : pseudo-determinant
         """
-        if (not self._equal_M(index)) or self.m_pdet is None:
-            self.m_pdet = pdet(self.m)
+        if self.reset[index] or (self.m_pdet is None):
+            self.m_pdet = pdet(self.m_tensor[index])
         return self.m_pdet
 
 
+@deprecated
 def Constant_M(M: np.ndarray, length: int, 
         constant_M_type: str='simple'):
     """
@@ -1109,6 +1139,7 @@ def Constant_M(M: np.ndarray, length: int,
                 ' value "simple" or "complex".')
 
 
+@deprecated
 class Constant_M_simple(object):
     """
     Simple way of creating a list of constant matrix
@@ -1170,6 +1201,8 @@ class Constant_M_simple(object):
         return self.length
 
 
+@deprecated("This class is deprecated because we are move from " + \
+        "list to tensor. It's cool stuff though.")
 class Constant_M_complex(Sequence):
     """
     If the sequence of system matrix is mostly constant over time 

@@ -87,6 +87,7 @@ class Filter(object):
         self.A = None
         self.q = None
         self.t_q = 0
+        self.is_init = False  # if true then only reset to 0
 
         # Create output matrices for smoothers
         if self.for_smoother:
@@ -155,28 +156,52 @@ class Filter(object):
                     self.explosive)
 
         # Initialize xi_1_0 and  P_1_0
-        self.xi_t = preallocate(self.T, self.y_length + 1)
-        self.xi_t[0][0] = self.xi_1_0
-        self.d_t = preallocate(self.T, self.y_length)
-        self.Upsilon_star_t = preallocate(self.T, self.y_length)
-        self.P_star_t = preallocate(self.T, self.y_length + 1)
-        self.P_star_t[0][0] = self.P_star
-        self.n_t = preallocate(self.T)
-        
-        if self.q > 0:
-            self.P_inf_t = preallocate(self.T, self.y_length + 1)
-            self.P_inf_t[0][0] = self.A
-            self.Upsilon_inf_t = preallocate(self.T, self.y_length)
-            self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length)
+        self.xi_t = preallocate(self.T, self.y_length + 1, 
+                self.xi_length, 1)
+        self.d_t = preallocate(self.T, self.y_length, self.xi_length, 1)
+        self.Upsilon_star_t = preallocate(self.T, self.y_length, 1)
+        self.P_star_t = preallocate(self.T, self.y_length + 1, 
+                self.xi_length, self.xi_length)
+        self.n_t = preallocate(self.T, arr_type='int')
 
-        if self.for_smoother:
-            self.Ht_tilde = preallocate(self.T)
-            self.partition_index = preallocate(self.T)
-            self.L_star_t = preallocate(self.T, self.y_length)
-
+        if not self.is_init:
             if self.q > 0:
-                self.L0_t = preallocate(self.T, self.y_length)
-                self.L1_t = preallocate(self.T, self.y_length)
+                self.P_inf_t = preallocate(self.T, self.y_length + 1,
+                        self.xi_length, self.xi_length)
+                self.Upsilon_inf_t = preallocate(self.T, self.y_length, 1)
+                self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length, 1)
+
+            if self.for_smoother:
+                self.Ht_tilde = preallocate(self.T, self.y_length, self.xi_length)
+                self.partition_index = preallocate(self.T, self.y_length)
+                self.L_star_t = preallocate(self.T, self.y_length, 
+                        self.xi_length, self.xi_length)
+
+                if self.q > 0:
+                    self.L0_t = preallocate(self.T, self.y_length, 
+                            self.xi_length, self.xi_length)
+                    self.L1_t = preallocate(self.T, self.y_length,
+                            self.xi_length, self.xi_length)
+            self.is_init = True
+        else:
+            if self.q > 0:
+                self.P_inf_t[:] = 0
+                self.Upsilon_inf_t[:] = 0
+                self.Upsilon_inf_gt_0_t[:] = 0
+
+            if self.for_smoother:
+                self.Ht_tilde[:] = 0       
+                self.partition_index[:] = 0
+                self.L_star_t[:] = 0
+
+                if self.q > 0:
+                    self.L0_t[:] = 0
+                    self.L1_t[:] = 0
+
+        self.xi_t[0][0] = self.xi_1_0
+        self.P_star_t[0][0] = self.P_star
+        if self.q > 0:
+            self.P_inf_t[0][0] = self.A
 
 
     def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
@@ -244,6 +269,8 @@ class Filter(object):
 
             if self.for_smoother:
                 self.L_star_t[t][ob_index] = L_t_i
+            if t == 1:
+                raise
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
         xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \

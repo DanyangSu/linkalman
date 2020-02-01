@@ -27,7 +27,8 @@ setup(
         'numpy',
         'scipy',
         'pandas',
-        'networkx'
+        'networkx',
+        'deprecated'
         ],
     classifiers = [
         'Development Status :: 3 - Alpha',
