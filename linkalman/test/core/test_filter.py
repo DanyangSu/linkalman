@@ -584,8 +584,8 @@ def test_get_filtered_y_no_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
 
     Yt_filtered, Yt_filtered_cov, xi_t, P_t = kf.get_filtered_val(is_xi=False)
-    assert xi_t[-1] == None
-    assert P_t[-1] == None
+    assert np.isnan(xi_t[-1])
+    assert np.isnan(P_t[-1])
 
 
 # Test get_filtered_state

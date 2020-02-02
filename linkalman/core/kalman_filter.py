@@ -158,7 +158,7 @@ class Filter(object):
         # Initialize xi_1_0 and  P_1_0
         self.xi_t = preallocate(self.T, self.y_length + 1, 
                 self.xi_length, 1)
-        self.d_t = preallocate(self.T, self.y_length, self.xi_length, 1)
+        self.d_t = preallocate(self.T, self.y_length, 1)
         self.Upsilon_star_t = preallocate(self.T, self.y_length, 1)
         self.P_star_t = preallocate(self.T, self.y_length + 1, 
                 self.xi_length, self.xi_length)
@@ -269,8 +269,6 @@ class Filter(object):
 
             if self.for_smoother:
                 self.L_star_t[t][ob_index] = L_t_i
-            if t == 1:
-                raise
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
         xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
@@ -447,6 +445,12 @@ class Filter(object):
             self.Ht[t] = permute(self.Ht[t], partitioned_index)
             self.Dt[t] = permute(self.Dt[t], partitioned_index)
 
+            # Update reset index so ldl of R gets recalculated
+            if t == self.T - 1:
+                self.Rt.reset[t] = 1
+            else:
+                self.Rt.reset[t:t+2] = 1
+
         # Diagonalize Y_t, H_t, and D_t
         L_t, R_t, L_inv = self.Rt.ldl(t)
         Y_t = L_inv.dot(self.Yt[t])
@@ -523,13 +527,14 @@ class Filter(object):
         # If xi_col is not specified, use all columns
         if xi_col is None:
             xi_col = list(range(self.xi_length))
+        xi_len = len(xi_col)
         
         Mt = self.ft(self.theta, self.T, **self.ft_kwargs)
 
-        Yt_filtered = preallocate(self.T)
-        Yt_filtered_cov = preallocate(self.T)
-        xi_t = preallocate(self.T)
-        P_t = preallocate(self.T)
+        Yt_filtered = preallocate(self.T, self.y_length, 1)
+        Yt_filtered_cov = preallocate(self.T, self.y_length, self.y_length)
+        xi_t = preallocate(self.T, xi_len, 1)
+        P_t = preallocate(self.T, xi_len, xi_len)
 
         for t in range(self.T):
             # Get filtered y_t
@@ -549,7 +554,10 @@ class Filter(object):
                 if t >= self.t_q:
                     P_t[t] = self.P_star_t[t][0][xi_col][:, xi_col]
                 else:
-                    P_t[t] = np.nan * np.ones(self.P_star_t[t][0].shape)
+                    P_t[t] = np.nan * np.ones((xi_len, xi_len))
+            else:
+                xi_t = np.nan * np.ones(self.T)
+                P_t = np.nan * np.ones(self.T)
             
         return Yt_filtered, Yt_filtered_cov, xi_t, P_t
 

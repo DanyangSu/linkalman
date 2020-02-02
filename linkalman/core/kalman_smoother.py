@@ -49,6 +49,7 @@ class Smoother(object):
         self.N1_t = None
         self.N2_t = None
         self.is_smoothed = False
+        self.is_init_smooth = False
         
 
     def init_attr_smoother(self, kf: Filter) -> None:
@@ -66,21 +67,43 @@ class Smoother(object):
             raise TypeError('The Kalman filter object is not for smoothers')
         self.__dict__.update(kf.__dict__)
 
-        # Initiate state variables
-        self.xi_t_T = preallocate(self.T)
-        self.P_t_T = preallocate(self.T)
-        self.xi2_t_T = preallocate(self.T)
-        self.Pcov_t_t1 = preallocate(self.T)
-        self.delta2 = preallocate(self.T)
-        self.chi2 = preallocate(self.T)
+        if not self.is_init_smooth:
+            # Initiate state variables
+            self.xi_t_T = preallocate(self.T, self.xi_length, 1)
+            self.P_t_T = preallocate(self.T, self.xi_length, 
+                    self.xi_length)
+            self.xi2_t_T = preallocate(self.T, self.xi_length, 1)
+            self.Pcov_t_t1 = preallocate(self.T, self.xi_length, 
+                    self.xi_length)
+            self.delta2 = preallocate(self.T, 1)
+            self.chi2 = preallocate(self.T, 1)
 
-        # Initiate r and N
-        self.r0_t = preallocate(self.T)
-        self.r1_t = preallocate(self.t_q)
-        self.N0_t = preallocate(self.T)
-        self.N1_t = preallocate(self.t_q)
-        self.N2_t = preallocate(self.t_q)
-        
+            # Initiate r and N
+            self.r0_t = preallocate(self.T, self.xi_length, 1)
+            self.r1_t = preallocate(self.t_q, self.xi_length, 1)
+            self.N0_t = preallocate(self.T, self.xi_length, 
+                    self.xi_length)
+            self.N1_t = preallocate(self.t_q, self.xi_length,
+                    self.xi_length)
+            self.N2_t = preallocate(self.t_q, self.xi_length,
+                    self.xi_length)
+            self.is_init_smooth = True
+            
+        else: 
+            self.xi_t_T[:] = 0
+            self.P_t_T[:] = 0
+            self.xi2_t_T[:] = 0
+            self.Pcov_t_t1[:] = 0
+            self.delta2[:] = 0
+            self.chi2[:] = 0
+
+            # Initiate r and N
+            self.r0_t[:] = 0
+            self.r1_t[:] = 0
+            self.N0_t[:] = 0
+            self.N1_t[:] = 0
+            self.N2_t[:] = 0
+
         self.r0_t[self.T-1] = np.zeros([self.xi_length, 1])
         self.N0_t[self.T-1] = np.zeros([self.xi_length, self.xi_length])
         
@@ -131,7 +154,7 @@ class Smoother(object):
         
         for i in reversed(range(n_t)):
             H_i_T = H_t[i:i+1].T
-            r_t_1i = (H_i_T).dot(d_t[i]) / Upsilon[i] + \
+            r_t_1i = (H_i_T).dot(d_t[i:i+1]) / Upsilon[i] + \
                     (L_t[i].T).dot(r_t_1i)
             N_t_1i = (H_i_T).dot(H_i_T.T) / Upsilon[i] + \
                     (L_t[i].T).dot(N_t_1i).dot(L_t[i])
@@ -190,7 +213,7 @@ class Smoother(object):
             if gt_0[i]:
                 
                 # Must update r1 first, bc it uses r0_t_1i
-                r1_t_1i = (H_i_T).dot(d_t[i]) / Upsilon_inf[i] + \
+                r1_t_1i = (H_i_T).dot(d_t[i:i+1]) / Upsilon_inf[i] + \
                         (L1_t[i].T).dot(r0_t_1i) + (L0_t[i].T).dot(r1_t_1i)
                 r0_t_1i = (L0_t[i].T).dot(r0_t_1i)
 
@@ -207,7 +230,7 @@ class Smoother(object):
 
             # If Upsilon_inf == 0
             else:
-                r0_t_1i = (H_i_T).dot(d_t[i]) / Upsilon_star[i] + \
+                r0_t_1i = (H_i_T).dot(d_t[i:i+1]) / Upsilon_star[i] + \
                         (L_star_t[i].T).dot(r0_t_1i)
                 N0_t_1i = (H_i_T).dot(H_i_T.T) / Upsilon_star[i] + \
                         (L_star_t[i].T).dot(N0_t_1i).dot(L_star_t[i])
@@ -381,11 +404,13 @@ class Smoother(object):
         # If xi_col is not specified, use all columns
         if xi_col is None:
             xi_col = list(range(self.xi_length))
+        xi_len = len(xi_col)
 
-        Yt_smoothed = preallocate(self.T)
-        Yt_smoothed_cov = preallocate(self.T)
-        xi_t_T = preallocate(self.T)
-        P_t_T = preallocate(self.T)
+        Yt_smoothed = preallocate(self.T, self.y_length, 1)
+        Yt_smoothed_cov = preallocate(self.T, 
+                self.y_length, self.y_length)
+        xi_t_T = preallocate(self.T, xi_len, 1)
+        P_t_T = preallocate(self.T, xi_len, xi_len)
 
         for t in range(self.T):
             # Get smoothed mean and cov of y_t

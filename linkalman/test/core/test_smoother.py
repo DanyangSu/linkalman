@@ -24,7 +24,7 @@ def test_init_attr_smoother(ft_rw_1, theta_rw, Yt_1d, Xt_1d):
     N0 = ks.N0_t[kf.T-1]
     np.testing.assert_array_equal(e_r0, r0)
     np.testing.assert_array_equal(e_N0, N0)
-    assert ks.r1_t == None
+    assert ks.r1_t.shape[0] == 0
 
 
 def test_init_attr_smoother_not_fitted(ft_rw_1, theta_rw, Yt_1d, Xt_1d):
