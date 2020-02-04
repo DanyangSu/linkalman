@@ -69,40 +69,44 @@ class Smoother(object):
 
         if not self.is_init_smooth:
             # Initiate state variables
-            self.xi_t_T = preallocate(self.T, self.xi_length, 1)
+            self.xi_t_T = preallocate(self.T, self.xi_length, 1, 
+                    default_val=np.nan)
             self.P_t_T = preallocate(self.T, self.xi_length, 
-                    self.xi_length)
-            self.xi2_t_T = preallocate(self.T, self.xi_length, 1)
+                    self.xi_length, default_val=np.nan)
+            self.xi2_t_T = preallocate(self.T, self.xi_length, 1,
+                    default_val=np.nan)
             self.Pcov_t_t1 = preallocate(self.T, self.xi_length, 
-                    self.xi_length)
-            self.delta2 = preallocate(self.T, 1)
-            self.chi2 = preallocate(self.T, 1)
+                    self.xi_length, default_val=np.nan)
+            self.delta2 = preallocate(self.T, 1, default_val=np.nan)
+            self.chi2 = preallocate(self.T, 1, default_val=np.nan)
 
             # Initiate r and N
-            self.r0_t = preallocate(self.T, self.xi_length, 1)
-            self.r1_t = preallocate(self.t_q, self.xi_length, 1)
+            self.r0_t = preallocate(self.T, self.xi_length, 1,
+                    default_val=np.nan)
+            self.r1_t = preallocate(self.t_q, self.xi_length, 1,
+                    default_val=np.nan)
             self.N0_t = preallocate(self.T, self.xi_length, 
-                    self.xi_length)
+                    self.xi_length, default_val=np.nan)
             self.N1_t = preallocate(self.t_q, self.xi_length,
-                    self.xi_length)
+                    self.xi_length, default_val=np.nan)
             self.N2_t = preallocate(self.t_q, self.xi_length,
-                    self.xi_length)
+                    self.xi_length, default_val=np.nan)
             self.is_init_smooth = True
             
         else: 
-            self.xi_t_T[:] = 0
-            self.P_t_T[:] = 0
-            self.xi2_t_T[:] = 0
-            self.Pcov_t_t1[:] = 0
-            self.delta2[:] = 0
-            self.chi2[:] = 0
+            self.xi_t_T[:] = np.nan
+            self.P_t_T[:] = np.nan
+            self.xi2_t_T[:] = np.nan
+            self.Pcov_t_t1[:] = np.nan
+            self.delta2[:] = np.nan
+            self.chi2[:] = np.nan
 
             # Initiate r and N
-            self.r0_t[:] = 0
-            self.r1_t[:] = 0
-            self.N0_t[:] = 0
-            self.N1_t[:] = 0
-            self.N2_t[:] = 0
+            self.r0_t[:] = np.nan
+            self.r1_t[:] = np.nan
+            self.N0_t[:] = np.nan
+            self.N1_t[:] = np.nan
+            self.N2_t[:] = np.nan
 
         self.r0_t[self.T-1] = np.zeros([self.xi_length, 1])
         self.N0_t[self.T-1] = np.zeros([self.xi_length, self.xi_length])

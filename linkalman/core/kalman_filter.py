@@ -155,48 +155,60 @@ class Filter(object):
             self.explosive = init_state.get('explosive', 
                     self.explosive)
 
-        # Initialize xi_1_0 and  P_1_0
-        self.xi_t = preallocate(self.T, self.y_length + 1, 
-                self.xi_length, 1)
-        self.d_t = preallocate(self.T, self.y_length, 1)
-        self.Upsilon_star_t = preallocate(self.T, self.y_length, 1)
-        self.P_star_t = preallocate(self.T, self.y_length + 1, 
-                self.xi_length, self.xi_length)
-        self.n_t = preallocate(self.T, arr_type='int')
-
         if not self.is_init:
+
+            # Initialize xi_1_0 and  P_1_0
+            self.xi_t = preallocate(self.T, self.y_length + 1, 
+                    self.xi_length, 1, default_val=np.nan)
+            self.d_t = preallocate(self.T, self.y_length, 1, default_val=np.nan)
+            self.Upsilon_star_t = preallocate(self.T, self.y_length, 1, 
+                    default_val=np.nan)
+            self.P_star_t = preallocate(self.T, self.y_length + 1, 
+                    self.xi_length, self.xi_length, default_val=np.nan)
+            self.n_t = preallocate(self.T, arr_type='int')
+
             if self.q > 0:
                 self.P_inf_t = preallocate(self.T, self.y_length + 1,
-                        self.xi_length, self.xi_length)
-                self.Upsilon_inf_t = preallocate(self.T, self.y_length, 1)
-                self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length, 1)
+                        self.xi_length, self.xi_length, default_val=np.nan)
+                self.Upsilon_inf_t = preallocate(self.T, self.y_length, 1,
+                        default_val=np.nan)
+                self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length, 1,
+                        default_val=np.nan)
 
             if self.for_smoother:
-                self.Ht_tilde = preallocate(self.T, self.y_length, self.xi_length)
-                self.partition_index = preallocate(self.T, self.y_length, arr_type='int')
+                self.Ht_tilde = preallocate(self.T, self.y_length, self.xi_length,
+                        default_val=np.nan)
+                self.partition_index = preallocate(self.T, self.y_length, 
+                        arr_type='int')
                 self.L_star_t = preallocate(self.T, self.y_length, 
-                        self.xi_length, self.xi_length)
+                        self.xi_length, self.xi_length, default_val=np.nan)
 
                 if self.q > 0:
                     self.L0_t = preallocate(self.T, self.y_length, 
-                            self.xi_length, self.xi_length)
+                            self.xi_length, self.xi_length, default_val=np.nan)
                     self.L1_t = preallocate(self.T, self.y_length,
-                            self.xi_length, self.xi_length)
+                            self.xi_length, self.xi_length, default_val=np.nan)
             self.is_init = True
         else:
+            self.xi_t[:] = np.nan
+            self.d_t[:] = np.nan
+            self.Upsilon_star_t[:] = np.nan
+            self.P_star_t[:] = np.nan 
+            self.n_t[:] = 0
+
             if self.q > 0:
-                self.P_inf_t[:] = 0
-                self.Upsilon_inf_t[:] = 0
-                self.Upsilon_inf_gt_0_t[:] = 0
+                self.P_inf_t[:] = np.nan
+                self.Upsilon_inf_t[:] = np.nan
+                self.Upsilon_inf_gt_0_t[:] = np.nan
 
             if self.for_smoother:
-                self.Ht_tilde[:] = 0       
+                self.Ht_tilde[:] = np.nan
                 self.partition_index[:] = 0
-                self.L_star_t[:] = 0
+                self.L_star_t[:] = np.nan
 
                 if self.q > 0:
-                    self.L0_t[:] = 0
-                    self.L1_t[:] = 0
+                    self.L0_t[:] = np.nan
+                    self.L1_t[:] = np.nan
 
         self.xi_t[0][0] = self.xi_1_0
         self.P_star_t[0][0] = self.P_star

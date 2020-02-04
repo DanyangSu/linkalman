@@ -221,14 +221,14 @@ def test_sequential_update_uni_missing(
         kf._sequential_update(t_)
     K = kf.P_star_t[t][ob] / (kf.P_star_t[t][ob] + kf.Rt[t][ob][ob])
     v = kf.Yt[t][ob] - kf.xi_t[t][ob] - kf.Dt[t][ob].dot(kf.Xt[t])
-    expected_xi_t_11 = 0
-    expected_P_t_11 = np.zeros((1, 1))
+    expected_xi_t_11 = np.array([[np.nan]])
+    expected_P_t_11 = np.zeros((1, 1)) * np.nan
     expected_P_t1_0 = kf.Ft[t].dot(kf.P_star_t[t][0]).dot(
             kf.Ft[t]) + kf.Qt[t]
     expected_xi_t1_0 = kf.Ft[t].dot(kf.xi_t[t][0]) + \
             kf.Bt[t].dot(kf.Xt[t])
-    assert expected_xi_t_11 == kf.xi_t[t][1]
-    assert expected_P_t_11 == kf.P_star_t[t][1]
+    np.testing.assert_array_equal(expected_xi_t_11, kf.xi_t[t][1])
+    np.testing.assert_array_equal(expected_P_t_11, kf.P_star_t[t][1])
     np.testing.assert_array_almost_equal(expected_P_t1_0, 
             kf.P_star_t[t+1][0])
     np.testing.assert_array_almost_equal(expected_xi_t1_0, 
