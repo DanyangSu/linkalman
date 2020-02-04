@@ -87,8 +87,8 @@ def test_get_LL_explosive_root(f_arma32):
     # Build simulated data
     df, y_col, xi_col = model.simulated_data(
             input_theta=theta_intend, Xt=Xt)
-    Xt = df_to_list(df, x_col)
-    Yt = df_to_list(df, y_col)
+    Xt = df_to_tensor(df, x_col)
+    Yt = df_to_tensor(df, y_col)
     kf = Filter(my_ft)
     kf.fit(theta_test, Yt, Xt)
     result = kf.get_LL()
@@ -114,8 +114,8 @@ def test_G_explosive_root(f_arma32):
     # Build simulated data
     df, y_col, xi_col = model.simulated_data(
             input_theta=theta_intend, Xt=Xt)
-    Xt = df_to_list(df, x_col)
-    Yt = df_to_list(df, y_col)
+    Xt = df_to_tensor(df, x_col)
+    Yt = df_to_tensor(df, y_col)
     kf = Filter(my_ft, for_smoother=True)
     kf.fit(theta_test, Yt, Xt)
     ks = Smoother()

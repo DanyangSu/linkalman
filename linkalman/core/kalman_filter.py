@@ -173,7 +173,7 @@ class Filter(object):
 
             if self.for_smoother:
                 self.Ht_tilde = preallocate(self.T, self.y_length, self.xi_length)
-                self.partition_index = preallocate(self.T, self.y_length)
+                self.partition_index = preallocate(self.T, self.y_length, arr_type='int')
                 self.L_star_t = preallocate(self.T, self.y_length, 
                         self.xi_length, self.xi_length)
 

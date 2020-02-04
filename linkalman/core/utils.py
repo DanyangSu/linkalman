@@ -522,7 +522,7 @@ def simulated_data(Ft: Callable, theta: np.ndarray,
         P_1_0 = init_state.get('P_star_t', P_1_0)
 
     P_1_0[np.isnan(P_1_0)] = 1  # give an arbitrary value to diffuse priors
-    Xi_t = preallocate(T, 1, 1)
+    Xi_t = preallocate(T, xi_1_0.shape[0], 1)
     Xi_t[0] = xi_1_0 + noise(xi_dim, P_1_0)
 
     # Iterate through time steps
