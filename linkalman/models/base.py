@@ -188,8 +188,8 @@ class BaseOpt(object):
         self.ks_fitted = ks
 
 
-    def get_LLY(self, theta: np.ndarray, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None) -> float:
+    def get_LLY(self, theta: np.ndarray, Yt: np.ndarray, 
+            Xt: np.ndarray=None) -> float:
         """
         Wrapper for calculating LLY. Used as the objective 
         function for optimizers.
@@ -197,8 +197,8 @@ class BaseOpt(object):
         Parameters:
         ----------
         theta : paratmers
-        Yt : list of measurements
-        Xt : list of regressors. May be None
+        Yt : array of measurements
+        Xt : array of regressors. May be None
 
         Returns:
         ----------

@@ -184,9 +184,9 @@ class Filter(object):
                         self.xi_length, self.xi_length, default_val=np.nan)
 
                 if self.q > 0:
-                    self.L0_t = preallocate(self.T, self.y_length, 
+                    self.L0_t = preallocate(self.q + 1, self.y_length, 
                             self.xi_length, self.xi_length, default_val=np.nan)
-                    self.L1_t = preallocate(self.T, self.y_length,
+                    self.L1_t = preallocate(self.q + 1, self.y_length,
                             self.xi_length, self.xi_length, default_val=np.nan)
             self.is_init = True
         else:

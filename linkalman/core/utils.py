@@ -30,7 +30,7 @@ min_val = 1e-7  # detect 0
 def mask_nan(is_nan: np.ndarray, mat: np.ndarray, 
         dim: str='both', diag: float=0) -> np.ndarray:
     """
-    Takes the list of NaN indices and mask the rows and columns 
+    Takes an array of NaN indices and mask the rows and columns 
     of a matrix with 0 if index has NaN value.
 
     Example:
@@ -114,7 +114,7 @@ def inv(h_array: np.ndarray) -> np.ndarray:
     return h_inv
 
 
-def get_explosive_diffuse(F: np.ndarray) -> List[bool]:
+def get_explosive_diffuse(F: np.ndarray) -> np.ndarray:
     """
     If contains explosive roots, find strongly
     connected components. Check eigenvalues for
@@ -601,7 +601,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
     
     # Is is_diffuse is not supplied, create the list
     if force_diffuse is None:
-        is_diffuse = [False for _ in range(dim)]
+        is_diffuse = np.zeros(dim, dtype=np.bool)
     else: 
         is_diffuse = deepcopy(force_diffuse)
         if len(is_diffuse) != dim:
@@ -625,8 +625,7 @@ def get_ergodic(F: np.ndarray, Q: np.ndarray, B: np.ndarray=None,
                     'results may be biased or inconsistent. Please provide ' + \
                     'user-defined xi_1_0 and P_1_0.', RuntimeWarning)
         is_diffuse_explosive = get_explosive_diffuse(F)
-        is_diffuse = [a or b for a, b in zip(is_diffuse, 
-            is_diffuse_explosive)]
+        is_diffuse = is_diffuse | is_diffuse_explosive
 
     # Modify Q_ to reflect diffuse states
     Q_ = mask_nan(is_diffuse, Q_, diag=inf_val)
