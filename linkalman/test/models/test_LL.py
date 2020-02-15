@@ -14,8 +14,8 @@ def test_E_delta2(ft_ll_mvar_diffuse,
     """
     Test normal run 
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_smooth, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
 
@@ -38,8 +38,8 @@ def test_E_chi2(ft_ll_mvar_diffuse,
     """
     Test normal run 
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_smooth, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
 
@@ -89,8 +89,8 @@ def test_get_LL_explosive_root(f_arma32):
             input_theta=theta_intend, Xt=Xt)
     Xt = df_to_tensor(df, x_col)
     Yt = df_to_tensor(df, y_col)
-    kf = Filter(my_ft)
-    kf.fit(theta_test, Yt, Xt)
+    kf = Filter(my_ft, Yt, Xt)
+    kf.fit(theta_test)
     result = kf.get_LL()
     assert not np.isnan(result)
 
@@ -116,8 +116,8 @@ def test_G_explosive_root(f_arma32):
             input_theta=theta_intend, Xt=Xt)
     Xt = df_to_tensor(df, x_col)
     Yt = df_to_tensor(df, y_col)
-    kf = Filter(my_ft, for_smoother=True)
-    kf.fit(theta_test, Yt, Xt)
+    kf = Filter(my_ft, Yt, Xt, for_smoother=True)
+    kf.fit(theta_test)
     ks = Smoother()
     ks.fit(kf)
     result = ks.G(theta_test)

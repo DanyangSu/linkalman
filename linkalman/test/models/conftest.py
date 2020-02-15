@@ -36,10 +36,11 @@ def Yt_mvar_diffuse_smooth():
     """
     Local linear model with complete yt, refer to Chapter 5 of Koopman and Durbin (2012)
     """
-    y = [np.array([1, 2]).reshape(-1, 1), 
-         np.array([np.nan, np.nan]).reshape(-1, 1), 
-         np.array([np.nan, 3.5]).reshape(-1, 1),
-         np.array([3, 5]).reshape(-1, 1)]
+    y = np.zeros((4, 2, 1))
+    y[0] = np.array([1, 2]).reshape(-1, 1)
+    y[1] = np.array([np.nan, np.nan]).reshape(-1, 1)
+    y[2] = np.array([np.nan, 3.5]).reshape(-1, 1)
+    y[3] = np.array([3, 5]).reshape(-1, 1)
     return y
 
 

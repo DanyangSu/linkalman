@@ -879,9 +879,25 @@ def test_validate_wrapper_string():
     """
     Test error message if input is some random object
     """
+    class wrapper():
+        def __init__(m_tensor, reset):
+            pass
     with pytest.raises(AttributeError) as error:
-        validate_wrapper(2)
+        validate_wrapper(wrapper)
     expected_result = 'The wrapper does not contain all required methods.'
+    assert expected_result == str(error.value)
+
+
+def test_validate_wrapper_wrong_input():
+    """
+    Test error message if the wrapper object has required arguments
+    """
+    class wrapper():
+        def __init__(self, m_tensor, rese):
+            pass
+    with pytest.raises(AttributeError) as error:
+        validate_wrapper(wrapper)
+    expected_result = """The wrapper object must contain 'm_tensor' and 'reset'. """
     assert expected_result == str(error.value)
 
 
@@ -890,7 +906,7 @@ def test_validate_wrapper_incomplete_obj():
     Test error message if input does not have all required methods
     """
     class incomplete_M(object):
-        def __init__(self):
+        def __init__(self, m_tensor, reset):
             pass
 
         def pinvh(self):

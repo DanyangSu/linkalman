@@ -169,12 +169,9 @@ def gen_Xt(Xt: np.ndarray=None, B: np.ndarray=None,
     ----------
     Xt_ : output Xt, if input is None, fill with zeros
     """
-    if Xt is None:
-        if B is None or T is None:
-            raise ValueError('B and T must not be None')
-        Xt_ = np.zeros((T, B.shape[1], 1))
-    else:
-        Xt_ = Xt
+    if B is None or T is None:
+        raise ValueError('B and T must not be None')
+    Xt_ = np.zeros((T, B.shape[1], 1))
     return Xt_
 
 
@@ -196,6 +193,12 @@ def validate_wrapper(wrapper: Any) -> Any:
     if wrapper is None:
         return M_wrap
     else:
+        # Check required inputs
+        arg_list = set(inspect.getargspec(wrapper.__init__).args)
+        if len(set(['m_tensor', 'reset']).difference(arg_list)) > 0:
+            raise AttributeError("""The wrapper object must contain""" + \
+                    """ 'm_tensor' and 'reset'. """)
+        # Check required functions
         required_list = ['pinvh', 'pdet', 'ldl']
         methods = inspect.getmembers(wrapper, 
                 predicate=inspect.isroutine)
@@ -350,7 +353,7 @@ def noise(y_dim: int, Sigma: np.ndarray) -> np.ndarray:
 
 
 def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray, 
-        init_state: Dict=None) -> None:
+        init_state: Dict=None, is_checked: bool=False) -> None:
     """
     Check consistence of matrix dimensions. Ensure
     all matrix operations are properly done. The
@@ -364,104 +367,106 @@ def check_consistence(Mt: Dict, y_t: np.ndarray, x_t: np.ndarray,
     y_t : measurement vector
     x_t : regressor vector
     init_state : user-specified initial state values
+    is_checked : if True, skip the checking step
     """
-    # Check whether Mt contains all elements
-    keys = set(['Ft', 'Bt', 'Qt', 'Ht', 'Dt', 'Rt', 
-            'xi_1_0', 'P_1_0'])
-    M_keys = set(Mt.keys())
+    if not is_checked:
+        # Check whether Mt contains all elements
+        keys = set(['Ft', 'Bt', 'Qt', 'Ht', 'Dt', 'Rt', 
+                'xi_1_0', 'P_1_0'])
+        M_keys = set(Mt.keys())
 
-    if not keys.issubset(M_keys):
-        diff_keys = keys.difference(M_keys)
-        raise ValueError('Mt does not contain all required keys. ' + \
-                'The missing keys are {}'.format(list(diff_keys)))
+        if not keys.issubset(M_keys):
+            diff_keys = keys.difference(M_keys)
+            raise ValueError('Mt does not contain all required keys. ' + \
+                    'The missing keys are {}'.format(list(diff_keys)))
 
-    # Collect dimensional information
-    dim = {}
-    dim.update({'Ft': Mt['Ft'][0].shape})
-    dim.update({'Bt': Mt['Bt'][0].shape})
-    dim.update({'Ht': Mt['Ht'][0].shape})
-    dim.update({'Dt': Mt['Dt'][0].shape}) 
-    dim.update({'Qt': Mt['Qt'][0].shape}) 
-    dim.update({'Rt': Mt['Rt'][0].shape})
-    dim.update({'xi_t': Mt['xi_1_0'].shape})
-    dim.update({'y_t': y_t.shape}) 
-    dim.update({'x_t': x_t.shape})
-    
-    # Check whether dimension is 2-D
-    for m_name in dim.keys():
-        if len(dim[m_name]) != 2:
-            raise ValueError('{} has the wrong dimensions'.format(m_name))
+        # Collect dimensional information
+        dim = {}
+        dim.update({'Ft': Mt['Ft'][0].shape})
+        dim.update({'Bt': Mt['Bt'][0].shape})
+        dim.update({'Ht': Mt['Ht'][0].shape})
+        dim.update({'Dt': Mt['Dt'][0].shape}) 
+        dim.update({'Qt': Mt['Qt'][0].shape}) 
+        dim.update({'Rt': Mt['Rt'][0].shape})
+        dim.update({'xi_t': Mt['xi_1_0'].shape})
+        dim.update({'y_t': y_t.shape}) 
+        dim.update({'x_t': x_t.shape})
+        
+        # Check whether dimension is 2-D
+        for m_name in dim.keys():
+            if len(dim[m_name]) != 2:
+                raise ValueError('{} has the wrong dimensions'.format(m_name))
 
-    # Check Ft and xi_t
-    if (dim['Ft'][1] != dim['Ft'][0]) or (dim['Ft'][1] != dim['xi_t'][0]):
-        raise ValueError('Ft and xi_t do not match in dimensions')
+        # Check Ft and xi_t
+        if (dim['Ft'][1] != dim['Ft'][0]) or (dim['Ft'][1] != dim['xi_t'][0]):
+            raise ValueError('Ft and xi_t do not match in dimensions')
 
-    # Check Ht and xi_t
-    if dim['Ht'][1] != dim['xi_t'][0]:
-        raise ValueError('Ht and xi_t do not match in dimensions')
+        # Check Ht and xi_t
+        if dim['Ht'][1] != dim['xi_t'][0]:
+            raise ValueError('Ht and xi_t do not match in dimensions')
 
-    # Check Ht and y_t
-    if dim['Ht'][0] != dim['y_t'][0]:
-        raise ValueError('Ht and y_t do not match in dimensions')
+        # Check Ht and y_t
+        if dim['Ht'][0] != dim['y_t'][0]:
+            raise ValueError('Ht and y_t do not match in dimensions')
 
-    # Check Bt and xi_t
-    if dim['Bt'][0] != dim['xi_t'][0]:
-        raise ValueError('Bt and xi_t do not match in dimensions')
+        # Check Bt and xi_t
+        if dim['Bt'][0] != dim['xi_t'][0]:
+            raise ValueError('Bt and xi_t do not match in dimensions')
 
-    # Check Bt and x_t
-    if dim['Bt'][1] != dim['x_t'][0]:
-        raise ValueError('Bt and x_t do not match in dimensions')
+        # Check Bt and x_t
+        if dim['Bt'][1] != dim['x_t'][0]:
+            raise ValueError('Bt and x_t do not match in dimensions')
 
-    # Check Dt and y_t
-    if dim['Dt'][0] != dim['y_t'][0]:
-        raise ValueError('Dt and y_t do not match in dimensions')
+        # Check Dt and y_t
+        if dim['Dt'][0] != dim['y_t'][0]:
+            raise ValueError('Dt and y_t do not match in dimensions')
 
-    # Check Dt and x_t
-    if dim['Dt'][1] != dim['x_t'][0]:
-        raise ValueError('Dt and x_t do not match in dimensions')
+        # Check Dt and x_t
+        if dim['Dt'][1] != dim['x_t'][0]:
+            raise ValueError('Dt and x_t do not match in dimensions')
 
-    # Check Qt and xi_t
-    if (dim['Qt'][1] != dim['Qt'][0]) or (dim['Qt'][1] != dim['xi_t'][0]):
-        raise ValueError('Qt and xi_t do not match in dimensions')
+        # Check Qt and xi_t
+        if (dim['Qt'][1] != dim['Qt'][0]) or (dim['Qt'][1] != dim['xi_t'][0]):
+            raise ValueError('Qt and xi_t do not match in dimensions')
 
-    # Check Rt and y_t
-    if (dim['Rt'][1] != dim['Rt'][0]) or (dim['Rt'][1] != dim['y_t'][0]):
-        raise ValueError('Rt and y_t do not match in dimensions')
+        # Check Rt and y_t
+        if (dim['Rt'][1] != dim['Rt'][0]) or (dim['Rt'][1] != dim['y_t'][0]):
+            raise ValueError('Rt and y_t do not match in dimensions')
 
-    # Check if y_t is a vector
-    if dim['y_t'][1] != 1:
-        raise ValueError('y_t must be a vector')
+        # Check if y_t is a vector
+        if dim['y_t'][1] != 1:
+            raise ValueError('y_t must be a vector')
 
-    # Check if xi_t is a vector
-    if dim['xi_t'][1] != 1:
-        raise ValueError('xi_t must be a vector')
+        # Check if xi_t is a vector
+        if dim['xi_t'][1] != 1:
+            raise ValueError('xi_t must be a vector')
 
-    # Check if x_t is a vector
-    if dim['x_t'][1] != 1:
-        raise ValueError('x_t must be a vector')
+        # Check if x_t is a vector
+        if dim['x_t'][1] != 1:
+            raise ValueError('x_t must be a vector')
 
-    # If init_state is provided, check consistency
-    if init_state is not None:
-        check_name = set(['xi_t','P_star_t', 'P_inf_t']).intersection(
-                init_state.keys())
-        for name in check_name:
+        # If init_state is provided, check consistency
+        if init_state is not None:
+            check_name = set(['xi_t','P_star_t', 'P_inf_t']).intersection(
+                    init_state.keys())
+            for name in check_name:
 
-            # Check number of dimensions
-            if len(init_state[name].shape) != 2:
-                raise ValueError('User-specified {} '.format(name) + \
-                        'does not have 2 dimensions')
-            
-            # Check if match sizes
-            if name == 'xi_t':
-                dim_check = dim['xi_t']
-            else:
-                dim_check = dim['Qt']
-            if init_state[name].shape != dim_check:
-                raise ValueError('User-specified {} has'.format(name) + \
-                        ' wrong dimensions')
+                # Check number of dimensions
+                if len(init_state[name].shape) != 2:
+                    raise ValueError('User-specified {} '.format(name) + \
+                            'does not have 2 dimensions')
+                
+                # Check if match sizes
+                if name == 'xi_t':
+                    dim_check = dim['xi_t']
+                else:
+                    dim_check = dim['Qt']
+                if init_state[name].shape != dim_check:
+                    raise ValueError('User-specified {} has'.format(name) + \
+                            ' wrong dimensions')
 
-        if init_state.get('q', 0) < 0:
-            raise ValueError('User-specified q must be non-negative')
+            if init_state.get('q', 0) < 0:
+                raise ValueError('User-specified q must be non-negative')
 
 
 def simulated_data(Ft: Callable, theta: np.ndarray, 
@@ -986,7 +991,32 @@ def get_reset(tensor: np.ndarray) -> np.ndarray:
             reset_array[i+1] = 1
     return reset_array
         
+
+def get_reset_index(Yt: np.ndarray) -> np.ndarray:
+    """
+    If Yt[i] has missing values, set the corresponding 
+    reset_index value to True
     
+    Parameters:
+    ----------
+    Yt : input tensor. If a measurement is missing, use np.nan
+
+    Returns:
+    ----------
+    reset_index : output array on whether to recalculate LDL etc. 
+    """
+    T = Yt.shape[0]
+    reset_index = ~np.ones(T, dtype=bool)
+    reset_index[0] = True
+    arr_is_nan = np.isnan(Yt[0])
+    for t in range(1, T):
+        arr_is_nan_t = np.isnan(Yt[t])
+        if not np.array_equal(arr_is_nan_t, arr_is_nan):
+            reset_index[t] = True
+        arr_is_nan = arr_is_nan_t
+    return reset_index
+
+
 class M_wrap(Sequence):
     """
     Wraper of tensor. Improve efficiency by skipping 
@@ -994,7 +1024,7 @@ class M_wrap(Sequence):
     """
     
     def __init__(self, m_tensor: np.ndarray, 
-            reset: np.ndarray=None) -> None:
+            reset: np.ndarray) -> None:
         """
         Create placeholder for calculated matrix. 
 
@@ -1004,11 +1034,7 @@ class M_wrap(Sequence):
         reset : if true, then recalculate ldl, etc
         """
         self.m_tensor = m_tensor
-
-        if reset is None:
-            self.reset = get_reset(m_tensor) 
-        else:
-            self.reset = reset
+        self.reset = deepcopy(reset)
 
         # Initialize using first value
         self.m_pinvh = None
@@ -1054,6 +1080,17 @@ class M_wrap(Sequence):
         len(self.m_list) : length of the wrapped list
         """
         return len(self.m_tensor)
+
+
+    def update_reset(self, reset_index: np.ndarray) -> None:
+        """
+        Manually insert when to recalculate values
+
+        Parameters:
+        ----------
+        reset_index : inserted reset
+        """
+        self.reset = deepcopy(reset_index)
 
 
     def refresh(self) -> None:

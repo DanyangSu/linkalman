@@ -12,8 +12,8 @@ def test_init_attr_smoother(ft_rw_1, theta_rw, Yt_1d, Xt_1d):
     """
     Test normal run
     """
-    kf = Filter(ft_rw_1, for_smoother=True)
-    kf.fit(theta_rw, Yt_1d, Xt_1d)
+    kf = Filter(ft_rw_1, Yt_1d, Xt_1d, for_smoother=True)
+    kf.fit(theta_rw)
     ks = Smoother()
     ks.init_attr_smoother(kf)
 
@@ -31,7 +31,7 @@ def test_init_attr_smoother_not_fitted(ft_rw_1, theta_rw, Yt_1d, Xt_1d):
     """
     Test error message Kalman filter not fitted
     """
-    kf = Filter(ft_rw_1, for_smoother=True)
+    kf = Filter(ft_rw_1,Yt_1d, Xt_1d, for_smoother=True)
     ks = Smoother()
     with pytest.raises(TypeError) as error:
         ks.init_attr_smoother(kf)
@@ -45,8 +45,8 @@ def test_init_attr_smoother_not_for_smoother(ft_rw_1, theta_rw, Yt_1d, Xt_1d):
     """
     Test error message Kalman filter not for smoother
     """
-    kf = Filter(ft_rw_1, for_smoother=False)
-    kf.fit(theta_rw, Yt_1d, Xt_1d)
+    kf = Filter(ft_rw_1, Yt_1d, Xt_1d, for_smoother=False)
+    kf.fit(theta_rw)
     ks = Smoother()
     with pytest.raises(TypeError) as error:
         ks.init_attr_smoother(kf)
@@ -61,8 +61,8 @@ def test_init_attr_smoother_diffuse(ft_ll_mvar_diffuse,
     """
     Test initialization for diffuse smoother
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.init_attr_smoother(kf)
     e_r1 = np.zeros([2, 1])
@@ -78,8 +78,8 @@ def test_sequential_smooth(ft_ar2_mvar, theta_ar2_mvar,
     """
     Test whether it gives the same result as using direct approach
     """
-    kf = Filter(ft_ar2_mvar, for_smoother=True)
-    kf.fit(theta_ar2_mvar, Yt_ar2_mvar, Xt_ar2_mvar)
+    kf = Filter(ft_ar2_mvar, Yt_ar2_mvar, Xt_ar2_mvar, for_smoother=True)
+    kf.fit(theta_ar2_mvar)
     ks = Smoother()
     ks.fit(kf)
 
@@ -205,8 +205,8 @@ def test_sequential_smooth_diffuse_missing(ft_ll_mvar_diffuse,
     in a seperate test, as the sequential smoother uses a different
     system of r and N. 
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_smooth, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
     
@@ -339,8 +339,8 @@ def test_sequential_smooth_diffuse_vec(ft_ll_mvar_diffuse,
     where there are multiple observations at time t, and only the 
     first measurement matters (in local linear models). 
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_smooth_vec)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_smooth_vec, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
 
@@ -431,11 +431,11 @@ def test_sequential_smooth_diffuse_vec(ft_ll_mvar_diffuse,
 
 
 # Test get_smoothed_val
-def test_get_smoothed_val_not_smoothed(ft_ll_mvar_1d):
+def test_get_smoothed_val_not_smoothed(ft_ll_mvar_1d, Yt_1d):
     """
     Test error message when fit is not run
     """
-    kf = Filter(ft_ll_mvar_1d, for_smoother=True)
+    kf = Filter(ft_ll_mvar_1d, Yt_1d, for_smoother=True)
     ks = Smoother()
     with pytest.raises(TypeError) as error:
         ks.get_smoothed_val()
@@ -449,8 +449,8 @@ def test_get_smoothed_val_all_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     """
     Test df with all xi
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
 
@@ -499,8 +499,8 @@ def test_get_smoothed_y_selected_xi(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing,
     """
     Test df with selected xi
     """
-    kf = Filter(ft_ll_mvar_diffuse, for_smoother=True)
-    kf.fit(theta_ll_mvar_diffuse, Yt_mvar_diffuse_missing)
+    kf = Filter(ft_ll_mvar_diffuse, Yt_mvar_diffuse_missing, for_smoother=True)
+    kf.fit(theta_ll_mvar_diffuse)
     ks = Smoother()
     ks.fit(kf)
 

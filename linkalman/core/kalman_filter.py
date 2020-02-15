@@ -31,8 +31,9 @@ class Filter(object):
     distribution of the BSTS model. Refer to doc/manual.pdf for details.
     """
 
-    def __init__(self, ft: Callable, for_smoother: bool=False, 
-            wrapper: Any=None, **kwargs) -> None:
+    def __init__(self, ft: Callable, Yt: np.ndarray, Xt: np.ndarray=None, 
+            for_smoother: bool=False, wrapper: Any=None, 
+            reset_index: np.ndarray=None, **kwargs) -> None:
         """
         Initialize a Kalman Filter. Filter take system matrices 
         Mt returns characteristics of the BSTS model. Note that self.Qt
@@ -41,17 +42,22 @@ class Filter(object):
         Parameters:
         ----------
         ft : function that generate Mt
+        Yt : input Yt from self.fit()
+        Xt : input Xt from self.fit()
         for_smoother : whether to store extra information for Kalman smoothers
         kwargs : kwargs for ft
         wrapper : wrapper of list of system matrices, determine whether 
             or not to carry out certain operations to boost performance.
             If not None, then it has to be a class object.
+        reset_index : update wrapper reset attribute
         """
         self.ft = ft
         self.for_smoother = for_smoother
         self.is_filtered = False  # determine if the filter object has been fitted
         self.ft_kwargs = kwargs
         self.wrapper = validate_wrapper(wrapper)
+        self.is_checked = False
+        self.is_init = False  # if true then only reset to np.nan
 
         # Create placeholders for other class attributes
         self.theta = None
@@ -63,9 +69,13 @@ class Filter(object):
         self.Rt = None
         self.xi_length = None
         self.y_length = None
-        self.Yt = None
-        self.Xt = None
-        self.T = None
+        self.Yt = deepcopy(Yt)
+        self.Xt = deepcopy(Xt)
+        if reset_index is None:
+            self.reset_index = np.ones(Yt.shape[0], dtype=bool)
+        else:
+            self.reset_index = reset_index
+        self.T = len(self.Yt)
         self.I = None
         self.P_star = None
         self.n_t = None
@@ -87,7 +97,6 @@ class Filter(object):
         self.A = None
         self.q = None
         self.t_q = 0
-        self.is_init = False  # if true then only reset to 0
 
         # Create output matrices for smoothers
         if self.for_smoother:
@@ -98,41 +107,40 @@ class Filter(object):
             self.Ht_tilde = None
 
 
-    def init_attr(self, theta: np.ndarray, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None, init_state: Dict=None) -> None:
+    def init_attr(self, theta: np.ndarray, 
+            init_state: Dict=None) -> None:
         """
         Initialize inputs to the Kalman filter. 
     
         Parameters:
         ----------
         theta : input parameters
-        Yt : input Yt from self.fit()
-        Xt : input Xt from self.fit()
         init_state : user-specified initial state 
         """
         # Initialize data inputs
         self.theta = theta
-        self.Yt = deepcopy(Yt)
-        self.T = len(self.Yt)
 
         # Generate Mt and Xt, and populate system matrices of the BSTS model
-        M_ = self.ft(self.theta, 1, **self.ft_kwargs)
-        self.Xt = gen_Xt(Xt=Xt, B=M_['Bt'][0], T=self.T)
+        M_ = self.ft(self.theta, T=1, **self.ft_kwargs)
+        if self.Xt is None:
+            self.Xt = gen_Xt(Xt=None, B=M_['Bt'][0], T=self.T)
 
         # Check consistence
         Mt = self.ft(self.theta, self.T, **self.ft_kwargs)
         check_consistence(Mt, self.Yt[0], self.Xt[0], 
-                init_state=init_state)
+                init_state=init_state, is_checked=self.is_checked)
+        self.is_checked = True  # only check for the first time
 
-        self.Ft = self.wrapper(Mt['Ft'])
-        self.Bt = self.wrapper(Mt['Bt'])
-        self.Ht = self.wrapper(Mt['Ht'])
-        self.Dt = self.wrapper(Mt['Dt'])
-        self.Qt = self.wrapper(Mt['Qt'])
-        self.Rt = self.wrapper(Mt['Rt'])
+        self.Ft = self.wrapper(Mt['Ft'], self.reset_index)
+        self.Bt = self.wrapper(Mt['Bt'], self.reset_index)
+        self.Ht = self.wrapper(Mt['Ht'], self.reset_index)
+        self.Dt = self.wrapper(Mt['Dt'], self.reset_index)
+        self.Qt = self.wrapper(Mt['Qt'], self.reset_index)
+        self.Rt = self.wrapper(Mt['Rt'], self.reset_index)
         self.xi_length = self.Ft[0].shape[0]
         self.y_length = self.Ht[0].shape[0]
         self.I = np.eye(self.xi_length)
+        self.t_q = 0
 
         # Create output matrices
         self.xi_1_0 = Mt['xi_1_0']
@@ -188,7 +196,7 @@ class Filter(object):
                             self.xi_length, self.xi_length, default_val=np.nan)
                     self.L1_t = preallocate(self.q + 1, self.y_length,
                             self.xi_length, self.xi_length, default_val=np.nan)
-            self.is_init = True
+            self.is_init = True  # only initialize for the first time
         else:
             self.xi_t[:] = np.nan
             self.d_t[:] = np.nan
@@ -216,21 +224,17 @@ class Filter(object):
             self.P_inf_t[0][0] = self.A
 
 
-    def fit(self, theta: np.ndarray, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None, init_state: Dict=None) -> None:
+    def fit(self, theta: np.ndarray, init_state: Dict=None) -> None:
         """
         Run forward filtering, given input measurements and regressors
 
         Parameters:
         ----------
         theta : list of parameters for self.ft
-        Yt : measurements, may contain missing values
-        Xt : regressors, must be deterministic and has no missing values.
-            If set as None, will generate zero vectors
         init_state : user-specified initial state values
         """
         # Initialize input data
-        self.init_attr(theta, Yt, Xt, init_state=init_state)
+        self.init_attr(theta, init_state=init_state)
 
         # Filter
         for t in range(self.T):
@@ -456,12 +460,6 @@ class Filter(object):
             self.Rt[t] = permute(self.Rt[t], partitioned_index, axis='both')
             self.Ht[t] = permute(self.Ht[t], partitioned_index)
             self.Dt[t] = permute(self.Dt[t], partitioned_index)
-
-            # Update reset index so ldl of R gets recalculated
-            if t == self.T - 1:
-                self.Rt.reset[t] = 1
-            else:
-                self.Rt.reset[t:t+2] = 1
 
         # Diagonalize Y_t, H_t, and D_t
         L_t, R_t, L_inv = self.Rt.ldl(t)
