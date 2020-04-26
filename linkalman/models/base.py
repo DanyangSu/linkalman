@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 from typing import List, Any, Callable, Dict, Tuple
 from ..core import Filter, Smoother
-from ..core.utils import df_to_list, list_to_df, \
-        simulated_data, get_diag, ft, create_col
+from ..core.utils import df_to_tensor, tensor_to_df, \
+        simulated_data, get_diag, ft, create_col, M_wrap, \
+        get_reset_index
 import warnings
 warnings.simplefilter('default')
 
@@ -77,7 +78,7 @@ class BaseOpt(object):
             method: str='LLY', EM_threshold: float=1e-3, 
             num_EM_iter: int=np.inf, post_min_iter: int=100, 
             EM_stopping_rate: float=0.01, init_state: Dict=None, 
-            wrapper: Any=None) -> None:
+            wrapper: Any=None, reset_index: np.ndarray=None) -> None:
         """
         Fit the model and returns optimal theta. 
 
@@ -100,6 +101,7 @@ class BaseOpt(object):
         wrapper : wrapper of list of system matrices, determine whether
             or not to carry out certain operations to boost performance. 
             If not None, then it has to be a class object.
+        reset_index : predetermine index of t to recalculate LDL etc.
         """
         # Raise exception if method is not correctly specified
         if method not in ['EM','LLY']:
@@ -132,13 +134,21 @@ class BaseOpt(object):
         self.y_col = y_col
 
         # If x_col is given, convert dataframe to lists
-        Xt = df_to_list(df, x_col)
-        Yt = df_to_list(df, y_col)
+        Xt = df_to_tensor(df, x_col)
+        Yt = df_to_tensor(df, y_col)
 
+        # Set reset_index
+        if reset_index is None:
+            self.reset_index = np.ones(Yt.shape[0], dtype=bool)
+        else:
+            self.reset_index = reset_index
+        
         # Run solver
         self.wrapper = wrapper
-        if method == 'LLY': 
-            obj = lambda theta: self.get_LLY(theta, Yt, Xt) 
+        if method == 'LLY':
+            kf = Filter(self.ft, Yt, Xt, wrapper=self.wrapper, 
+                    reset_index=self.reset_index, **self.ft_kwargs)
+            obj = lambda theta: self.get_LLY(theta, kf, init_state=init_state) 
             self.theta_opt, self.fval_opt = self.solver(
                     theta_init, obj, **self.solver_kwargs)
 
@@ -149,11 +159,11 @@ class BaseOpt(object):
             counter = 0
             max_G = -np.inf
             clock = 0
+            kf = Filter(self.ft, Yt, Xt, for_smoother=True, 
+                    wrapper=self.wrapper, **self.ft_kwargs)
 
             while (dist > EM_threshold) and (counter < num_EM_iter):
-                kf = Filter(self.ft, for_smoother=True, 
-                        wrapper=self.wrapper, **self.ft_kwargs)
-                kf.fit(theta_i, Yt, Xt)
+                kf.fit(theta_i, init_state=init_state)
                 ks = Smoother()
                 ks.fit(kf)
                 obj = ks.G
@@ -180,16 +190,15 @@ class BaseOpt(object):
             self.fval_opt = ks.G(theta_i)
 
         # Generate fitted smoother
-        kf = Filter(self.ft, **self.ft_kwargs, wrapper=self.wrapper, 
-                for_smoother=True)
-        kf.fit(self.theta_opt, Yt, Xt, init_state=init_state)
+        kf = Filter(self.ft, Yt, Xt, for_smoother=True, 
+                wrapper=self.wrapper, **self.ft_kwargs)
+        kf.fit(self.theta_opt, init_state=init_state)
         ks = Smoother()
         ks.fit(kf)
         self.ks_fitted = ks
 
 
-    def get_LLY(self, theta: np.ndarray, Yt: List[np.ndarray], 
-            Xt: List[np.ndarray]=None) -> float:
+    def get_LLY(self, theta: np.ndarray, kf: Any, init_state=None) -> float:
         """
         Wrapper for calculating LLY. Used as the objective 
         function for optimizers.
@@ -197,15 +206,14 @@ class BaseOpt(object):
         Parameters:
         ----------
         theta : paratmers
-        Yt : list of measurements
-        Xt : list of regressors. May be None
+        kf : the filter object
+        init_state : user-specified initial state
 
         Returns:
         ----------
         lly : log likelihood from Kalman filters
         """
-        kf = Filter(self.ft, wrapper=self.wrapper, **self.ft_kwargs)
-        kf.fit(theta, Yt, Xt)
+        kf.fit(theta, init_state=init_state)
         return kf.get_LL()
 
 
@@ -269,18 +277,18 @@ class BaseOpt(object):
         df_fitted : Contains filtered/smoothed y_t, xi_t, and P_t
         """
         # Generate system matrices for prediction
-        Xt = df_to_list(df, self.x_col)
-        Yt = df_to_list(df, self.y_col)
+        Xt = df_to_tensor(df, self.x_col)
+        Yt = df_to_tensor(df, self.y_col)
         
         # Generate filtered predictions
-        kf = Filter(self.ft, for_smoother=True, wrapper=self.wrapper, 
-                **self.ft_kwargs)
+        kf = Filter(self.ft, Yt, Xt, for_smoother=True, 
+                wrapper=self.wrapper, **self.ft_kwargs)
 
         # Override theta_opt if theta is not None
         if theta is not None:
-            kf.fit(theta, Yt, Xt, init_state=init_state)
+            kf.fit(theta, init_state=init_state)
         elif self.theta_opt is not None:
-            kf.fit(self.theta_opt, Yt, Xt, init_state=init_state)
+            kf.fit(self.theta_opt, init_state=init_state)
         else:
             raise ValueError('Model is not fitted')
         
@@ -294,8 +302,8 @@ class BaseOpt(object):
         Yt_filtered, Yt_P, xi_t, P_t = kf.get_filtered_val(
                 is_xi=is_xi, xi_col=xi_col)
         Yt_P_diag = get_diag(Yt_P)
-        df_Yt_filtered = list_to_df(Yt_filtered, y_col_filter)
-        df_Yt_fvar = list_to_df(Yt_P_diag, y_filter_var)
+        df_Yt_filtered = tensor_to_df(Yt_filtered, y_col_filter)
+        df_Yt_fvar = tensor_to_df(Yt_P_diag, y_filter_var)
             
         # Get smoothed Yt
         y_col_smoother = create_col(self.y_col, suffix=smean_suffix)
@@ -303,8 +311,8 @@ class BaseOpt(object):
         Yt_smoothed, Yt_S, xi_T, P_T = ks.get_smoothed_val(
                 is_xi=is_xi, xi_col=xi_col)
         Yt_S_diag = get_diag(Yt_S)
-        df_Yt_smoothed = list_to_df(Yt_smoothed, y_col_smoother)
-        df_Yt_svar = list_to_df(Yt_S_diag, y_smoother_var)
+        df_Yt_smoothed = tensor_to_df(Yt_smoothed, y_col_smoother)
+        df_Yt_svar = tensor_to_df(Yt_S_diag, y_smoother_var)
 
         # Generate xi values if needed
         if is_xi:
@@ -316,13 +324,13 @@ class BaseOpt(object):
             xi_col_s = ['xi_{}_smoothed'.format(i) for i in xi_col]
             P_col_s = ['P_{}_smoothed'.format(i) for i in xi_col]
 
-            df_xi_t = list_to_df(xi_t, xi_col_f)
+            df_xi_t = tensor_to_df(xi_t, xi_col_f)
             P_t_diag = get_diag(P_t)
-            df_P_t = list_to_df(P_t_diag, P_col_f)
+            df_P_t = tensor_to_df(P_t_diag, P_col_f)
 
             P_T_diag = get_diag(P_T)
-            df_xi_T = list_to_df(xi_T, xi_col_s)
-            df_P_T = list_to_df(P_T_diag, P_col_s)
+            df_xi_T = tensor_to_df(xi_T, xi_col_s)
+            df_P_T = tensor_to_df(P_T_diag, P_col_s)
             df_fs = pd.concat([df_Yt_filtered, df_Yt_fvar,
                                df_Yt_smoothed, df_Yt_svar, df_xi_t,
                                df_P_t, df_xi_T, df_P_T], axis=1)
@@ -400,3 +408,38 @@ class BaseConstantModel(BaseOpt):
         super().set_f(ft_, reset=reset, **ft_kwargs)
 
 
+    def fit(self, df: pd.DataFrame, theta_init: np.ndarray,
+            y_col: List[str], x_col: List[str]=None, 
+            method: str='LLY', EM_threshold: float=1e-3, 
+            num_EM_iter: int=np.inf, post_min_iter: int=100, 
+            EM_stopping_rate: float=0.01, init_state: Dict=None, 
+            wrapper: Any=None) -> None:
+        """
+        Fit the model and returns optimal theta. 
+
+        Parameters:
+        ----------
+        df : input data to be fitted
+        theta_init : initial theta. self.Ft(theta_init) produce 
+            Mt for first iteration of EM algorithm.
+        y_col : list of columns in df that belong to Yt
+        x_col : list of columns in df that belong to Xt. May be None
+        method : EM or LLY
+        EM_threshold : stopping criteria
+        num_EM_iter : number of iterations for EM algorithms
+        post_min_iter : after a new minimum is set, terminate iteration 
+            after the number of runs determined by this argument
+        EM_stopping_rate : weight placed on counter, higher rate means 
+            update theta_opt slower. EM_stopping_rate = 0 means full 
+            weight on theta_opt after each iteration
+        init_state : user-specified initial state values
+        wrapper : wrapper of list of system matrices, determine whether
+            or not to carry out certain operations to boost performance. 
+            If not None, then it has to be a class object.
+        """
+        # Build reset_index
+        Yt = df_to_tensor(df, y_col)
+        reset_index = get_reset_index(Yt)
+        super().fit(df, theta_init, y_col, x_col, method, EM_threshold, 
+                num_EM_iter, post_min_iter, EM_stopping_rate, init_state, 
+                wrapper, reset_index)

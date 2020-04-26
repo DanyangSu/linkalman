@@ -1,31 +1,38 @@
 import pytest
 import numpy as np
 from linkalman.core.utils import *
+import pandas as pd
 
 
 # Generate input data
 @pytest.fixture()
 def Mt():
-    Mt = {'Ft': [np.ones((3, 3))],
-            'Bt': [np.ones((3, 2))],
-            'Ht': [np.ones((4, 3))],
-            'Dt': [np.ones((4, 2))],
-            'Qt': [np.ones((3, 3))],
-            'Rt': [np.ones((4, 4))],
+    Mt = {'Ft': build_tensor(np.ones((3, 3)), 10),
+            'Bt': build_tensor(np.ones((3, 2)), 10),
+            'Ht': build_tensor(np.ones((4, 3)), 10),
+            'Dt': build_tensor(np.ones((4, 2)), 10),
+            'Qt': build_tensor(np.ones((3, 3)), 10),
+            'Rt': build_tensor(np.ones((4, 4)), 10),
             'xi_1_0': np.ones((3, 1)),
             'P_1_0': np.ones((3, 3))}
     return Mt
 
 
 @pytest.fixture()
+def df1():
+    df = pd.DataFrame({'a': [1, 2, 3], 'b': [4, 5, 6]})
+    return df
+
+
+@pytest.fixture()
 def Yt():
-    Yt = [np.ones((4, 1))]
+    Yt = np.ones((1, 4, 1))
     return Yt
 
 
 @pytest.fixture()
 def Xt():
-    Xt = [np.ones((2, 1))]
+    Xt = np.ones((1, 2, 1))
     return Xt
 
 
@@ -70,7 +77,7 @@ def Yt_1d():
     """
     1d Yt
     """
-    y = [np.array([[1]]), np.array([[np.nan]]), np.array([[2.5]])]
+    y = np.array([[[1]], [[np.nan]], [[2.5]]])
     return y
 
 
@@ -79,7 +86,7 @@ def Xt_1d():
     """
     1d Xt
     """
-    x = [np.array([[0.1]]), np.array([[0.2]]), np.array([[0.3]])]
+    x = np.array([[[0.1]], [[0.2]], [[0.3]]])
     return x
 
 
@@ -138,17 +145,17 @@ def Yt_mvar():
     """
     Contain missing measurements
     """
-    Yt = [np.array([1, 2, 2.1]).reshape(-1, 1),
-            np.array([np.nan, 2.2, 3]).reshape(-1, 1),
-            np.array([np.nan, np.nan, np.nan]).reshape(-1, 1),
-            np.array([2, np.nan, 3.2]).reshape(-1, 1)]
+    Yt = np.zeros((4, 3, 1))
+    Yt[0] = np.array([1, 2, 2.1]).reshape(-1, 1)
+    Yt[1] = np.array([np.nan, 2.2, 3]).reshape(-1, 1)
+    Yt[2] = np.array([np.nan, np.nan, np.nan]).reshape(-1, 1)
+    Yt[3] = np.array([2, np.nan, 3.2]).reshape(-1, 1)
     return Yt
 
 
 @pytest.fixture()
 def Xt_mvar():
-    Xt = [np.array([[0.2]]), np.array([[0.3]]), np.array([[0.4]]), 
-            np.array([[0.1]])]
+    Xt = np.array([[[0.2]], [[0.3]], [[0.4]], [[0.1]]])
     return Xt
 
 
@@ -238,19 +245,17 @@ def ft_ar2_mvar_kw():
 
 @pytest.fixture()
 def Yt_ar2_mvar():
-    Yt = [np.array([1, 2, 3]).reshape(-1, 1),
-          np.array([2, np.nan, 4]).reshape(-1, 1),
-          np.array([np.nan, np.nan, np.nan]).reshape(-1, 1),
-          np.array([np.nan, 2.5, 3.5]).reshape(-1, 1)]
+    Yt = np.zeros((4, 3, 1))
+    Yt[0] = np.array([1, 2, 3]).reshape(-1, 1)
+    Yt[1] = np.array([2, np.nan, 4]).reshape(-1, 1)
+    Yt[2] = np.array([np.nan, np.nan, np.nan]).reshape(-1, 1)
+    Yt[3] = np.array([np.nan, 2.5, 3.5]).reshape(-1, 1)
     return Yt
 
 
 @pytest.fixture()
 def Xt_ar2_mvar():
-    Xt = [np.array([[1]]),
-          np.array([[2]]),
-          np.array([[1.5]]),
-          np.array([[0.8]])]
+    Xt = np.array([[[1]], [[2]], [[1.5]], [[0.8]]])
     return Xt
 
 
@@ -280,7 +285,7 @@ def Yt_1d_missing():
     """
     1d Yt
     """
-    y = [np.array([[np.nan]]), np.array([[1]]), np.array([[2.5]])]
+    y = np.array([[[np.nan]], [[1]], [[2.5]]])
     return y
 
 
@@ -313,7 +318,7 @@ def Yt_1d_full():
     """
     1d Yt fully observed
     """
-    y = [np.array([[2]]), np.array([[1.3]]), np.array([[2.5]]), np.array([[3.1]])]
+    y = np.array([[[2]], [[1.3]], [[2.5]], [[3.1]]])
     return y
 
 
@@ -341,10 +346,11 @@ def Yt_mvar_diffuse():
     """
     Local linear model with complete yt, refer Chapter 5 of Koopman and Durbin (2012)
     """
-    y = [np.array([1, 2]).reshape(-1, 1), 
-         np.array([2, np.nan]).reshape(-1, 1), 
-         np.array([np.nan, 3.5]).reshape(-1, 1),
-         np.array([3, 5]).reshape(-1, 1)]
+    y = np.zeros((4, 2, 1))
+    y[0] = np.array([1, 2]).reshape(-1, 1)
+    y[1] = np.array([2, np.nan]).reshape(-1, 1)
+    y[2] = np.array([np.nan, 3.5]).reshape(-1, 1)
+    y[3] = np.array([3, 5]).reshape(-1, 1)
     return y
 
 
@@ -359,10 +365,11 @@ def Yt_mvar_diffuse_smooth():
     """
     Local linear model with complete yt, refer to Chapter 5 of Koopman and Durbin (2012)
     """
-    y = [np.array([1, 2]).reshape(-1, 1), 
-         np.array([np.nan, np.nan]).reshape(-1, 1), 
-         np.array([np.nan, 3.5]).reshape(-1, 1),
-         np.array([3, 5]).reshape(-1, 1)]
+    y = np.zeros((4, 2, 1))
+    y[0] = np.array([1, 2]).reshape(-1, 1)
+    y[1] = np.array([np.nan, np.nan]).reshape(-1, 1)
+    y[2] = np.array([np.nan, 3.5]).reshape(-1, 1)
+    y[3] = np.array([3, 5]).reshape(-1, 1)
     return y
 
 
@@ -371,9 +378,10 @@ def Yt_mvar_diffuse_smooth_vec():
     """
     Local linear model with complete yt, refer to Koopman (1997)
     """
-    y = [np.array([1, 2]).reshape(-1, 1), 
-         np.array([2.4, 3.2]).reshape(-1, 1),
-         np.array([3, 5]).reshape(-1, 1)]
+    y = np.zeros((3, 2, 1))
+    y[0] = np.array([1, 2]).reshape(-1, 1)
+    y[1] = np.array([2.4, 3.2]).reshape(-1, 1)
+    y[2] = np.array([3, 5]).reshape(-1, 1)
     return y
 
 
@@ -382,10 +390,11 @@ def Yt_mvar_diffuse_missing():
     """
     Yt with missing measurements at t
     """
-    y = [np.array([np.nan, 2]).reshape(-1, 1), 
-         np.array([np.nan, np.nan]).reshape(-1, 1), 
-         np.array([2.5, np.nan]).reshape(-1, 1),
-         np.array([3, 5]).reshape(-1, 1)]
+    y = np.zeros((4, 2, 1))
+    y[0] = np.array([np.nan, 2]).reshape(-1, 1)
+    y[1] = np.array([np.nan, np.nan]).reshape(-1, 1)
+    y[2] = np.array([2.5, np.nan]).reshape(-1, 1)
+    y[3] = np.array([3, 5]).reshape(-1, 1)
     return y
 
 
@@ -397,20 +406,19 @@ def ft_ll_mvar_1d():
     """
     def ft_(theta, T):
         F = np.array([[1, 1], [0, 1]])
-        Ft = [F.copy() for _ in range(T)]
+        Ft = build_tensor(F, T)
         Q = np.array([[theta[0], 0], [0, theta[1]]])
-        Qt = [Q.copy() for _ in range(T)]
-        Rt = [np.array([[theta[4]]]),
-             np.array([[1]]),  # not being used
-             np.array([[theta[2]]]), 
-             np.array([[1]])]  # not relevant
-        Ht = [np.array([[2, 0]]), 
-              np.array([[1.5, 0]]),
-              np.array([[1, 0]]),
-              np.array([[4, 0]])]
+        Qt = build_tensor(Q, T)
+        Rt = np.array([[[theta[4]]], [[1]], [[theta[2]]], [[1]]])
+        Ht = np.array([[[2, 0]], 
+              [[1.5, 0]],
+              [[1, 0]],
+              [[4, 0]]])
 
-        Bt = [np.array([[0, 0]]).reshape(-1, 1) for _ in range(T)]
-        Dt = [np.array([[0]]) for _ in range(T)]
+        B = np.array([[0, 0]]).reshape(-1, 1) 
+        Bt = build_tensor(B, T)
+        D = np.array([[0]])
+        Dt = build_tensor(D, T)
         xi_1_0 = np.array([[0], [0]])
         P_1_0 = np.diag([np.nan, np.nan])
 
@@ -422,10 +430,11 @@ def ft_ll_mvar_1d():
 
 @pytest.fixture()
 def Yt_mvar_1d():
-    y = [np.array([[2]]),
-         np.array([[np.nan]]),
-         np.array([[2.5]]),
-         np.array([[7]])]
+    y = np.zeros((4, 1, 1))
+    y[0] = np.array([[2]])
+    y[1] = np.array([[np.nan]])
+    y[2] = np.array([[2.5]])
+    y[3] = np.array([[7]])
     return y
 
 @pytest.fixture()
@@ -435,17 +444,18 @@ def ft_q():
     """
     def ft_(theta, T):
         F = np.array([[1, 0, 0, 0, 0]] * 5)
-        Ft = [F.copy() for _ in range(T)]
+        Ft = build_tensor(F, T)
         Q = np.eye(5)
-        Qt = [Q.copy() for _ in range(T)]
+        Qt = build_tensor(F, T)
         R = np.eye(2)
-        Rt = [R.copy() for _ in range(T)]
+        Rt = build_tensor(R, T)
         H = np.array([[2, 0, 0, 0, 0], [1, 0, 0, 0, 0]])
-        Ht = [H.copy() for _ in range(T)]
+        Ht = build_tensor(H, T)
 
-
-        Bt = [np.zeros([5, 1]) for _ in range(T)]
-        Dt = [np.zeros([2, 1]) for _ in range(T)]
+        B = np.zeros([5, 1])
+        Bt = build_tensor(B, T)
+        D = np.zeros([2, 1])
+        Dt = build_tensor(D, T)
         xi_1_0 = np.zeros([5, 1])
         P_1_0 = np.diag([np.nan] * 5)
 
@@ -457,6 +467,5 @@ def ft_q():
 
 @pytest.fixture()
 def Yt_q():
-    y = [np.array([[2], [1.1]]),
-         np.array([[2.2], [1.14]])]
+    y = np.array([[[2], [1.1]], [[2.2], [1.14]]])
     return y
