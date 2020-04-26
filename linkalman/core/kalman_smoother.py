@@ -328,9 +328,9 @@ class Smoother(object):
         y_t = self.Yt[t]
 
         # Ht and Dt from Mt that is parameterized by theta
-        H_t_M = permute(Mt['Ht'][t], self.partition_index[t], 
+        H_t_M = permute(Mt['Ht'][t], self.partitioned_index[t], 
                 axis='row')[0:n_t]
-        D_t_M = permute(Mt['Dt'][t], self.partition_index[t], 
+        D_t_M = permute(Mt['Dt'][t], self.partitioned_index[t], 
                 axis='row')[0:n_t]
         chi = y_t[0:n_t] - H_t_M.dot(self.xi_t_T[t]) - \
                 D_t_M.dot(self.Xt[t])
@@ -369,7 +369,7 @@ class Smoother(object):
             
             if self.n_t[t] > 0:    
                 # Sort Rt index
-                R_t = permute(Mt['Rt'][t], self.partition_index[t], 
+                R_t = permute(Mt['Rt'][t], self.partitioned_index[t], 
                         axis='both')[0:self.n_t[t], 0:self.n_t[t]]
                 G2 += np.log(pdet(R_t)) + scipy.trace(inv(
                         R_t).dot(self._E_chi2(Mt, t)))
@@ -379,7 +379,7 @@ class Smoother(object):
         # Only use marginal correction if non-explosive diffuse
         if (not self.explosive) and self.t_q > 0:
             G -= np.log(pdet(LL_correct(Mt['Ht'], Mt['Ft'],
-                    self.n_t, A, index=self.partition_index)))
+                    self.n_t, A, index=self.partitioned_index)))
 
         return -G.item()
 
@@ -482,11 +482,10 @@ class Smoother(object):
             y_cov_T_permute[n_t:][:, n_t:] = y2_cov_T
 
             # Restore to the original index
-            original_index = revert_permute(self.partition_index[t])
+            original_index = revert_permute(self.partitioned_index[t])
             y_t_T = permute(y_t_T_permute, original_index)
             y_cov_T = permute(y_cov_T_permute, original_index, 
                     axis='both')
-        
         return y_t_T, y_cov_T
 
 

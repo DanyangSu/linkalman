@@ -58,6 +58,9 @@ class Filter(object):
         self.wrapper = validate_wrapper(wrapper)
         self.is_checked = False
         self.is_init = False  # if true then only reset to np.nan
+        self.n_t = None
+        self.is_missing = None
+        self.partitioned_index = None
 
         # Create placeholders for other class attributes
         self.theta = None
@@ -78,7 +81,6 @@ class Filter(object):
         self.T = len(self.Yt)
         self.I = None
         self.P_star = None
-        self.n_t = None
         self.xi_T1 = None
         self.P_T1 = None
         self.explosive = False  # default to be non-explosive
@@ -96,16 +98,15 @@ class Filter(object):
         self.Pi = None
         self.A = None
         self.q = None
-        self.t_q = 0
+        self.t_q = None
 
         # Create output matrices for smoothers
         if self.for_smoother:
-            self.partition_index = None
+            self.partitioned_index = None
             self.L0_t = None
             self.L1_t = None
             self.L_star_t = None
             self.Ht_tilde = None
-
 
     def init_attr(self, theta: np.ndarray, 
             init_state: Dict=None) -> None:
@@ -119,7 +120,7 @@ class Filter(object):
         """
         # Initialize data inputs
         self.theta = theta
-
+        
         # Generate Mt and Xt, and populate system matrices of the BSTS model
         M_ = self.ft(self.theta, T=1, **self.ft_kwargs)
         if self.Xt is None:
@@ -164,6 +165,20 @@ class Filter(object):
                     self.explosive)
 
         if not self.is_init:
+            # Preprocess Yt if Yt has missing measurements, only do once
+            self.is_missing = preallocate(*self.Yt.shape[0:2], arr_type='bool')
+            self.n_t = preallocate(self.T, arr_type='int')
+            self.partitioned_index = preallocate(*self.Yt.shape[0:2], arr_type='int')
+
+            for t in range(self.T):
+                self.is_missing[t] = np.isnan(self.Yt[t])[:,0]
+                self.n_t[t] = (~self.is_missing[t]).sum()
+            
+                # Sort observed measurements to the top
+                self.partitioned_index[t] = partition_index(self.is_missing[t])  
+                if self.n_t[t] < self.y_length:
+                    self.Yt[t] = mask_nan(self.is_missing[t], self.Yt[t], dim='row')
+                    self.Yt[t] = permute(self.Yt[t], self.partitioned_index[t])
 
             # Initialize xi_1_0 and  P_1_0
             self.xi_t = preallocate(self.T, self.y_length + 1, 
@@ -173,36 +188,34 @@ class Filter(object):
                     default_val=np.nan)
             self.P_star_t = preallocate(self.T, self.y_length + 1, 
                     self.xi_length, self.xi_length, default_val=np.nan)
-            self.n_t = preallocate(self.T, arr_type='int')
 
-            if self.q > 0:
-                self.P_inf_t = preallocate(self.T, self.y_length + 1,
-                        self.xi_length, self.xi_length, default_val=np.nan)
-                self.Upsilon_inf_t = preallocate(self.T, self.y_length, 1,
-                        default_val=np.nan)
-                self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length, 1,
-                        default_val=np.nan)
+            # Use self.T not self.q + 1 so it 
+            #     can handle different q in optimization.
+            #     Not self.xi_length + 1 to account for 
+            #     complete missing period
+            self.P_inf_t = preallocate(self.T, self.y_length + 1,
+                    self.xi_length, self.xi_length, default_val=np.nan)
+            self.Upsilon_inf_t = preallocate(self.T, self.y_length, 
+                    1, default_val=np.nan)
+            self.Upsilon_inf_gt_0_t = preallocate(self.T, self.y_length, 
+                    1, default_val=np.nan)
 
             if self.for_smoother:
                 self.Ht_tilde = preallocate(self.T, self.y_length, self.xi_length,
                         default_val=np.nan)
-                self.partition_index = preallocate(self.T, self.y_length, 
-                        arr_type='int')
                 self.L_star_t = preallocate(self.T, self.y_length, 
                         self.xi_length, self.xi_length, default_val=np.nan)
 
-                if self.q > 0:
-                    self.L0_t = preallocate(self.q + 1, self.y_length, 
-                            self.xi_length, self.xi_length, default_val=np.nan)
-                    self.L1_t = preallocate(self.q + 1, self.y_length,
-                            self.xi_length, self.xi_length, default_val=np.nan)
+                self.L0_t = preallocate(self.T, self.y_length, 
+                        self.xi_length, self.xi_length, default_val=np.nan)
+                self.L1_t = preallocate(self.T, self.y_length,
+                        self.xi_length, self.xi_length, default_val=np.nan)
             self.is_init = True  # only initialize for the first time
         else:
             self.xi_t[:] = np.nan
             self.d_t[:] = np.nan
             self.Upsilon_star_t[:] = np.nan
             self.P_star_t[:] = np.nan 
-            self.n_t[:] = 0
 
             if self.q > 0:
                 self.P_inf_t[:] = np.nan
@@ -211,7 +224,6 @@ class Filter(object):
 
             if self.for_smoother:
                 self.Ht_tilde[:] = np.nan
-                self.partition_index[:] = 0
                 self.L_star_t[:] = np.nan
 
                 if self.q > 0:
@@ -259,11 +271,10 @@ class Filter(object):
         t : time index
         """
         # LDL 
-        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
-        self.n_t[t] = n_t
+        Y_t, H_t, D_t, R_t, l_t, l_inv = self._LDL(t)
 
         # Skip missing measurements
-        for i in range(1, n_t+1):
+        for i in range(1, self.n_t[t]+1):
             ob_index = i - 1  # state variables have one more value
             xi_i = self.xi_t[t][ob_index]
             P_i = self.P_star_t[t][ob_index]
@@ -287,9 +298,9 @@ class Filter(object):
                 self.L_star_t[t][ob_index] = L_t_i
 
         # Calculate xi_t1_t and P_t, and add placeholders for others
-        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][self.n_t[t]]) + \
                 self.Bt[t].dot(self.Xt[t])
-        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][n_t]).dot(
+        P_t1_1 = self.Ft[t].dot(self.P_star_t[t][self.n_t[t]]).dot(
                 self.Ft[t].T) + self.Qt[t]
 
         if t < self.T - 1:
@@ -301,7 +312,6 @@ class Filter(object):
 
         if self.for_smoother:
             self.Ht_tilde[t] = H_t
-            self.partition_index[t] = partitioned_index
 
 
     def _sequential_update_diffuse(self, t: int) -> None:
@@ -316,13 +326,12 @@ class Filter(object):
         t : time index
         """
         # LDL 
-        n_t, Y_t, H_t, D_t, R_t, l_t, l_inv, partitioned_index = self._LDL(t)
+        Y_t, H_t, D_t, R_t, l_t, l_inv = self._LDL(t)
         self.t_q += 1
-        self.n_t[t] = n_t
 
         # Start sequential updating xi_{t:(i)}, 
         # P_inf_t_{t:(i)}, and P_star_t_{t:(i)}
-        for i in range(1, n_t+1):
+        for i in range(1, self.n_t[t]+1):
             ob_index = i - 1  # y index starts from 0 not 1
             P_inf = self.P_inf_t[t][ob_index]  # the most recent P
             P_star = self.P_star_t[t][ob_index]
@@ -377,12 +386,12 @@ class Filter(object):
 
         # Calculate xi_t1_t, P_inf_t1_t, and P_star_t1_t, 
         # and add placeholders for others
-        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][n_t]) + \
+        xi_t1_1 = self.Ft[t].dot(self.xi_t[t][self.n_t[t]]) + \
                 self.Bt[t].dot(self.Xt[t])
         P_inf_t1_1 = self.Ft[t].dot(
-                self.P_inf_t[t][n_t]).dot(self.Ft[t].T)
+                self.P_inf_t[t][self.n_t[t]]).dot(self.Ft[t].T)
         P_star_t1_1 = self.Ft[t].dot(
-                self.P_star_t[t][n_t]).dot(self.Ft[t].T) + self.Qt[t]      
+                self.P_star_t[t][self.n_t[t]]).dot(self.Ft[t].T) + self.Qt[t]      
 
         # Update q at the end of time t
         self.q = min(self.q, np.linalg.matrix_rank(P_inf_t1_1))
@@ -397,7 +406,6 @@ class Filter(object):
 
         if self.for_smoother:
             self.Ht_tilde[t] = H_t
-            self.partition_index[t] = partitioned_index
 
 
     def _joseph_form(self, L: np.ndarray, P: np.ndarray, 
@@ -435,7 +443,6 @@ class Filter(object):
 
         Returns:
         ----------
-        n_t : number of observed measurement at time t
         Y_t : transformed Yt[t], NaN values are replaced with 0
         H_t : transformed Yt[t], rows that correspond to NaN 
             in Yt[t] are replaced with 0
@@ -445,21 +452,11 @@ class Filter(object):
             to NaN in Yt[t] are replaced with 0, then diagonalized
         L_t : l from ldl
         L_inv : l^{-1}, used for EM algorithms
-        partitioned_index : sorted index, used for EM algorithms
         """
-        # Preprocess Rt and Yt if Yt has missing measurements
-        is_missing = np.isnan(self.Yt[t])[:,0]
-        n_t = (~is_missing).sum()
-
-        # Sort observed measurements to the top
-        partitioned_index = partition_index(is_missing)  
-
-        if n_t < self.y_length:
-            self.Yt[t] = mask_nan(is_missing, self.Yt[t], dim='row')
-            self.Yt[t] = permute(self.Yt[t], partitioned_index)
-            self.Rt[t] = permute(self.Rt[t], partitioned_index, axis='both')
-            self.Ht[t] = permute(self.Ht[t], partitioned_index)
-            self.Dt[t] = permute(self.Dt[t], partitioned_index)
+        if self.n_t[t] < self.y_length:
+            self.Rt[t] = permute(self.Rt[t], self.partitioned_index[t], axis='both')
+            self.Ht[t] = permute(self.Ht[t], self.partitioned_index[t])
+            self.Dt[t] = permute(self.Dt[t], self.partitioned_index[t])
 
         # Diagonalize Y_t, H_t, and D_t
         L_t, R_t, L_inv = self.Rt.ldl(t)
@@ -467,7 +464,7 @@ class Filter(object):
         H_t = L_inv.dot(self.Ht[t])
         D_t = L_inv.dot(self.Dt[t])
         
-        return n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, partitioned_index
+        return Y_t, H_t, D_t, R_t, L_t, L_inv
 
 
     def get_LL(self) -> float:
@@ -504,7 +501,6 @@ class Filter(object):
         if (not self.explosive) and self.t_q > 0:
             LL -= np.log(pdet(LL_correct(self.Ht, self.Ft, 
                 self.n_t, self.A)))
-        
         return -LL.item()
 
 

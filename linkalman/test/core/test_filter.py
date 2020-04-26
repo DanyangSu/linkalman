@@ -52,9 +52,8 @@ def test_LDL(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     kf = Filter(ft_mvar, Yt_mvar, Xt_mvar, for_smoother=True)
     kf.init_attr(theta_mvar_diffuse)
     
-    n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, \
-            partitioned_index = kf._LDL(0)
-    assert n_t == 3
+    Y_t, H_t, D_t, R_t, L_t, L_inv =  kf._LDL(0)
+    assert kf.n_t[0] == 3
     
     R_t_move = np.array([[3, 2, 1], 
                          [2, 4, 3], 
@@ -74,7 +73,7 @@ def test_LDL(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     np.testing.assert_array_almost_equal(H_t, H_t_expected)
 
     expected_partitioned_index = np.array([0, 1, 2])
-    np.testing.assert_array_equal(partitioned_index, 
+    np.testing.assert_array_equal(kf.partitioned_index[0], 
             expected_partitioned_index)
 
 
@@ -85,9 +84,8 @@ def test_LDL_first_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     kf = Filter(ft_mvar, Yt_mvar, Xt_mvar, for_smoother=True)
     kf.init_attr(theta_mvar_diffuse)
     
-    n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, \
-            partitioned_index = kf._LDL(1)
-    assert n_t == 2
+    Y_t, H_t, D_t, R_t, L_t, L_inv = kf._LDL(1)
+    assert kf.n_t[1] == 2
     
     R_t_move = np.array([[4, 3, 2], 
                          [3, 6, 1], 
@@ -107,7 +105,7 @@ def test_LDL_first_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     np.testing.assert_array_almost_equal(H_t, H_t_expected)
 
     expected_partitioned_index = np.array([1, 2, 0])
-    np.testing.assert_array_equal(partitioned_index, 
+    np.testing.assert_array_equal(kf.partitioned_index[1], 
             expected_partitioned_index)
 
 
@@ -118,9 +116,8 @@ def test_LDL_full_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     kf = Filter(ft_mvar, Yt_mvar, Xt_mvar, for_smoother=True)
     kf.init_attr(theta_mvar_diffuse)
     
-    n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, \
-            partitioned_index = kf._LDL(2)
-    assert n_t == 0
+    Y_t, H_t, D_t, R_t, L_t, L_inv = kf._LDL(2)
+    assert kf.n_t[2] == 0
     
     R_t_move = np.array([[3, 2, 1], 
                          [2, 4, 3], 
@@ -140,7 +137,7 @@ def test_LDL_full_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     np.testing.assert_array_almost_equal(H_t, H_t_expected)
 
     expected_partitioned_index = np.array([0, 1, 2])
-    np.testing.assert_array_equal(partitioned_index, 
+    np.testing.assert_array_equal(kf.partitioned_index[2], 
             expected_partitioned_index)
 
 
@@ -151,9 +148,8 @@ def test_LDL_middle_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     kf = Filter(ft_mvar, Yt_mvar, Xt_mvar, for_smoother=True)
     kf.init_attr(theta_mvar_diffuse)
     
-    n_t, Y_t, H_t, D_t, R_t, L_t, L_inv, \
-            partitioned_index = kf._LDL(3)
-    assert n_t == 2
+    Y_t, H_t, D_t, R_t, L_t, L_inv = kf._LDL(3)
+    assert kf.n_t[3] == 2
     
     R_t_move = np.array([[3, 1, 2], 
                          [1, 6, 3], 
@@ -173,7 +169,7 @@ def test_LDL_middle_missing(ft_mvar, theta_mvar_diffuse, Yt_mvar, Xt_mvar):
     np.testing.assert_array_almost_equal(H_t, H_t_expected)
 
     expected_partitioned_index = np.array([0, 2, 1])
-    np.testing.assert_array_equal(partitioned_index, 
+    np.testing.assert_array_equal(kf.partitioned_index[3], 
             expected_partitioned_index)
 
 

@@ -194,7 +194,7 @@ def validate_wrapper(wrapper: Any) -> Any:
         return M_wrap
     else:
         # Check required inputs
-        arg_list = set(inspect.getargspec(wrapper.__init__).args)
+        arg_list = set(inspect.getfullargspec(wrapper.__init__).args)
         if len(set(['m_tensor', 'reset']).difference(arg_list)) > 0:
             raise AttributeError("""The wrapper object must contain""" + \
                     """ 'm_tensor' and 'reset'. """)
@@ -315,8 +315,7 @@ def preallocate(dim1: int, *dimn: int, default_val: float = 0,
     Parameters:
     ----------
     dim1 : length of tensor
-    dim2 : m of m*n matrix
-    dim3 : n of m*n matrix
+    dimn : dimension of the matrix
     default_val : default value of array
     arr_type : if 'float' then np.float64, if 'int' then int
 
@@ -326,11 +325,16 @@ def preallocate(dim1: int, *dimn: int, default_val: float = 0,
     """
     if arr_type == 'float':
         array_type = np.float64
+        typed_default_val = float(default_val)
     elif arr_type == 'int':
         array_type = int
+        typed_default_val = int(default_val)
+    elif arr_type == 'bool':
+        array_type = bool
+        typed_default_val = bool(default_val)
     else:
-        raise TypeError("array_type must be 'float' or 'int'")
-    allocated_tensor = default_val * np.ones((dim1, *dimn), 
+        raise TypeError("array_type must be 'float', 'int' or 'bool'")
+    allocated_tensor = typed_default_val * np.ones((dim1, *dimn), 
             dtype=array_type, order='F')
     return allocated_tensor
 
