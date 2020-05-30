@@ -1,6 +1,3 @@
-# Update (Apr 20, 2020):
-Further update to the project is halted, as `statsmodels` already includes a statespace model. It is very similar in architecture design, better maintained and has achieved intended performance speed using `Cython`. Please refer to `statsmodels` for further reference. For interested readers who want to learn the math behind high performance Kalman Filtering, please refer the [user's manual](https://github.com/DanyangSu/linkalman/blob/master/doc/manual.pdf) I wrote for `linkalman`. 
-
 # linkalman
 
 `linkalman` is a python package that solves linear structural time series models with Gaussian noises. Compared with some other popular Kalman filter packages written in python, linkalman has a combination of several advantages:
